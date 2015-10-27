@@ -2,6 +2,7 @@
 .Rhistory
 .Rdata
 ~Data**/*.Rdata
+**/*.DS_Store
 **/*.csv
 **/*.pdf
 **/*.xlsx
