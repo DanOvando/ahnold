@@ -1,0 +1,87 @@
+---
+title: "Proposal for MLPA Effects Paper"
+author: "Dan Ovando"
+date: "October 26, 2015"
+output: pdf_document
+---
+
+```{r global_options, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(fig.path='Figs/', echo=FALSE, warning=FALSE, message=FALSE)
+library(gridExtra)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(coda)
+library(ggmcmc)
+library(LaplacesDemon)
+library(foreach)
+library(scales)
+library(stargazer)
+```
+
+```{r run options}
+
+runfolder <- 'development'
+
+if (dir.exists(paste('MLPA Effects Results/',runfolder, sep = '')) == F)
+{
+  dir.create(paste('MLPA Effects Results/',runfolder, sep = ''), recursive = T)
+}
+
+```
+
+##Proposal
+
+Did the MLPA succeed in achieving its stated objectives of conserving marine resources and improving fishing livelihoods?
+
+The purpose of this analysis  is to attempt identify the causal effect of the MLPA on a variety of metrics, including conservation and fishery economics. To begin with, we will focus on the conservation outcomes, as these are the (relatively) clearest to measure. Our goal is to identify whether the MLPA and a measurable and causal impact on the amount of biomass/numbers of fish both inside, outside, and in total of the Channel Islands section of the MLPA. 
+
+##Data
+
+Available data are collected by PISCO in partnership with blah blah
+
+```{r,summarize data}
+
+rawdat <- read.csv('UCSB_FISH raw thru 2013.csv', stringsAsFactors = F)
+
+life.history <- read.csv('VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv', stringsAsFactors = F) %>%
+  rename(classcode = pisco_classcode)
+
+species.dat <- read.csv('master_spp_table.csv', stringsAsFactors = F)
+
+site.dat <- read.csv('Final_Site_Table_UCSB.csv', stringsAsFactors = F) %>%
+  rename(site = SITE)
+
+mlpa.dat <- left_join(rawdat,life.history, by = 'classcode') %>%
+  left_join(site.dat, by = 'site') %>%
+  left_join(species.dat, by = 'classcode' )
+
+
+
+
+head(mlpa.dat)
+
+mlpa.summary <- mlpa.dat %>%
+  group_by(year,MPA_STATUS,Targeted) %>%
+  summarise(total.count = sum(count), mean.total.length = mean(fish_tl, na.rm =T))
+
+
+ggplot(subset(mlpa.summary,MPA_STATUS == 'SMCA') , aes(year,total.count, shape = Targeted, color = Targeted)) + geom_point()
+
+ggplot(mlpa.dat, aes(vis,log(count))) + geom_point() + geom_smooth()
+
+
+
+```
+
+##Methods
+
+```{r}
+
+a <- b+2 
+#Thing
+```
+###Identification Strategies
