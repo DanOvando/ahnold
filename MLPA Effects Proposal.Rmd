@@ -2,10 +2,18 @@
 title: "Proposal for MLPA Effects Paper"
 author: "Dan Ovando"
 date: "October 26, 2015"
-output: pdf_document
+output:
+  html_document: default
+  pdf_document:
+    fig_caption: yes
+number_sections: yes
+csl: fish-and-fisheries.csl
+bibliography: MLPA Effects.bib
+toc: yes
 ---
 
 ```{r global_options, include=FALSE}
+rm(list = ls())
 library(knitr)
 knitr::opts_chunk$set(fig.path='Figs/', echo=FALSE, warning=FALSE, message=FALSE)
 library(gridExtra)
@@ -20,30 +28,31 @@ library(LaplacesDemon)
 library(foreach)
 library(scales)
 library(stargazer)
+library(DT)
+library(ggmap)
+library(texreg)
+devtools::load_all('~/Custom R Packages/ZurrCode')
+devtools::load_all('~/Custom R Packages/RobustRegression')
+
 ```
 
 ```{r run options}
 
 runfolder <- 'development'
 
-if (dir.exists(paste('MLPA Effects Results/',runfolder, sep = '')) == F)
+runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
+
+if (dir.exists(runpath) == F)
 {
-  dir.create(paste('MLPA Effects Results/',runfolder, sep = ''), recursive = T)
+  dir.create(runpath, recursive = T)
 }
+
 
 ```
 
-##Proposal
+```{r,process data, cache=T}
 
-Did the MLPA succeed in achieving its stated objectives of conserving marine resources and improving fishing livelihoods?
-
-The purpose of this analysis  is to attempt identify the causal effect of the MLPA on a variety of metrics, including conservation and fishery economics. To begin with, we will focus on the conservation outcomes, as these are the (relatively) clearest to measure. Our goal is to identify whether the MLPA and a measurable and causal impact on the amount of biomass/numbers of fish both inside, outside, and in total of the Channel Islands section of the MLPA. 
-
-##Data
-
-Available data are collected by PISCO in partnership with blah blah
-
-```{r,summarize data}
+# Raw PISCO data ----
 
 rawdat <- read.csv('UCSB_FISH raw thru 2013.csv', stringsAsFactors = F)
 
@@ -59,29 +68,225 @@ mlpa.dat <- left_join(rawdat,life.history, by = 'classcode') %>%
   left_join(site.dat, by = 'site') %>%
   left_join(species.dat, by = 'classcode' )
 
+# Processed PISCO data ----
+# These are the processed biomass density estimates metric tons / hectare for is "biomass"
 
+# Tidy data
+# note that biomass is in units of mt/hectare and fish is un # per hectare
+# 
 
+processed.site.dat <- read.csv('ci_reserve_data_final3 txt.csv', stringsAsFactors = F) %>% 
+  gather('concat.name','value', grep('_',colnames(.)),convert = T) %>%
+  mutate(data.type = gsub('\\_.*', '', concat.name),
+         classcode = gsub('.*\\_','',concat.name)) %>%
+mutate(value = as.numeric(value)) %>% 
+spread(data.type,value)
+         
+processed.dat <- left_join(processed.site.dat, life.history, by = 'classcode') %>%
+  rename(description2 = Description)
 
-head(mlpa.dat)
+colnames(processed.dat) <- tolower(colnames(processed.dat)) #make all variables lower case
 
-mlpa.summary <- mlpa.dat %>%
-  group_by(year,MPA_STATUS,Targeted) %>%
-  summarise(total.count = sum(count), mean.total.length = mean(fish_tl, na.rm =T))
+# Filter data
 
+processed.dat <- processed.dat %>%
+  rename(common_name = commonname) %>%
+  group_by(site.side, common_name) %>%
+  mutate(ever.seen = sum(biomass, na.rm = T)>0) %>%
+  subset(year != 1999 & ever.seen == T & grepl('YOY',classcode) == F) %>% #remove 1999, species never seen at a site, and young of the year
+  ungroup() %>%
+  group_by(site.side) %>%
+  mutate(num.years.surveyed = length(unique(year))) %>%
+  subset(num.years.surveyed > 2)
 
-ggplot(subset(mlpa.summary,MPA_STATUS == 'SMCA') , aes(year,total.count, shape = Targeted, color = Targeted)) + geom_point()
-
-ggplot(mlpa.dat, aes(vis,log(count))) + geom_point() + geom_smooth()
-
-
+save(mlpa.dat,processed.dat, file = paste(runpath,'Combined MLPA Database.Rdata',sep = ''))
 
 ```
 
-##Methods
 
-```{r}
+##Proposal
 
-a <- b+2 
-#Thing
+Did the Marine Life Protection Act (MLPA) succeed in achieving its stated objectives of conserving marine resources and improving fishing livelihoods?
+
+The purpose of this analysis  is to attempt identify the causal effect of the MLPA on a variety of metrics, including conservation and fishery economics in the South Coast region of the MLPA. To begin with, we will focus on the conservation outcomes, as these are the (relatively) clearest to measure. Our goal is to identify whether the MLPA had a measurable and causal impact on the amount of biomass/numbers of fish both inside, outside, and in total of the South Coast region of the MLPA. 
+
+The MLPA was created in 1999, with the goal of creating a network of marine protected areas (MPAs) along the coast of California. Widespread implementation did not begin until ~2003 though due to political and scientific constraints.  However some MPAs in the Channel Islands region of the south coast date back to 1978. For the south coast sites then, the MPAs have been in place for over a decade, allowing us to begin to ask to what extent they have achieved their stated objectives [see Hamilton et al -@Hamilton2010 for a description of the biogeography of the sites]
+
+Caselle et al [-@Caselle2015] provides a summary of trends in fish biomass observed across the south coast region following the implementation of the MLPA. They report that some species show increases in biomass densities since 2002, with faster rates of increase for some fished species, as compared to unfished species. However, these trends are highly variable among species and locations. 
+
+Caselle et al [-@Caselle2015] provides an excellent basis for understanding observed changes in the coastal fish populations of the south coast MLPA region following the implementation of the network of reserves. However, we have a strong interest in understanding not just correlational relationships between the MLPA and observed conservation and fishery impacts, but the actual causal effect of the MLPA. The MLPA was enacted with a specific hypothesis in mind: creating a network of MPAs will rebuild fished populations inside and outside of the reserves. It is critical then that we go back and attempt to measure whether the policy caused its intended effect, both to assess the performance of the MLPA and to help guide the broader use of MPAs as policy. 
+
+## Methods
+
+### Data 
+
+Data are available in both MPA and "reference" (non-MPA) sites. Site-level data include the location, area of the site, general habitat characteristics, bioregion, year converted to MPA (if ever), and environmental covariates such as mean temperature (e.g. Fig.1)
+
+```{r summary maps, cache=T, fig.cap= 'Map of survey locations. Color corresponds to year site was made an MPA. Size is proportional to area, though area data is missing for coastal sites'}
+
+spatial_dat <- processed.dat %>%
+  group_by(site,year) %>%
+  summarize(long = mean(lat.wgs84), lat = mean(lon.wgs84), #these appear to be flipped in the database
+            num.species = length(unique(common_name)),
+            year.mpa = mean(year.mpa),
+            area = mean(mpaareanm2))
+
+# spatial_dat$area[spatial_dat$area == 0] <- mean(spatial_dat$area[spatial_dat$area !=0], na.rm = T)
+
+
+map_region <- get_map(location = c(lon = mean(spatial_dat$long[is.na(spatial_dat$long) == F]), lat = mean(spatial_dat$lat[is.na(spatial_dat$long) == F]) ),zoom=9,maptype='hybrid')
+
+mpa.map <- (ggmap(map_region, fullpage = TRUE) + 
+              geom_point(data = subset(spatial_dat), aes(x = long, y = lat, fill = factor(year.mpa),
+                                                                            size = area), 
+                         shape = 21, alpha = 0.6) + 
+              scale_fill_brewer(name = 'Year made MPA',palette = 'Spectral') + 
+              scale_size_continuous(name = 'Area (NM2)'))
+mpa.map
+
+species.map <- (ggmap(map_region, fullpage = TRUE) + 
+                  geom_point(data = subset(spatial_dat, year == max(year)), aes(x = long, y = lat, fill = (num.species),
+                                                                                size = area), 
+                             shape = 21, alpha = 0.6) + 
+                  scale_fill_continuous(low = 'blue',high  = 'orange'))
+
 ```
-###Identification Strategies
+
+
+Visual transect data are available from `r min(processed.dat$year, na.rm = T)` to `r max(processed.dat$year, na.rm = T)`, observing `r length(unique(processed.dat$common_name))` different species across `r length(unique(processed.dat$site))` sites. 30m x 2m x 2m transects were repeated at each site at multiple depths. For each transect divers record numbers of grouped lengths of observed fish species (e.g. 15 black rockfish of ~12 cm), along with a suite of environmental covariates such as temperature, visibility, and kelp cover. 
+
+Life history data, including length-at-age, weight-at-length/age, maturity ogives, trophic level, habitat preference,and schooling behavior were collected from best-available sources for each of the observed species. In addition, each species is classified by whether it is the target of significant commercial or recreational fishing. 
+
+Lengths observed in the transects were converted to weights, and then to densities per transect. These were extrapolated up to the site level under the assumption that the stratified random nature of the transects adequately characterizes the whole site. Densites are reported as metric tons per hectare. 
+
+### Model Structure
+
+Identifying causality in the absence of a well-structured experiment is a challenging endeavor. As such, we will begin with the simplest question we could ask the data: Did the MLPA cause increases of biomass densities inside reserves? Under this scenario, the presence of absence of an MPA in a given year at a given site will be our "treatment" variable. We will conduct this analysis at the near-coarsest level available: density *D* (MT/hectare) a fish species *f*  at a site *s* in year *t* as related to the presence of absence of an MPA *R*, per the model
+
+$$ D_{f,s,t} = \beta_{0} + \alpha{R_{s,t}} + \gamma{X_{f,s,t}} + u_{f,s,t} $$
+
+Where $\beta$ is a constant, $\gamma$ and *X* are vectors of covariates, and $alpha$ is our coefficient of interest: the marginal effect of the treatment *R* of an MPA. We will assume (obviously incorrectly) for now that $E(u_{s,t,t} | X,R) = 0$ and the data are independent and identically distributed (i.i.d.). 
+
+### Identification Strategies
+
+"Identification" is a general term for assigning a causal relationship to an explanatory variable. Under our ideal scenario for this analysis, we would randomly assign MPA "treatments" *R* throughout the south-coast region (and put walls around them to prevent leakage of course). This would theoretically satisfy our least squares assumptions, and give us confidence that any changes in densities seen inside the MPAs is a result of the treatment. 
+
+However, we do not have this luxury. As a result, our least squares assumptions are certainly violated, suggesting that a) we cannot assign causality to the effect of the MLPA and b) we cannot even have particular confidence in the values of the coefficients themselves. As such, we must turn to econometric techniques for our identification strategy. A number are available, but for this first phase we will focus on a difference-in-difference (DiD) estimator. A DiD estimator seeks to control for unobserved and omitted variables by comparing the differences in the outcome of interest  between treated and untreated groups. The key assumption here is that any omitted variables that might skew the analysis are time-invariant. If this is the case, it can be shown that the DiD estimator controls for these unobserved time-invariant characteristics. By controlling for other appropriate covariates, we can then more safely consider the remaining effect of the treatment as "causal". 
+
+In the context of the MLPA, we know that the MPA sites were not chosen randomly: they were selected through scientific advise and negotiation in the hope of achieving MLPA objectives. These sites are likely to have inherent characteristics that will affect densities of fish over time, and in comparison to reference sites. For example, they may contain more ideal habitat for the species of interest. We can control for some of these factors in the standard fashion (e.g. by including a covariate controlling for kelp cover), but are unable to account for all of the potential characteristics of the MPA and references sites. If we control for time varying factors (e.g. the temperature at a site in a give year), through the DiD estimator we can resolve remaining unobserved time-invariant differences in the MPA and reference sites. In effect then, if we assume the confounding factors are time-invariant, the DiD estimator gets us closer to a valid assumption of our data being i.i.d . 
+
+## Regression Model
+
+With a panel dataset, such as we have here, the DiD estimator can be formulated as a panel regression with fixed effects for time and treatment groups (in this case sites):
+
+$$ D_{f,s,t} = \beta_{0} + MPA(1,0) + targeted(1,0) + factor(year) + factor(site)
++ years.in.mpa + MPA*EventualMPA +  u_{f,s,t} $$ 
+
+We also control for whether the species *f* is the target of fishing, as well as its trophic group, as well as the number of years a particular site has been in an MPA and an interaction between the current presence of an MPA and and the presence of an MPA across all years.
+
+## Results
+
+Due to some gaps in the area data for the coastal sites (resolving tomorrow), preliminary results are based solely on the Channel Islands sites. 
+
+```{r processed site year}
+
+ a <- subset(processed.dat,year == 2000 & site.side == 'ANACAPA_EAST_ISLE_CEN' & common_name == 'kelp blennies')
+
+species.siteside.year <- processed.dat %>%
+  subset(is.na(targeted) == F & targeted != '' & mpaareanm2 >0) %>%
+  group_by(year,site.side,classcode) %>%
+  summarise(mpa.period = unique(period), density = sum(biomass, na.rm = T),
+            site.type = unique(mpa.status),years.mpa = max(0,(year - (year.mpa-1)) * as.numeric(year.mpa>0)), region = unique(region), targeted = unique(targeted),
+            trophic.group = unique(trophicgroup)) %>%
+mutate(log.density = log(pmax(density, .0000001)),
+       fishable = as.numeric(targeted == 'Targeted'),
+       MPA = as.numeric(mpa.period == 'AFTER')) %>%
+  ungroup() %>%
+  group_by(site.side) %>%
+  mutate(eventual.mpa = max(years.mpa) >0)
+
+# datatable(year.site.targeted)
+
+ varnames <- colnames(species.siteside.year)
+
+species.siteside.year$MLPA <- ordered((species.siteside.year$mpa.period), levels = c('BEFORE','AFTER'))
+```
+
+First looking at some raw data. We see that inside sites that will eventually become MPAs, log densities of fished (targeted) species show evidence of an increasing trend in the longer the MPA has been in place (Fig.2)
+
+```{r, fig.cap='Density vs Years in MPA by Targeted or Untargeted Inside and Outside of Eventual MPA'}
+    density.by.time.in.mpa <- 
+    ggplot(subset(species.siteside.year,density >0), aes(factor(years.mpa),log.density)) + 
+    geom_boxplot(aes(fill = factor(targeted))) + 
+      facet_grid(eventual.mpa~.)
+
+density.by.time.in.mpa
+```
+
+The relationship of log density over time is less clear. We see a general trend of higher densities for fished species,
+and perhaps a declining trends in log densities in the areas that never become MPAs. 
+
+
+```{r,fig.cap = 'Density vs Year by Targeted or Untargeted Inside and Outside of Eventual MPA'}
+
+    density.by.year <- 
+    ggplot(subset(species.siteside.year,density >0), aes(factor(year),log.density)) + 
+    geom_boxplot(aes(fill = factor(targeted))) + 
+      facet_grid(eventual.mpa~.)
+  
+density.by.year
+```
+
+
+```{r run regression}
+  species.siteside.year.reg <- lm(log.density ~  factor(year)  + factor(site.side) + factor(trophic.group) + fishable + years.mpa + MPA + MPA:eventual.mpa , data = subset(species.siteside.year, density >0))
+  
+#   species.siteside.year.reg <- RobustRegression(Model = lm(log.density ~  factor(year)  + factor(site.side) + factor(trophic.group) + fishable + years.mpa + MPA  + eventual.mpa*MPA, data = subset(species.siteside.year, density >0)) , Data = subset(species.siteside.year, density >0),ClusterVar = 'None')
+#   
+
+check <- augment(species.siteside.year.reg)
+# summary(species.siteside.year.reg)
+
+```
+
+Turning to the regression itself, we see that the model explains relatively little of the variation of the data ($R^{2}$ of `r round(glance(species.siteside.year.reg)$r.squared,2)`). However, the diagnostics look surprisingly good for this early stage (Fig.4). Our residuals look relatively normally distributed, albeit slightly skewed to the left. But we do see strong evidence of heterogeneity that we will have to deal with. 
+
+
+```{r regression diagnostics, fig.cap='regression diagnostics'}
+
+par(mfrow = c(2,2))
+qqnorm(check$.resid)
+plot(check$.fitted,check$.resid, xlab = 'predicted log density', ylab = 'residuals')
+hist(check$.resid, xlab = 'residuals', main = element_blank())
+plot(check$log.density,check$.fitted, xlab = 'observed log density',ylab = 'predicted log density')
+abline(a=0,b=1, col = 'red')
+```
+
+Looking at our early regression results, we see some interesting findings to date. First off, we see that much of the variance is being soaked up by the year fixed effects, suggesting potentially a strong temporal trend outside of the effect of the MLPA (or potential confounding with the effect of the MLPA over time). We also see that targeted species *ceteris paribus* have higher densities than unfished species. Interestingly, we see no marginal effect of the presence or absence of an MPA in a given year at a given site. This means that for a particular species we cannot detect a significant effect of being inside or outside of an MPA in a given year. However, the interaction between presence of an MPA and eventually being an MPA (i.e. whether a site that will eventually become an MPA has become an MPA) is significant and positive. This suggests that the MPAs do have a detectable impact at the species-site level inside sites that eventually become MPAs. 
+
+
+```{r, results='asis'}
+# 
+stargazer(species.siteside.year.reg, title = 'Preliminary DiD regression of biomass density inside and outside reserves',type = 'html', ci = T, font.size = 'tiny', float = F,table.placement = 'h')
+
+# texreg(species.siteside.year.reg, title = 'Preliminary DiD regression of biomass density inside and outside reserves', ci.force = T)
+  
+```
+
+## Next Steps
+
+Obviously this represents just a first exploration of the model. Broadly, it is somewhat unsurprising that we don't detect clear signals at the level of individual species and site over time. However, starting at this fine resolution allows for better understanding of the data at this point. We may want to aggregate later on though. 
+
+The next key steps are 
+
+1. Account for the clear heterogeneity in the data (fix my robust regression function that seems broken)
+
+2. Once we have the model cleaned up, move to a Bayesian version of the regression, compare results
+
+3. Explore GAMM setup instead of OLS in Bayesian regression framework
+
+4. Space is the whale in the room here. Need to characterize and account for spatial and temporal correlation structure, likely through hierarchical model structure
+
+5. Incorporate model into reversible jump MCMC to decide on appropriate model structure
+
+## Works Cited

@@ -9,6 +9,8 @@
 **/*.xls
 **/*.Rproj
 **/*.Rdata
+**/*.rdx
+**/*.rdb
 **/*.rdata
 **/*.out
 Results**/*.csv
@@ -20,5 +22,7 @@ Results/
 **/*.docx
 Paper**/*.csv
 Paper**/*.*
+Figs**/*.*
+
 **/*.docx
 GFR_Master.R
