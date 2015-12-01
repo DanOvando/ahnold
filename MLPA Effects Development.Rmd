@@ -1,0 +1,72 @@
+---
+title: "MLPA Effects Model Development"
+author: "Dan Ovando"
+date: "November 20, 2015"
+output: html_document
+---
+
+You are now moving beyond the proposal and developing the actual model you will to estimate the causal impact of the MPLA on density (get to fishing pressure next).
+
+# Methods
+
+## Identification strategy
+
+We will employ a difference-in-difference estimator to gain identification of the MLPA effect. Specifically, we will be looking to assess the differences in the differences in density pre-and-post MLPA inside and outside of the MLPAs. Our "treatment" is the start of the MLPA, as defined by the presence of 1 or more MPA in a region in a given year. We can explore two potential classifications of treatment groups: whether or not a given site is an MPA in a given year, and whether or not the surveyed species is fished or unfished. 
+
+For the first case, with site as the treatment, the general DiD estimator will be 
+
+$$ d_{s,f,y} = \beta_{0} + \beta_{1}EventualMPA_{s} + \beta_{2}MLPAEnacted_{s,y} + \beta_{3}EventualMPA_{s}*MLPAEnacted_{s,y} $$
+
+In words, we are comparing densities in sites that eventually become MPAs to those that do not, pre and post MPA application
+
+The alternative identification model is 
+
+$$ d_{s,f,y} = \beta_{0} + \beta_{1}Targeted{f} + \beta_{2}MLPAEnacted_{s,y} + \beta_{3}Targeted{f}*MLPAEnacted_{s,y} $$
+
+In this case, we are comparing densities amoung species directly affected my the MLPA, at least as defined by whether or not they are a fished species, pre and post MLPA application in the region. 
+
+The region effect is a little weak right now, since it's basically one treatment except for the few sites that have much older MPAs. This will get stronger when you can add in the southern coast and the central coast. 
+
+## Regression Model
+
+There's a major zero-count problem in the data. Just about 50% of the data points are 0. This creates a regression problen any way you slice it. If we left the data in raw space, a) it's hard for the model to fit and b) the huge amount of zeros will greatly skew the model. If we log transform the data, the positive densities become much easier to fit, but the 0's are undefined. Adding a small constant adds a huge amount of bias and results in the data no longer being normally distributed. 
+
+Original thought was to go with the Tobit model. However, it seems to be having some major problems with these data, based on runs in both R and STATA. Basically it seems to have a strong negative bias, which is suggesting to me that something in there is misspecified. So, I'm going with a "hurdle" model, following Zurr. 
+
+## Likelihood 
+
+Under the hurdle model, with consider the likelihood of the data to be composed of two parts: the probablity that the specific "count" (or density in this case) is greater than 0 and then, the probability of the observed density if it is greater than zero. 
+
+The predicted density at a site is then ...
+
+OK I'm getting at the heart of my confusion. What the hell are data and what are predictions in all this? So to take the hippo example from Zurr. You've fot counts of hippos at a variety of sites. Some of those counts are zero. Your goal is a model that explains hippo counts. Ths issue here is that you're not really doing "observed vs predicted" in this case. Looking at homework 4 for example, you have an observed likelihood, then you're fitting parameters to tune the lambda/shape/mu parameter of the poisson distribution to max the log likelihood. So, in the homework 4 example, you have mosquito counts, and you were summing the log likelihood of a bunch of poisson counts with specific lambas. But, and this is the key, we were never predicting counts. 
+
+Now, for yours you have a different problem. You're not in poisson world, your in continuous world. So, all the methods that I know of, you need to actually predict the densities; that's what OLS would do. So that's why I'm confused now. One option: Predict the model. The likelihood though comes from the probability that the predicted data are below the threshold if they are below the threshold, and the probability that they are above the threshold and the likelihood of the data if they are above. So, you have a bunch of predictions. 
+
+Alternatively, the tobit seems to be working again! maybe go back to that in the meantime then. Try and figure out what's driving the weird banding in the residuals
+
+Consider a threshold *r* that defines the lowest cutoff of densities. The probability that a given density is at or below the threshold is a binomial process
+
+ $p(y_{i} | y_{i} \leq m) = dbinom(0,1,\gamma_{i})$ 
+ 
+ for 
+ 
+ where $\gamma$ is a function of some linear regressors, e.g. visibility, kelp, surge, site, species, etc. 
+
+We will work with this basic regression model at first. 
+
+$$ d_{s,f,y} = \beta_{0} + \beta_{1}EventualMPA_{s} + \beta_{2}MLPAEnacted_{s,y} + \beta_{3}EventualMPA_{s}*MLPAEnacted_{s,y} + beta_{4}Targeted + beta_5{year} + beta_6{region} + beta_{7}AgeMature $$
+
+This gives you a couple nested data levels that you need to deal with. 
+
+The tobit model is structured as follows 
+
+denote $\hat{d}$ as the predicted density from our linear DiD regression, where $$\hat{d} = \betaX$$. 
+
+
+You're going to fit this inside an MCMC rather than a Gibbs sampler, neccesarily, since you're not sure if you'll be able to work in Gibbs space later on. Not sure if there's a really big problem with this...
+
+
+
+
+## MCMC Methods

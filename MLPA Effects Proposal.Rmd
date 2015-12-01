@@ -50,7 +50,7 @@ if (dir.exists(runpath) == F)
 
 ```
 
-```{r,process data, cache=T}
+```{r,process data, cache=F}
 
 # Raw PISCO data ----
 
@@ -97,7 +97,20 @@ processed.dat <- processed.dat %>%
   ungroup() %>%
   group_by(site.side) %>%
   mutate(num.years.surveyed = length(unique(year))) %>%
-  subset(num.years.surveyed > 2)
+  subset(num.years.surveyed > 2) %>%
+  ungroup() %>%
+  group_by(region,year) %>%
+  mutate(region_has_mpas = any(year.mpa <= year))
+
+# processed.dat %>%
+#   group_by(year,region) %>%
+#   summarise(hasmpa = unique(region_has_mpas)) %>%
+#   ggplot(aes(year,hasmpa,fill = region)) + 
+#   geom_bar(stat = 'identity')
+# 
+# processed.dat %>%
+#   group_by(year) %>%
+#   summarise(regions = length(unique(region)))
 
 save(mlpa.dat,processed.dat, file = paste(runpath,'Combined MLPA Database.Rdata',sep = ''))
 
@@ -122,7 +135,7 @@ Caselle et al [-@Caselle2015] provides an excellent basis for understanding obse
 
 Data are available in both MPA and "reference" (non-MPA) sites. Site-level data include the location, area of the site, general habitat characteristics, bioregion, year converted to MPA (if ever), and environmental covariates such as mean temperature (e.g. Fig.1)
 
-```{r summary maps, cache=T, fig.cap= 'Map of survey locations. Color corresponds to year site was made an MPA. Size is proportional to area, though area data is missing for coastal sites'}
+```{r summary maps, cache=F, fig.cap= 'Map of survey locations. Color corresponds to year site was made an MPA. Size is proportional to area, though area data is missing for coastal sites'}
 
 spatial_dat <- processed.dat %>%
   group_by(site,year) %>%
@@ -179,8 +192,10 @@ In the context of the MLPA, we know that the MPA sites were not chosen randomly:
 
 With a panel dataset, such as we have here, the DiD estimator can be formulated as a panel regression with fixed effects for time and treatment groups (in this case sites):
 
-$$ D_{f,s,t} = \beta_{0} + MPA(1,0) + targeted(1,0) + factor(year) + factor(site)
+$$ D_{f,s,t} = \beta_{0} + MPA(1,0) + EventualMPA(1,0) + targeted(1,0) + factor(year) + factor(site)
 + years.in.mpa + MPA*EventualMPA +  u_{f,s,t} $$ 
+
+where MPA indicates whether any MPAs are present in the region (i.e. is it pre or post treatment period) and EventualMPA indicates the treatment group
 
 We also control for whether the species *f* is the target of fishing, as well as its trophic group, as well as the number of years a particular site has been in an MPA and an interaction between the current presence of an MPA and and the presence of an MPA across all years.
 
@@ -195,12 +210,12 @@ Due to some gaps in the area data for the coastal sites (resolving tomorrow), pr
 species.siteside.year <- processed.dat %>%
   subset(is.na(targeted) == F & targeted != '' & mpaareanm2 >0) %>%
   group_by(year,site.side,classcode) %>%
-  summarise(mpa.period = unique(period), density = sum(biomass, na.rm = T),
+  summarise(mpa.period = unique(region_has_mpas), density = sum(biomass, na.rm = T),
             site.type = unique(mpa.status),years.mpa = max(0,(year - (year.mpa-1)) * as.numeric(year.mpa>0)), region = unique(region), targeted = unique(targeted),
             trophic.group = unique(trophicgroup)) %>%
-mutate(log.density = log(pmax(density, .0000001)),
+mutate(log.density = log(pmax(density, 1e-1)), #per caselle 2015
        fishable = as.numeric(targeted == 'Targeted'),
-       MPA = as.numeric(mpa.period == 'AFTER')) %>%
+       MPA = as.numeric(mpa.period == 'TRUE')) %>%
   ungroup() %>%
   group_by(site.side) %>%
   mutate(eventual.mpa = max(years.mpa) >0)
@@ -239,7 +254,7 @@ density.by.year
 
 
 ```{r run regression}
-  species.siteside.year.reg <- lm(log.density ~  factor(year)  + factor(site.side) + factor(trophic.group) + fishable + years.mpa + MPA + MPA:eventual.mpa , data = subset(species.siteside.year, density >0))
+  species.siteside.year.reg <- lm(log.density ~  factor(year)  + factor(site.side) + factor(trophic.group) + fishable + years.mpa + MPA + eventual.mpa + MPA*eventual.mpa , data = (species.siteside.year))
   
 #   species.siteside.year.reg <- RobustRegression(Model = lm(log.density ~  factor(year)  + factor(site.side) + factor(trophic.group) + fishable + years.mpa + MPA  + eventual.mpa*MPA, data = subset(species.siteside.year, density >0)) , Data = subset(species.siteside.year, density >0),ClusterVar = 'None')
 #   
@@ -254,13 +269,45 @@ Turning to the regression itself, we see that the model explains relatively litt
 
 ```{r regression diagnostics, fig.cap='regression diagnostics'}
 
-par(mfrow = c(2,2))
+par(mfrow = c(3,3))
 qqnorm(check$.resid)
 plot(check$.fitted,check$.resid, xlab = 'predicted log density', ylab = 'residuals')
 hist(check$.resid, xlab = 'residuals', main = element_blank())
 plot(check$log.density,check$.fitted, xlab = 'observed log density',ylab = 'predicted log density')
 abline(a=0,b=1, col = 'red')
+plot(check$factor.site.side.,check$.resid)
+abline(h = 0,col = 'red')
+
+cormat_func <- function(i,cormat)
+{
+  hasdat <- (cormat[,i])
+  hasdat <- hasdat[is.na(hasdat) == F] 
+  return(hasdat)
+}
+
+cormat <- select(check,factor.site.side.,.resid) %>%
+  spread(factor.site.side.,.resid)
+
+clean_cor_mat <- foreach(i = 1:dim(cormat)[2],.combine = cbind) %do%
+  (cormat_func(i,cormat))
+colnames(clean_cor_mat) <- colnames(cormat)
+
+corplot <- cor(clean_cor_mat) %>%
+  as.data.frame() %>%
+          mutate(site.1 = rownames(.)) %>%
+  gather('site.2','correlation',ANACAPA_ADMIRALS_CEN:SRI_TRANCION_CANYON_W) %>%
+  ggplot(aes(site.1,site.2,fill = correlation)) + 
+  geom_tile() + 
+  scale_fill_continuous(low = 'orange', high = 'green')
+  
+
+
+#plot(check$factor.year.,check$.resid, xlab = 'year', ylab = 'residuals')
+#plot(check$years.mpa,check$.resid, xlab = 'year', ylab = 'residuals')
+
 ```
+
+Note: plot residuals vs. time, and residuals vs place
 
 Looking at our early regression results, we see some interesting findings to date. First off, we see that much of the variance is being soaked up by the year fixed effects, suggesting potentially a strong temporal trend outside of the effect of the MLPA (or potential confounding with the effect of the MLPA over time). We also see that targeted species *ceteris paribus* have higher densities than unfished species. Interestingly, we see no marginal effect of the presence or absence of an MPA in a given year at a given site. This means that for a particular species we cannot detect a significant effect of being inside or outside of an MPA in a given year. However, the interaction between presence of an MPA and eventually being an MPA (i.e. whether a site that will eventually become an MPA has become an MPA) is significant and positive. This suggests that the MPAs do have a detectable impact at the species-site level inside sites that eventually become MPAs. 
 
@@ -273,7 +320,34 @@ stargazer(species.siteside.year.reg, title = 'Preliminary DiD regression of biom
   
 ```
 
+## Analysis
+
+OK! looking at this we see some serious problems. With that many zeros, and adding a constant to deal with the log-transformed zeros, the residuals are clearly no longer normal, and you've got some serious statistical problems.  See an interesting summary of this issue in Wilson [-@Wilson2007]. So, to solve this
+
+One option, go with the tobit model. Essentially, this works through data augmentation 
+to deal with the truncated part. So, the idea here might be if the density is zero, deal with the data augmentation side, and if it's above the likelihood comes from normal distribution of log-transformed densities. Advantage is that you've already done this in a bayesian framework in Bayesian Econometrics, though the code is in matlab. Slight disadvantage is I'm not entirely clear how or if it would work in a hierarchichal framework. 
+
+Another strategy is from Zurr chapter 11. The idea here is similar, and might even be the same damn thing, in that you are breaking apart the probability of the zeros and non-zero data. So under this model, you would model zeros as a binomial distribution of whether the densities are 0, and then if they are zeros, scaled by the probability of false zeros. You fit the probability fo false zeros as a regression of visibility, depth, kelp, whatever. You then fit whatever likelihood you're dealing with to the remainder of the data. So in this context, you would fit the zero data as a binomial likelihood with probabilities defined by the the regression and the false positive rate, and the >0 data would be coming from a normal distribution fit to the predicted and observed log densities, scaled by the probability of zero. I.e. the likelihood of the data being the data and the data not being 0. 
+
+
+I like this approach somewhat since it makes more sense to me in terms of how it works, maybe just because Zurr is so much better written than Koop. The downside though, I've never coded this before, so not entirely clear how you'd translate this to a Bayesian framework, or a non-probit framework. Also don't have a working example to deal with. 
+
+
+
 ## Next Steps
+
+The actual next step. First things first, let's move this into a bayesian hierarchechal framework. The framework will be
+
+1. Work your way on up through the data and sketch out the hierarchecal structure and the model
+
+    * Make some summary plots/tables of the coefficients of interest
+
+
+2. Get a simple version (maybe without spatial/temporal autocorrelation) up and running. Make it an MCMC framework since a) potentially lots of parameters and b) allows you to go to reversible jump MCMC
+
+3. Get the reversible jump working 
+
+4. Work on the damn spatial/temporal autocorrelation
 
 Obviously this represents just a first exploration of the model. Broadly, it is somewhat unsurprising that we don't detect clear signals at the level of individual species and site over time. However, starting at this fine resolution allows for better understanding of the data at this point. We may want to aggregate later on though. 
 

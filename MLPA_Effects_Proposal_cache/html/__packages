@@ -18,3 +18,5 @@ DT
 ggmap
 maps
 mapproj
+texreg
+RobustRegression
