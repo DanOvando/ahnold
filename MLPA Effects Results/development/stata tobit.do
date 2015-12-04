@@ -1,9 +1,7 @@
- encode site_side, generate(ss)
- encode eventual_mpa, generate(will_be_mpa)
 
-generate arg= fishable* mpa
+encode factorregion, generate(factor_region)
 
-xi: tobit logdensity fishable mpa arg ss mpa_area, ll(-2.3025851)
+xi: tobit observed year years_mpa, ll(-6.907755)
 
 predict predicted2
 

@@ -33,6 +33,15 @@ There's a major zero-count problem in the data. Just about 50% of the data point
 
 Original thought was to go with the Tobit model. However, it seems to be having some major problems with these data, based on runs in both R and STATA. Basically it seems to have a strong negative bias, which is suggesting to me that something in there is misspecified. So, I'm going with a "hurdle" model, following Zurr. 
 
+
+So now, you're going to do two things. 
+
+## Development Notes
+
+* Tobit appears to be struggling in Laplaces Demon, due to the random changes. Can't seem to get above an acceptance rate of like 0.01. Problem goes away when I comment out the data augmentation
+
+* One alternative: Modify the mozzy MCMC 
+
 ## Likelihood 
 
 Under the hurdle model, with consider the likelihood of the data to be composed of two parts: the probablity that the specific "count" (or density in this case) is greater than 0 and then, the probability of the observed density if it is greater than zero. 
@@ -43,7 +52,9 @@ OK I'm getting at the heart of my confusion. What the hell are data and what are
 
 Now, for yours you have a different problem. You're not in poisson world, your in continuous world. So, all the methods that I know of, you need to actually predict the densities; that's what OLS would do. So that's why I'm confused now. One option: Predict the model. The likelihood though comes from the probability that the predicted data are below the threshold if they are below the threshold, and the probability that they are above the threshold and the likelihood of the data if they are above. So, you have a bunch of predictions. 
 
-Alternatively, the tobit seems to be working again! maybe go back to that in the meantime then. Try and figure out what's driving the weird banding in the residuals
+Alternatively, the tobit seems to be working again! maybe go back to that in the meantime then. Try and figure out what's driving the weird banding in the residuals. 
+
+Note: you might want to go through and scale some variables on a 0-1 scale, e.g. set 2012 as 1, 0 as min year, etc. vig
 
 Consider a threshold *r* that defines the lowest cutoff of densities. The probability that a given density is at or below the threshold is a binomial process
 
