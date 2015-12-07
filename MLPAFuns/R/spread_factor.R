@@ -8,7 +8,7 @@ spread_factor <- function(dat,var,omit = 'first')
 
   num_levels <- length(levels(thing))
 
-  names <- paste(var,levels(thing), sep = '.')
+  names <- paste(var,levels(thing),'factor', sep = '.')
 
   names <- names[2:length(names)]
 

@@ -153,8 +153,8 @@ mpa.map <- (ggmap(map_region, fullpage = TRUE) +
               geom_point(data = subset(spatial_dat), aes(x = long, y = lat, fill = factor(year.mpa),
                                                                             size = area), 
                          shape = 21, alpha = 0.6) + 
-              scale_fill_brewer(name = 'Year made MPA',palette = 'Spectral') + 
-              scale_size_continuous(name = 'Area (NM2)'))
+              scale_fill_brewer(guide = F,name = 'Year made MPA',palette = 'Spectral') + 
+              scale_size_continuous(guide = F,name = 'Area (NM2)'))
 mpa.map
 
 species.map <- (ggmap(map_region, fullpage = TRUE) + 

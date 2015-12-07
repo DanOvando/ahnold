@@ -30,7 +30,6 @@ Model <- function(parm, Data)
 {
   ### Parameters
   beta <- parm[Data$pos.beta]
-  show(beta)
   sigma <- interval(parm[Data$pos.sigma], 1e-100, Inf)
   parm[Data$pos.sigma] <- sigma
   ### Log-Prior
@@ -53,7 +52,7 @@ Fit <- LaplacesDemon(Model, Data=MyData, Initial.Values = Initial.Values,
      Covar=NULL, Iterations=20000, Status=100, Thinning=100,
      Algorithm="RJ", Specs=list(bin.n=bin.n, bin.p=bin.p,
           parm.p=parm.p, selectable=selectable,
-          selected=c(0,rep(0,J-1),0)),parm.names = parm.names)
+          selected=c(0,rep(1,J-1),0)),parm.names = parm.names)
 
 
 check_post <- as.data.frame(Fit$Posterior1) %>%
