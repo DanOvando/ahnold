@@ -3,8 +3,8 @@
 # This script runs the development version of the MLPA effects model
 
 rm(list = ls())
+set.seed(666)
 library(knitr)
-knitr::opts_chunk$set(fig.path='Figs/', echo=FALSE, warning=FALSE, message=FALSE)
 library(gridExtra)
 library(ggplot2)
 library(plyr)
@@ -20,22 +20,16 @@ library(stargazer)
 library(DT)
 library(ggmap)
 library(texreg)
-# library(VGAM)
 library(AER)
 library(msm)
 library(mvtnorm)
 devtools::load_all('MLPAFuns')
 
 
-devtools::load_all('~/Custom R Packages/ZurrCode')
-devtools::load_all('~/Custom R Packages/RobustRegression')
-
-
-
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- 'development'
+runfolder <- '2.0'
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -52,13 +46,6 @@ rawdat <- read.csv('UCSB_FISH raw thru 2013.csv', stringsAsFactors = F)
 
 life.history <- read.csv('VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv', stringsAsFactors = F) %>%
   rename(classcode = pisco_classcode)
-
-
-# lh <- life.history %>%
-#   group_by(classcode) %>%
-#   summarise(L_inf = mean(linf),VbK = mean(vbk),size_mat = mean(size_mature)) %>%
-#   ungroup() %>%
-#   mutate(hasall = is.na(L_inf) == F & is.na(VbK) == F & is.na(size_mat) == F)
 
 species.dat <- read.csv('master_spp_table.csv', stringsAsFactors = F)
 
@@ -98,7 +85,8 @@ processed_site_dat <- read.csv('ci_reserve_data_final3 txt.csv', stringsAsFactor
   rename(site_side = site.side) %>%
   left_join(conditions_dat,by = c('year','site_side')) %>%
   left_join(life.history, by = 'classcode') %>%
-  rename(description2 = Description)
+  rename(description2 = Description) %>%
+  subset(is.na(biomass) == F)
 
 colnames(processed_site_dat) <- tolower(colnames(processed_site_dat)) #make all variables lower case
 
@@ -115,32 +103,68 @@ processed_dat <- processed_site_dat %>%
   mutate(ever.seen = mean(biomass, na.rm = T)>0) %>%
   subset(year != 1999 & ever.seen == T & grepl('YOY',classcode) == F) %>% #remove 1999, species never seen at a site, and young of the year. Why remove YOY again?
   ungroup() %>%
+  mutate(year_mlpa_mpa = year.mpa * as.numeric(year.mpa >= 2003)) %>%
   group_by(site_side) %>%
   mutate(num.years.surveyed = length(unique(year)),
-         will_be_mpa = year.mpa>0) %>%
+         will_be_mlpa = year_mlpa_mpa>0) %>%
   subset(num.years.surveyed > 2) %>% #Only keep sites that have been surveyed two or more years
   ungroup() %>%
-  mutate(year_mpa2 = capfun(year.mpa)) %>%
+  mutate(year_mpa2 = capfun(year_mlpa_mpa)) %>%
   group_by(region,year) %>%
-  mutate(region_has_mpas = any(year_mpa2 <= year)) %>%
+  mutate(region_has_mpas = any(year_mpa2 <= year)) %>% #redefining 'MPA' as an MLPA created MPA
   ungroup() %>%
   group_by(common_name) %>%
-  mutate(num_samples = sum(biomass>0, na.rm = T)) %>%
+  mutate(total_species_samples = sum(biomass>0, na.rm = T)) %>%
   ungroup() %>%
-  subset(num_samples > quantile(num_samples,.1))
+  subset(total_species_samples > quantile(total_species_samples,.1))
 
 save(mlpa_dat,processed_dat, file = paste(runpath,'Combined MLPA Database.Rdata',sep = ''))
 
 
+temptrend_plot <- processed_dat %>% group_by(region,year) %>% summarize(mt = mean(mean_temp)) %>%
+  ggplot(aes(year,mt,color = region)) +
+  geom_line()
+
+# Generate temperature lags ----
+
+temp_lags <- processed_dat %>%
+  group_by(site_side,year) %>%
+  summarise(mean_temp = unique(mean_temp)) %>%
+  ungroup() %>%
+  group_by(site_side) %>%
+  mutate(mean_site_temp = mean(mean_temp, na.rm = T))
+
+temp_lags$mean_temp[is.na(temp_lags$mean_temp)] <- temp_lags$mean_site_temp[is.na(temp_lags$mean_temp)]
+
+temp_lags <- temp_lags %>%
+  mutate(mean_temp_lag1 = (lag(mean_temp,1)),
+         mean_temp_lag2 = lag(mean_temp,2),
+         mean_temp_lag3 = lag(mean_temp,3),
+         mean_temp_lag4 = lag(mean_temp,4))
+
+for (i in 1:dim(temp_lags)[1]){
+
+  missing_lags <- which(is.na(temp_lags[i,]))
+
+  temp_lags[i,missing_lags] <- temp_lags$mean_site_temp[i]
+
+}
+
+
 # Format data for regression ----------------------------------------------
+
 
 species_siteside_year <- processed_dat %>% #group data to the species, site_side, year level
   subset(is.na(targeted) == F & targeted != '' & mpaareanm2 >0) %>%
   group_by(year,site_side,classcode) %>%
   summarise(mpa.period = unique(region_has_mpas),
             mean_density = mean(biomass, na.rm = T),
+#             num_transects = length(biomass),
+#             num_pos_transects = sum(biomass > 0, na.rm = T),
             site.type = unique(mpa.status),
-            years_mpa = max(0,(year - (year.mpa-1)) * as.numeric(year.mpa>0)),
+            site = unique(site),
+            year_mlpa = unique(year_mlpa_mpa),
+            years_mpa = max(0,(year - (year_mlpa_mpa-1)) * as.numeric(year_mlpa_mpa>0)),
             region = unique(region),
             targeted = unique(targeted),
             trophic.group = unique(trophicgroup),
@@ -149,7 +173,6 @@ species_siteside_year <- processed_dat %>% #group data to the species, site_side
             vbk = mean(c(vbgf.k,vbgf.k.f,vbgf.k.m), na.rm = T),
             size_mature = mean(size_mature_cm, na.rm = T),
             broadtrophic = unique(broadtrophic),
-            mean_temp = mean(mean_temp, na.rm = T),
             mean_vis = mean(mean_vis, na.rm = T),
             species = unique(common_name)) %>%
   #   ungroup() %>% min(mean_density[mean_density>0], na.rm = T)
@@ -168,18 +191,32 @@ species_siteside_year <- processed_dat %>% #group data to the species, site_side
   group_by(site_side) %>%
   mutate(eventual_mpa = max(years_mpa) >0) %>%
   subset(is.na(mean_density) == F & is.na(log_density) == F) %>%
-  ungroup()
+  ungroup() %>%
+  left_join(temp_lags, by = c('site_side','year'))
 
+# par(mfrow= c(1,2))
+# hist(species_siteside_year$mean_temp)
+# hist(processed_dat$mean_temp)
 
 varnames <- colnames(species_siteside_year)
 
+species_siteside_year$MLPA <- ordered((species_siteside_year$mpa.period), levels = c('BEFORE','AFTER'))
+
+species_siteside_year$na_temp <- (species_siteside_year$mean_temp)
+
+species_siteside_year$na_temp[is.na(species_siteside_year$mean_temp)] <- mean(species_siteside_year$mean_temp, na.rm = T)
+
+species_siteside_year$na_vis <- (species_siteside_year$mean_vis)
+
+species_siteside_year$na_vis[is.na(species_siteside_year$mean_vis)] <- mean(species_siteside_year$mean_vis, na.rm = T)
+
+save(file = paste(runpath,'species_siteside_year.Rdata', sep = ''), species_siteside_year)
 
 # Plot some stuff ---------------------------------------------------------
 
 
-species_siteside_year$MLPA <- ordered((species_siteside_year$mpa.period), levels = c('BEFORE','AFTER'))
 
-density.by.time.in.mpa <-
+density.by.time.in.mpa_plot <-
   ggplot(subset(species_siteside_year), aes(factor(years_mpa),mean_density)) +
   geom_boxplot(aes(fill = factor(targeted))) +
   facet_grid(eventual_mpa~.) +
@@ -190,7 +227,7 @@ density.by.time.in.mpa
 
 # Density vs Year by Targeted or Untargeted Inside and Outside of Eventual MPA ----
 
-density.by.year <-
+density.by.year_plot <-
   ggplot(subset(species_siteside_year,mean_density >0), aes(factor(year),mean_density)) +
   geom_boxplot(aes(fill = factor(targeted))) +
   facet_grid(eventual_mpa~.) +
@@ -200,7 +237,7 @@ density.by.year
 
 # Covatiate Plots ----
 
-temp_gradient <- species_siteside_year %>%
+temp_gradient_plot <- species_siteside_year %>%
   group_by(site_side) %>%
   mutate(mean_mean_temp = mean(mean_temp), na.rm = T) %>%
   subset(is.na(mean_mean_temp) == F) %>%
@@ -212,7 +249,7 @@ temp_gradient <- species_siteside_year %>%
   ylab("Mean Temperature ('C')") +
   coord_flip()
 
-vis_gradient <- species_siteside_year %>%
+vis_gradient_plot <- species_siteside_year %>%
   group_by(site_side) %>%
   mutate(mean_mean_vis = mean(mean_vis), na.rm = T) %>%
   subset(is.na(mean_mean_vis) == F) %>%
@@ -224,7 +261,7 @@ vis_gradient <- species_siteside_year %>%
   ylab("Mean Visibility") +
   coord_flip()
 
-mean_density <- species_siteside_year %>%
+mean_density_plot <- species_siteside_year %>%
   group_by(site_side) %>%
   mutate(mean_mean_density = mean(mean_density, na.rm = T)) %>%
   subset(is.na(mean_mean_density) == F) %>%
@@ -237,7 +274,7 @@ mean_density <- species_siteside_year %>%
   scale_y_log10() +
   coord_flip()
 
-perc_targeted <- species_siteside_year %>%
+perc_targeted_plot <- species_siteside_year %>%
   group_by(site_side) %>%
   summarize(perc_targeted = mean(targeted == 'Targeted')) %>%
   ungroup() %>%
@@ -249,14 +286,7 @@ perc_targeted <- species_siteside_year %>%
   ylab("% of Species Targeted") +
   coord_flip()
 
-community_structure <- species_siteside_year %>%
-  ggplot(aes(site_side,fill= trophic.group)) +
-  geom_bar() +
-  xlab('Site Side') +
-  ylab("Community Structure") +
-  coord_flip()
-
-community_structure <- species_siteside_year %>%
+community_structure_plot <- species_siteside_year %>%
   ggplot(aes(site_side,fill= trophic.group)) +
   geom_bar() +
   xlab('Site Side') +
@@ -282,56 +312,25 @@ write.csv(file = paste(runpath,'species_siteside_year.csv', sep = ''),
 
 # Run Regression ----------------------------------------------------------
 
-# reg <- lm(log_density ~  factor(year) + mpa_applied + fished + mpa_applied*fished  , data = (species_siteside_year))
-
-# tobit_reg <- vglm(log_density ~  factor(year) + factor(region) + mpa_applied + fished + mpa_applied*fished + fished*years_mpa + years_mpa +
-#                     factor(broadtrophic) + size_mature,
-#                   data = subset(species_siteside_year, is.na(log_density) == F),
-#                   tobit(Lower = min(species_siteside_year$log_density, na.rm = T)),control = vglm.control(maxit = 100),trace = T)
-#
-# tobit_reg <- tobit(log_density ~  factor(year) + factor(region) + mpa_applied + fished + mpa_applied*fished + fished*years_mpa + years_mpa +
-#                     factor(broadtrophic) + size_mature,
-#                   data = subset(species_siteside_year, is.na(log_density) == F),
-#                   left = min(species_siteside_year$log_density, na.rm = T))
-#
-
-species_siteside_year$na_temp <- (species_siteside_year$mean_temp)
-
-species_siteside_year$na_temp[is.na(species_siteside_year$mean_temp)] <- mean(species_siteside_year$mean_temp, na.rm = T)
-
-species_siteside_year$na_vis <- (species_siteside_year$mean_vis)
-
-species_siteside_year$na_vis[is.na(species_siteside_year$mean_vis)] <- mean(species_siteside_year$mean_vis, na.rm = T)
-
-pos_vars <- c('fished','mpa_applied','fished_x_mpa','factor_year',
-              'region','broadtrophic','years_mpa','fished_x_yearsmpa',
-              'linf','vbk')
-
-species_siteside_year %>%
-  group_by(species) %>%
-  summarize(l = mean(linf),k = mean(vbk))
-
 tobit_reg <- tobit(log_density ~
                      factor(year) +
                      factor(region) +
                      years_mpa*fished +
-                     factor(broadtrophic) +
+                     factor(trophic.group) +
                      years_mpa +
                      linf +
                      vbk +
                      mpa_applied +
                      fished +
-                     mpa_applied*fished,
+                     mpa_applied*fished +
+                     na_temp +
+                     na_vis +
+                     mean_temp_lag1 +
+                     mean_temp_lag2 +
+                     mean_temp_lag3 +
+                     mean_temp_lag4,
                    data = subset(species_siteside_year, is.na(log_density) == F),
                    left = min(species_siteside_year$log_density, na.rm = T))
-#
-# tobit_reg <- tobit(log_density ~  (year) +
-#                      years_mpa,data = subset(species_siteside_year, is.na(log_density) == F),
-#                    left = min(species_siteside_year$log_density, na.rm = T))
-#
-
-# quartz()
-# image(a)
 
 vcov_plot <- as.data.frame(vcov(tobit_reg)) %>%
   mutate(var2 = rownames(.)) %>%
@@ -342,24 +341,7 @@ vcov_plot <- as.data.frame(vcov(tobit_reg)) %>%
 
 summary(tobit_reg)
 
-
 reg_results <- augment(tobit_reg)
-
-
-
-# predicted_log_density <- as.data.frame(predict(tobit_reg))
-#
-# observed_log_density <- as.data.frame(depvar(tobit_reg))
-#
-# observed_log_density$row <- rownames(observed_log_density)
-#
-# used <- species_siteside_year[as.numeric(observed_log_density$row),]
-#
-# used$predicted_log_density <- fitted(tobit_reg)
-
-# used$predicted_log_density <- predicted_log_density$mu
-
-# used$residuals <- used$predicted_log_density - used$log_density
 
 reg_results$observed <- reg_results$.fitted + reg_results$.resid
 
@@ -367,7 +349,7 @@ reg_results$observed <- reg_results$.fitted + reg_results$.resid
 write.csv(file = paste(runpath,'tobit data.csv', sep = ''),
           reg_results)
 
-quartz()
+pdf(file = paste(runfolder,'tobit diagnostics.pdf', sep = ''))
 par(mfrow = c(2,3))
 plot((reg_results$factor.year.),reg_results$.resid)
 boxplot(reg_results$.resid ~ reg_results$factor.region.)
@@ -378,6 +360,7 @@ hist(reg_results$.resid)
 abline(v = mean(reg_results$.resid))
 qqnorm(reg_results$.resid)
 qqline(reg_results$.resid)
+dev.off()
 
 summary(tobit_reg)
 
@@ -389,53 +372,61 @@ eval_resid <- reg_results %>%
 
 
 
-# Develop Bayesian Regression ------------------------------------------------------------
+# Prep Bayesian Regression ------------------------------------------------------------
 
 dep_var <- 'log_density'
 
 
 pos_vars <- c('fished','mpa_applied','fished_x_mpa','factor_year',
-              'region','broadtrophic','years_mpa','fished_x_yearsmpa',
-              'linf','vbk')
+              'region','trophic.group','years_mpa','fished_x_yearsmpa',
+              'linf','vbk','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+              'mean_temp_lag4')
 
-devtools::load_all('MLPAFuns')
-
-a = which(species_siteside_year$log_density == min(species_siteside_year$log_density))
-
-b <- sample(a,.99*length(a), replace = F)
-
-# Develop delta method ----------------------------------------------------
+delta_vars <- c('fished','mpa_applied','fished_x_mpa','factor_year',
+              'trophic.group',
+              'linf','na_temp','na_vis')
 
 any_fish <- species_siteside_year$log_density > min(species_siteside_year$log_density, na.rm = T)
 
-a = glm(any_fish ~ linf + fished + fished_x_mpa + broadtrophic
-        + mpa_applied + mean_vis + region + factor(year) ,family = 'binomial', data = species_siteside_year)
+logit_model = glm(any_fish ~  fished + mpa_applied + fished_x_mpa + trophic.group +
+        + linf + na_temp + na_vis ,family = 'binomial', data = species_siteside_year)
 
-b <- augment(a)
+logit_reg <- augment(logit_model)
 
-b$prob <- exp(b$.fitted)/(1+exp(b$.fitted))
+logit_reg$prob <- exp(logit_reg$.fitted)/(1+exp(logit_reg$.fitted))
 
-b %>%
+logit_reg_plot <- logit_reg %>%
   mutate(bin = cut(prob,100)) %>%
   group_by(bin) %>%
   summarize(seen = mean(any_fish)) %>%
   ggplot(aes(bin,seen)) +
   geom_bar(stat = 'identity', position = 'dodge')
 
+plots <- ls()
 
-bayesian_tobit <- run_mlpa_demon(dat = species_siteside_year, dep_var = dep_var,
-                                 pos_vars = pos_vars,runpath = runpath,scale_numerics = T,
-                                 iterations = 1e5,status = .025, acceptance_rate = 0.22, method = 'Summon Demon')
+plots <- plots[grepl('_plot',plots, fixed = T)]
 
-bayesian_tobit$Acceptance.Rate
+save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
-# post <- thin_mcmc(bayesian_tobit$posteriors, thin_every = 10)
-#
-# ggmcmc(ggs(mcmc(post)), file = paste(runpath,'mcmc diagnostics.pdf', sep = ''))
 
-post <- bayesian_tobit$Posterior1
+# Run Bayesian Regression -------------------------------------------------
 
-post <- thin_mcmc(post[2.5e5:dim(post)[1],], thin_every = 4*bayesian_tobit$Rec.Thinning)
+
+scale_numerics <- T
+
+its <- 1e6
+
+bayes_reg <- run_delta_demon(dat = species_siteside_year, dep_var = dep_var,
+                                 pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,
+                                 iterations = its,status = .025, acceptance_rate = 0.4, method = 'Summon Demon')
+
+save(file = paste(runpath,'MCMC results.Rdata', sep = ''), bayes_reg)
+
+# bayes_reg$demon_fit <- Acceptance.Rate
+
+post <- bayes_reg$demon_fit$Posterior1
+
+thinned_post <- thin_mcmc(post[(.5*its):its,], thin_every = bayes_reg$demon_fit$Rec.Thinning)
 
 ggmcmc(ggs(mcmc(post)), file = paste(runpath,'mcmc diagnostics.pdf', sep = ''))
 
