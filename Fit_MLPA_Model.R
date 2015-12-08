@@ -23,18 +23,17 @@ library(texreg)
 library(AER)
 library(msm)
 library(mvtnorm)
-library(Rcpp)
 devtools::load_all('MLPAFuns')
 
 
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- 'Scratch'
+runfolder <- '3.0'
 
 scale_numerics <- T
 
-its <- 1e3
+its <- 2e6
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -414,6 +413,7 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 # Run Bayesian Regression -------------------------------------------------
 
+devtools::load_all('MLPAFuns')
 
 bayes_reg <- run_delta_demon(dat = species_siteside_year, dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,

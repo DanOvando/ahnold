@@ -1,7 +1,6 @@
 mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 {
   ### Separate out parameters for observed density  ----
-
   beta <- parm[Data$pos_den_beta]
 
   parm[Data$pos_den_sigma] <- interval(parm[Data$pos_den_sigma], 1e-100, Inf)
@@ -35,14 +34,13 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   bi_beta <- parm[Data$beta_to_use_binom]
 
-  bi_dat <- Data$reg_dat[,Data$beta_to_use_binom]
+  bi_dat <- Data$bi_reg_mat
 
   bi_hat <- bi_dat %*% bi_beta
 
   prob_hat <- exp(bi_hat)/(1 + exp(bi_hat))
 
   bi_loglike <-  sum(dbinom(Data$binom_dep_var,1,prob_hat, log = T))
-
   ### Density Log-likelihood ----
 
   mu <- Data$den_reg_mat %*% beta
@@ -54,19 +52,13 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
   ### Log-Posterior
 
 
-#   local_vars <- ls()
-#
-#   post_comp <- local_vars[grepl('_loglike', local_vars) | grepl('_prior', local_vars)]
-#
-#   post_fmla <- paste(post_comp, sep = '+')
-
   LP <- density_loglike + bi_loglike  + year_priors + bi_year_priors +
     sigma_year_prior + sigma_bi_year_prior + region_priors + sigma_region_prior + sigma_density_prior
 
   LL <- density_loglike + bi_loglike
 
   Modelout <- list(LP=LP,Dev=-2*LL, Monitor=LP,yhat = 1,
-                   parm=parm,d =density_loglike, mu = mu )
+                   parm=parm)
 
   return(Modelout)
 }

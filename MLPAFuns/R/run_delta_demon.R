@@ -153,6 +153,7 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
                pos_den_beta = pos_den_beta,
                pos_den_sigma = pos_den_sigma,
                pos_den_time_terms = pos_den_time_terms,
+               pos_den_region_terms = pos_den_region_terms,
                pos_any_betas = pos_any_betas,
                pos_any_sigmas = pos_any_sigmas,
                pos_sigma_year = pos_sigma_year,
@@ -164,8 +165,6 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
                time_vars = time_vars,
                site_vars = site_vars,
                species_vars = species_vars)
-
-
   Initial.Values <- GIV(mlpa_delta_likelihood, Data, PGF=TRUE)
 
   # Run Demon ----
