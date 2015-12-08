@@ -1,11 +1,12 @@
 rm(list = ls())
+set.seed(667)
 load('FUCKIT.Rdata')
 library(Rcpp)
 
 parma <- Initial.Values
 
-
-cppFunction('NumericMatrix ballsack(NumericVector parm, NumericVector pos_den_beta,
+b <- '1234'
+cppFunction('NumericVector ballsacks(NumericVector parm, NumericVector pos_den_beta,
             NumericVector pos_sigma_year,NumericVector pos_sigma_bi_year, NumericVector pos_sigma_region,
             NumericVector pos_sigma_density, NumericVector pos_den_time_terms,
             NumericVector pos_bi_time_terms,NumericVector pos_den_region_terms,
@@ -121,11 +122,11 @@ cppFunction('NumericMatrix ballsack(NumericVector parm, NumericVector pos_den_be
 
             out[2] = -2*(density_loglike + bi_loglike);
 
-            return(den_reg_mat);
+            return(mu);
             }')
 
 # a <- proc.time()
-damnit = ballsack(parm = parma, pos_den_beta = (pos_den_beta - 1),
+damnit = ballsacks(parm = parma, pos_den_beta = (pos_den_beta - 1),
                   pos_sigma_year = pos_sigma_year - 1,pos_sigma_bi_year = pos_sigma_bi_year - 1,
                   pos_sigma_region = pos_sigma_region - 1,pos_sigma_density = pos_sigma_density - 1,
                   pos_den_time_terms = pos_den_time_terms - 1, pos_bi_time_terms = pos_bi_time_terms - 1,

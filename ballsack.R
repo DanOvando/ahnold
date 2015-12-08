@@ -1,11 +1,13 @@
 rm(list = ls())
+set.seed(663)
 load('FUCKIT.Rdata')
 library(Rcpp)
 
 parma <- Initial.Values
 
+b <- '1234'
 
-cppFunction('NumericMatrix ballsack(NumericVector parm, NumericVector pos_den_beta,
+cppFunction('NumericVector rballs(NumericVector parm, NumericVector pos_den_beta,
             NumericVector pos_sigma_year,NumericVector pos_sigma_bi_year, NumericVector pos_sigma_region,
             NumericVector pos_sigma_density, NumericVector pos_den_time_terms,
             NumericVector pos_bi_time_terms,NumericVector pos_den_region_terms,
@@ -121,20 +123,16 @@ cppFunction('NumericMatrix ballsack(NumericVector parm, NumericVector pos_den_be
 
             out[2] = -2*(density_loglike + bi_loglike);
 
-            return(den_reg_mat);
+            return(mu);
             }')
 
-# a <- proc.time()
-damnit = ballsack(parm = parma, pos_den_beta = (pos_den_beta - 1),
-                  pos_sigma_year = pos_sigma_year - 1,pos_sigma_bi_year = pos_sigma_bi_year - 1,
-                  pos_sigma_region = pos_sigma_region - 1,pos_sigma_density = pos_sigma_density - 1,
-                  pos_den_time_terms = pos_den_time_terms - 1, pos_bi_time_terms = pos_bi_time_terms - 1,
-                  pos_den_region_terms = pos_den_region_terms - 1,
-                  pos_beta_to_use_binom = pos_beta_to_use_binom-1,
-                  reg_dat = Data$reg_dat, binom_dep_var = Data$binom_dep_var,
-                  bi_reg_mat = bi_reg_mat, den_reg_mat = den_reg_mat, dep_var = Data$dep_var)
+damnit = rballs(parm = parma, pos_den_beta = (pos_den_beta - 1),
+                   pos_sigma_year = pos_sigma_year - 1,pos_sigma_bi_year = pos_sigma_bi_year - 1,
+                   pos_sigma_region = pos_sigma_region - 1,pos_sigma_density = pos_sigma_density - 1,
+                   pos_den_time_terms = pos_den_time_terms - 1, pos_bi_time_terms = pos_bi_time_terms - 1,
+                   pos_den_region_terms = pos_den_region_terms - 1,
+                   pos_beta_to_use_binom = pos_beta_to_use_binom-1,
+                   reg_dat = Data$reg_dat, binom_dep_var = Data$binom_dep_var,
+                   bi_reg_mat = bi_reg_mat, den_reg_mat = den_reg_mat, dep_var = Data$dep_var)
 
 print(head(damnit))
-
-# proc.time() - a
-

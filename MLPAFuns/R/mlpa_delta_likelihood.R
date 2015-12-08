@@ -45,7 +45,7 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   ### Density Log-likelihood ----
 
-  mu <- Data$reg_dat[,Data$beta_to_use_binom == F] %*% beta
+  mu <- Data$den_reg_mat %*% beta
 
   observed_density <- Data$dep_var
 
@@ -66,7 +66,7 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
   LL <- density_loglike + bi_loglike
 
   Modelout <- list(LP=LP,Dev=-2*LL, Monitor=LP,yhat = 1,
-                   parm=parm)
+                   parm=parm,d =density_loglike, mu = mu )
 
   return(Modelout)
 }
