@@ -24,7 +24,7 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   sigma_bi_year_prior <- dnorm(sigma_bi_year, .1,.2, log = T)
 
-  region_priors <- sum(dnorm(parm[Data$parm.names %in% Data$site_vars ],
+  region_priors <- sum(dnorm(parm[Data$pos_den_region_terms],
                              0,sigma_region, log = T))
 
   sigma_region_prior <- dnorm(sigma_region, .1,.2, log = T)
@@ -33,17 +33,11 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   ### Hurdle Log-Likelihood ----
 
-  bi_beta <- parm[Data$vars_for_binom]
+  bi_beta <- parm[Data$beta_to_use_binom]
 
   bi_dat <- Data$reg_dat[,Data$beta_to_use_binom]
 
-  #   bi_hat = tcrossprod(bi_beta, bi_dat)
-
   bi_hat <- bi_dat %*% bi_beta
-
-  #   mat_bi_beta <- matrix(rep(bi_beta,Data$N),nrow  = Data$N, ncol = length(bi_beta), byrow = T)
-  #
-  #   bi_hat <- rowSums(bi_dat * mat_bi_beta)
 
   prob_hat <- exp(bi_hat)/(1 + exp(bi_hat))
 
@@ -51,18 +45,11 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   ### Density Log-likelihood ----
 
-  #   mu <- tcrossprod(beta, Data$reg_dat[,Data$beta_to_use_binom == F])
-
   mu <- Data$reg_dat[,Data$beta_to_use_binom == F] %*% beta
 
   observed_density <- Data$dep_var
 
-#     min_val <- min(observed_density)
-#
-#     seen <- observed_density > min_val
-#
-#     density_loglike <- sum(dnorm(observed_density[seen], mu[seen],sigma_density, log=TRUE)^Data$binom_dep_var)
-  density_loglike <- sum(dnorm(observed_density, mu,sigma_density, log=TRUE)^(Data$binom_dep_var))
+   density_loglike <- sum(dnorm(observed_density, mu,sigma_density, log=TRUE)^(Data$binom_dep_var))
 
   ### Log-Posterior
 
@@ -80,11 +67,6 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   Modelout <- list(LP=LP,Dev=-2*LL, Monitor=LP,yhat = 1,
                    parm=parm)
-
-  #   Modelout <- list(LP=LP, Dev=-2*LL, Monitor=LP,
-  #                    yhat=rnorm(length(mu), mu, sigma), parm=parm)
-
-  #     show(proc.time() - a)
 
   return(Modelout)
 }

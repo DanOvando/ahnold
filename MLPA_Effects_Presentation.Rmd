@@ -37,7 +37,7 @@ devtools::load_all('MLPAFuns')
 
 ```{r load results}
 
-run_name <- 'Static 2.0 Full Presentation'
+run_name <- '2.0'
 
 runpath <- paste('MLPA Effects Results/',run_name,'/', sep = '')
 
@@ -57,6 +57,10 @@ plot_theme <- theme_classic() + theme(text = element_text(size = 18, family = 'H
 
 
 ```{r process MCMC, cache=T}
+
+#runthis now
+
+m <- 9
 
 post <- bayes_reg$demon_fit$Posterior1
 

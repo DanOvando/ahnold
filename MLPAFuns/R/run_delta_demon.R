@@ -78,6 +78,8 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
   vars_for_binom <- grepl('bi.', parm.names, fixed = T)
 
+  pos_vars_for_binom <- which(vars_for_binom)
+
   parm <- rep(0,length(parm.names))
 
   pos_den_beta <- which(parm.names %in% colnames(reg_dat) & vars_for_binom == F)
@@ -85,6 +87,8 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
   pos_den_sigma <- which(parm.names %in% sigmas & vars_for_binom == F)
 
   pos_den_time_terms <- which(parm.names %in% time_vars & vars_for_binom == F)
+
+  pos_den_region_terms <- which(parm.names %in% site_vars & vars_for_binom == F)
 
   pos_bi_time_terms <- which(parm.names %in% time_vars & vars_for_binom == T)
 
@@ -123,16 +127,29 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
   dep_sd <- sd(dat$log_density)
 
   # Prepare the Demon's snacks ----
+  #
+
+  pos_vars_for_binom <- which(vars_for_binom)
+
+  pos_beta_to_use_binom <- which(beta_to_use_binom)
+
+  bi_reg_mat = as.matrix(reg_dat[,beta_to_use_binom])
+
+  den_reg_mat = as.matrix(reg_dat[,beta_to_use_binom == F])
+
 
   Data <- list(N = N,
                J=J,
                PGF=PGF,
+               bi_reg_mat = bi_reg_mat,
+               den_reg_mat = den_reg_mat,
                reg_dat = as.matrix(reg_dat),
                mon.names = mon.names,
                binom_dep_var = binom_dep_var,
                parm.names = parm.names,
                beta_to_use_binom = beta_to_use_binom,
                vars_for_binom = vars_for_binom,
+               pos_beta_to_use_binom = pos_beta_to_use_binom,
                pos_den_beta = pos_den_beta,
                pos_den_sigma = pos_den_sigma,
                pos_den_time_terms = pos_den_time_terms,

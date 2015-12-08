@@ -60,7 +60,7 @@ run_mlpa_demon <- function(dat,dep_var,pos_vars,iterations = 1000,status = .05,t
   pos.sigma <- which(parm.names %in% sigmas)
 
   pos.time_terms <- which(parm.names %in% time_vars)
-browser()
+
   PGF <- function(Data) {
     beta <- rnorm(length(Data$pos.beta))
     sigma <- runif(length(Data$pos.sigma))
@@ -83,16 +83,16 @@ browser()
 
   if (method != 'Summon Demon')
   {
-  Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
-                   dat = Data,vcov = full_vcov,n_sim  = iterations,
-                   n_burn =  burn*iterations, targ_accept_rate = 0.25,
-                   vcov_augment = (2.4/sqrt(45))^2, jumpyness = 1)
+    Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
+                     dat = Data,vcov = full_vcov,n_sim  = iterations,
+                     n_burn =  burn*iterations, targ_accept_rate = 0.25,
+                     vcov_augment = (2.4/sqrt(45))^2, jumpyness = 1)
   }else{
 
-   Fit <- LaplacesDemon(mlpa_likelihood, Data=Data, Initial.Values = Initial.Values,
-                       Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
-                       Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL))
+    Fit <- LaplacesDemon(mlpa_likelihood, Data=Data, Initial.Values = Initial.Values,
+                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
+                         Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL))
   }
 
-                       return(Fit)
+  return(Fit)
 }

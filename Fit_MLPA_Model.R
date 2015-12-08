@@ -23,13 +23,18 @@ library(texreg)
 library(AER)
 library(msm)
 library(mvtnorm)
+library(Rcpp)
 devtools::load_all('MLPAFuns')
 
 
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '2.0'
+runfolder <- 'Scratch'
+
+scale_numerics <- T
+
+its <- 1e3
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -222,7 +227,6 @@ density.by.time.in.mpa_plot <-
   facet_grid(eventual_mpa~.) +
   scale_y_log10()
 
-density.by.time.in.mpa
 
 
 # Density vs Year by Targeted or Untargeted Inside and Outside of Eventual MPA ----
@@ -233,7 +237,6 @@ density.by.year_plot <-
   facet_grid(eventual_mpa~.) +
   scale_y_log10()
 
-density.by.year
 
 # Covatiate Plots ----
 
@@ -411,10 +414,6 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 # Run Bayesian Regression -------------------------------------------------
 
-
-scale_numerics <- T
-
-its <- 1e6
 
 bayes_reg <- run_delta_demon(dat = species_siteside_year, dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,

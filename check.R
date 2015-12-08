@@ -2,10 +2,12 @@
 p = rnorm(length(parm.names))
 Rprof()
 
+b <- proc.time()
 for (i in 1:100)
 {
-  a = mlpa_delta_likelihood(parm = p , Data = Data,reg_model = 'tobit')
+  a = mlpa_delta_likelihood(parm = p , Data = Data)
 }
+proc.time() - b
 
 Rprof(NULL)
 RProfData<- readProfileData('Rprof.out')
