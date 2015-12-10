@@ -24,7 +24,8 @@
 
 run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,status = .05,thin = 1,burn = .5,
                             scale_numerics = F,
-                            runpath, acceptance_rate  = 0.234, method = 'Summon Demon') {
+                            runpath, acceptance_rate  = 0.234, method = 'Summon Demon',
+                            num_chains = 2) {
 
 
   # Convert data to regression format----
@@ -184,6 +185,22 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
                          Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
                          Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
                          parm.names = parm.names)
+
+  }
+  if (method == 'Summon Parallel Demon')
+  {
+
+    jitter_inits <- c(rep(Initial.Values,num_chains))
+
+    disperse_mat <- matrix(runif(length(jitter_inits),-2,2),nrow = num_chains, ncol = length(Initial.Values))
+
+    par_initial_values <- matrix(jitter_inits,nrow = num_chains,
+                                        ncol = length(Initial.Values), byrow = T) + disperse_mat
+
+    Fit <- LaplacesDemon.hpc(mlpa_delta_likelihood, Data=Data, Initial.Values = par_initial_values,
+                         Covar=NULL, Iterations=100, Status=iterations*status, Thinning=1,
+                         Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
+                          Chains = num_chains, CPUs = num_chains)
 
   }
   if (method == 'Summon Reversible Demon'){

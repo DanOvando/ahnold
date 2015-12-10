@@ -351,7 +351,7 @@ reg_results$observed <- reg_results$.fitted + reg_results$.resid
 write.csv(file = paste(runpath,'tobit data.csv', sep = ''),
           reg_results)
 
-pdf(file = paste(runfolder,'tobit diagnostics.pdf', sep = ''))
+pdf(file = paste(runpath,'tobit diagnostics.pdf', sep = ''))
 par(mfrow = c(2,3))
 plot((reg_results$factor.year.),reg_results$.resid)
 boxplot(reg_results$.resid ~ reg_results$factor.region.)
@@ -423,9 +423,9 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 devtools::load_all('MLPAFuns')
 
-bayes_reg <- run_delta_demon(dat = species_siteside_year, dep_var = dep_var,
+bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Parallel Demon',dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,
-                                 iterations = its,status = .025, acceptance_rate = 0.4, thin = its/1e5, method = 'Summon Demon')
+                                 iterations = 100,status = .025, acceptance_rate = 0.4, thin = its/1e5)
 
 save(file = paste(runpath,'MCMC results.Rdata', sep = ""), bayes_reg)
 
