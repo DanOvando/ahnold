@@ -29,7 +29,7 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '4.0 Life History Effects'
+runfolder <- '4.0 Species Fixed Effects'
 
 scale_numerics <- T
 
@@ -378,23 +378,23 @@ eval_resid <- reg_results %>%
 
 dep_var <- 'log_density'
 
-# pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
-#               'region','species','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
-#               'mean_temp_lag4')
-#
-# delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
-#                 'trophic.group',
-#                 'linf','na_temp','na_vis')
-
-
 pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
-              'region','trophic.group',
-              'linf','vbk','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+              'region','species','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
               'mean_temp_lag4')
 
 delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
-              'trophic.group',
-              'linf','na_temp','na_vis')
+                'trophic.group',
+                'linf','na_temp','na_vis')
+
+
+# pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
+#               'region','trophic.group',
+#               'linf','vbk','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+#               'mean_temp_lag4')
+#
+# delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
+#               'trophic.group',
+#               'linf','na_temp','na_vis')
 
 any_fish <- species_siteside_year$log_density > min(species_siteside_year$log_density, na.rm = T)
 
