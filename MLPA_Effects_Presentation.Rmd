@@ -3,6 +3,7 @@ title: "Effects of the MLPA"
 author: "Dan Ovando - FISH 558 Final Presentation"
 date: "December 7, 2015"
 output:
+  beamer_presentation: default
   ioslides_presentation:
     font: helvetica
     theme: cerulean
@@ -37,7 +38,7 @@ devtools::load_all('MLPAFuns')
 
 ```{r load results}
 
-run_name <- '2.0'
+run_name <- '3.0'
 
 runpath <- paste('MLPA Effects Results/',run_name,'/', sep = '')
 
@@ -56,11 +57,14 @@ plot_theme <- theme_classic() + theme(text = element_text(size = 18, family = 'H
 ```
 
 
-```{r process MCMC, cache=T}
+```{r process MCMC, cache=F}
 
-#runthis now
+# runthis now
+ j <- 10
 
+show('hello')
 m <- 9
+b <- 9
 
 post <- bayes_reg$demon_fit$Posterior1
 
@@ -72,7 +76,7 @@ thinned_post <- thin_mcmc(post[(burn * its):its, ], thin_every = (its*(1-burn))/
 
 # ggmcmc(ggs(mcmc(thinned_post)), file = paste(runpath,'MLPA Diagnostics.pdf', sep = ''))
 
-predictions <- apply_demon(demonpost = thinned_post, demon = bayes_reg$demon_fit, dat = bayes_reg$Data)
+predictions <- apply_demon(demonpost = thinned_post, demon = bayes_reg$demon_fit, dat = bayes_reg$Data, raw_data = species_siteside_year)
 
 
 resids <- predictions$posterior %>%

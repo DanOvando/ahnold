@@ -1,9 +1,12 @@
+load('FUCKIT.Rdata')
 
-p = rnorm(length(parm.names))
+p =Initial.Values
 Rprof()
 
+
 b <- proc.time()
-for (i in 1:100)
+
+for (i in 1:1000)
 {
   a = mlpa_delta_likelihood(parm = p , Data = Data)
 }

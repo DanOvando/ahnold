@@ -5,6 +5,8 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   parm[Data$pos_den_sigma] <- interval(parm[Data$pos_den_sigma], 1e-100, Inf)
 
+  #   parm[Data$pos_den_sigma] <- exp(parm[Data$pos_den_sigma])
+
   sigma_year <- parm[Data$pos_sigma_year]
 
   sigma_bi_year <- parm[Data$pos_sigma_bi_year]
@@ -19,16 +21,25 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   bi_year_priors <- sum(dnorm(parm[Data$pos_bi_time_terms],0,sigma_bi_year, log = T))
 
-  sigma_year_prior <- dnorm(sigma_year, .1,.2, log = T)
 
-  sigma_bi_year_prior <- dnorm(sigma_bi_year, .1,.2, log = T)
+  sigma_year_prior <- dgamma(sigma_year, 2,0.5, log = T)
+
+  sigma_bi_year_prior <- dgamma(sigma_bi_year, 2,0.5, log = T)
+
+  #   sigma_year_prior <- dnorm(sigma_year, .1,.2, log = T)
+  #
+  #   sigma_bi_year_prior <- dnorm(sigma_bi_year, .1,.2, log = T)
 
   region_priors <- sum(dnorm(parm[Data$pos_den_region_terms],
                              0,sigma_region, log = T))
 
-  sigma_region_prior <- dnorm(sigma_region, .1,.2, log = T)
+  sigma_region_prior <- dgamma(sigma_region, 2,.5, log = T)
 
-  sigma_density_prior <- dnorm(sigma_density, .1,.2, log = T)
+  sigma_density_prior <- dgamma(sigma_density, 2,.5, log = T)
+
+  #   sigma_region_prior <- dnorm(sigma_region, .1,.2, log = T)
+  #
+  #   sigma_density_prior <- dnorm(sigma_density, .1,.2, log = T)
 
   ### Hurdle Log-Likelihood ----
 
@@ -47,7 +58,7 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   observed_density <- Data$dep_var
 
-   density_loglike <- sum(dnorm(observed_density, mu,sigma_density, log=TRUE)^(Data$binom_dep_var))
+  density_loglike <- sum(dnorm(observed_density, mu,sigma_density, log=TRUE)^(Data$binom_dep_var))
 
   ### Log-Posterior
 

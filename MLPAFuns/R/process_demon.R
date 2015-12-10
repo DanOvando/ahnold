@@ -9,10 +9,10 @@
 #' from the MCMC after burning and thinning
 #' @param burn proportion 0 to 1 of iterations to burn
 
-process_demon <- function(run_name,fontsize = 14,post_sample_size = 1000, burn = 0.6)
+process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn = 0.6)
 {
 
-  runpath <- paste('MLPA Effects Results/',run_name,'/', sep = '')
+  runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
   load(paste(runpath,'species_siteside_year.Rdata', sep = ''))
 
@@ -28,7 +28,78 @@ process_demon <- function(run_name,fontsize = 14,post_sample_size = 1000, burn =
 
   thinned_post <- thin_mcmc(post[(burn * its):its, ], thin_every = (its*(1-burn))/post_sample_size)
 
-  predictions <- apply_demon(demonpost = thinned_post, demon = bayes_reg$demon_fit, dat = bayes_reg$Data)
+  ggmcmc(ggs(mcmc(thinned_post)), file = paste(runpath,'ggMCMC Diagnostics.pdf', sep = ''))
+
+  predictions <- apply_demon(demonpost = thinned_post, demon = bayes_reg$demon_fit,
+                             dat = bayes_reg$Data, raw_data = species_siteside_year)
+
+
+  # Make three/4 plots:
+  # map/variogram of residuals by site/region
+  # residuals by time
+  # overlayed distributions of residuals by species group
+
+  # Diagnostic plots ----
+
+  resids_by_time_plot <- predictions$post_dat %>%
+    subset(mean_density >0) %>%
+    group_by(year) %>%
+    mutate(mean_mean_resid = mean(mean_resid)) %>%
+    ggplot(aes(factor(year),mean_resid)) +
+    geom_boxplot() +
+    geom_point(aes(factor(year),mean_mean_resid),
+               shape = 17) +
+    geom_hline(aes(yintercept = 0), color = 'red') +
+    xlab('Year') +
+    ylab('Residuals') +
+    plot_theme
+
+  resids_by_site_plot <- predictions$post_dat %>%
+    subset(mean_density >0) %>%
+    group_by(site) %>%
+    mutate(mean_mean_resid = mean(mean_resid)) %>%
+    ggplot(aes(factor(site),mean_resid, fill = factor(region))) +
+    geom_boxplot(alpha = 0.85, notch = T) +
+    geom_point(aes(factor(site),mean_mean_resid, fill = factor(region)),
+               shape = 17) +
+    scale_fill_discrete(name = 'Region') +
+    geom_hline(aes(yintercept = 0), color = 'red') +
+    plot_theme +
+    ylab('Residuals') +
+    xlab('') +
+    plot_theme +
+  coord_flip()
+
+  resids_by_species_plot <- predictions$post_dat %>%
+    subset(mean_density >0) %>%
+    group_by(species) %>%
+    mutate(mean_mean_resid = mean(mean_resid)) %>%
+    ggplot(aes(factor(species),mean_resid, fill = factor(trophic.group))) +
+    geom_boxplot(alpha = 0.85, notch = T) +
+    geom_point(aes(factor(species),mean_mean_resid, fill = factor(trophic.group)),
+               shape = 17) +
+    scale_fill_discrete(name = 'Trophic Group') +
+    geom_hline(aes(yintercept = 0), color = 'red') +
+    plot_theme +
+    ylab('Residuals') +
+    xlab('') +
+    plot_theme +
+    coord_flip()
+
+  resids_by_trophic_plot <- predictions$post_dat %>%
+    subset(mean_density >0) %>%
+    group_by(trophic.group) %>%
+    mutate(mean_mean_resid = mean(mean_resid)) %>%
+    ggplot(aes(factor(trophic.group),mean_resid)) +
+    geom_boxplot(alpha = 0.85, notch = T) +
+    geom_point(aes(factor(trophic.group),mean_mean_resid),
+               shape = 17) +
+    geom_hline(aes(yintercept = 0), color = 'red') +
+    plot_theme +
+    ylab('Residuals') +
+    xlab('') +
+    plot_theme +
+    coord_flip()
 
   resids <- predictions$posterior %>%
     subset(obs_log_density > min(obs_log_density)) %>%
@@ -140,9 +211,8 @@ process_demon <- function(run_name,fontsize = 14,post_sample_size = 1000, burn =
 
 
   outs_of_interest_plot <- as.data.frame(thinned_post) %>%
-    dplyr::select(fished,mpa_applied,fished_x_mpa,fished_x_yearsmpa) %>%
-    rename(Fished = fished,'MPA Applied' = mpa_applied, 'Fished and Applied' = fished_x_mpa,
-           'Fished by Years Protected' = fished_x_yearsmpa) %>%
+    dplyr::select(fished,years_mpa,fished_x_yearsmpa) %>%
+    rename(Fished = fished,'Years MLPA' = years_mpa, 'Fished X Years MLPA' = fished_x_yearsmpa) %>%
     gather('Variable','Coefficient') %>%
     group_by(Variable) %>%
     mutate(lower95 = quantile(Coefficient, 0.025), upper95 = quantile(Coefficient, 0.975)) %>%
@@ -157,8 +227,8 @@ process_demon <- function(run_name,fontsize = 14,post_sample_size = 1000, burn =
     ylab('Density')
 
   outs_of_interest_binomial_plot <- as.data.frame(thinned_post) %>%
-    dplyr::select(bi.fished,bi.mpa_applied,bi.fished_x_mpa) %>%
-    rename(Fished = bi.fished,'MPA Applied' = bi.mpa_applied, 'Fished and Applied' = bi.fished_x_mpa) %>%
+    dplyr::select(bi.fished,bi.years_mpa,bi.fished_x_yearsmpa) %>%
+    rename(Fished = bi.fished,'Years MLPA' = bi.years_mpa, 'Fished X Years MLPA' = bi.fished_x_yearsmpa) %>%
     gather('Variable','Coefficient') %>%
     group_by(Variable) %>%
     mutate(lower95 = quantile(Coefficient, 0.025), upper95 = quantile(Coefficient, 0.975)) %>%
@@ -197,6 +267,5 @@ process_demon <- function(run_name,fontsize = 14,post_sample_size = 1000, burn =
   }
 
 
-return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,
-            predictions = predictions))
+return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions))
 }

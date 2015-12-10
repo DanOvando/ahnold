@@ -84,6 +84,8 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
   pos_den_beta <- which(parm.names %in% colnames(reg_dat) & vars_for_binom == F)
 
+  pos_bi_beta <- which(parm.names %in% colnames(reg_dat) & vars_for_binom == T)
+
   pos_den_sigma <- which(parm.names %in% sigmas & vars_for_binom == F)
 
   pos_den_time_terms <- which(parm.names %in% time_vars & vars_for_binom == F)
@@ -112,11 +114,17 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
   # Subset data to possible for regression ----
 
-  possible <- is.na(as.matrix(reg_dat[,beta_to_use_binom == F]) %*% parm[pos_den_beta]) == F
+  possible <- matrix(NA,nrow = dim(reg_dat)[1], ncol = 2)
 
-  reg_dat <- reg_dat[possible,]
+  possible[,1] <- is.na(as.matrix(reg_dat[,beta_to_use_binom == F]) %*% parm[pos_den_beta]) == F
 
-  dat <- dat[possible,]
+  possible[,2] <- is.na(as.matrix(reg_dat[,beta_to_use_binom == T]) %*% parm[pos_bi_beta]) == F
+
+  which_contrains <- which(colSums(possible) == min(colSums(possible)))[1]
+
+  reg_dat <- reg_dat[possible[,which_contrains],]
+
+  dat <- dat[possible[,which_contrains],]
 
   binom_dep_var <- as.numeric(dat[,dep_var] > min(dat[,dep_var]))
 
@@ -165,6 +173,7 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
                time_vars = time_vars,
                site_vars = site_vars,
                species_vars = species_vars)
+
   Initial.Values <- GIV(mlpa_delta_likelihood, Data, PGF=TRUE)
 
   # Run Demon ----
@@ -180,7 +189,7 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
   if (method == 'Summon Reversible Demon'){
 
     Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
-                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
+                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=thin,
                          Algorithm = 'RJ', Specs=list(bin.n=bin.n, bin.p=bin.p,
                                                       parm.p=parm.p, selectable=selectable,
                                                       selected=selected), parm.names = parm.names)

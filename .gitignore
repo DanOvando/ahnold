@@ -3,7 +3,6 @@
 .Rdata
 ~Data**/*.Rdata
 **/*.DS_Store
-**/*.csv
 **/*.pdf
 **/*.xlsx
 **/*.xls

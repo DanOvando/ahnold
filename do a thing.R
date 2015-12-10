@@ -7,7 +7,7 @@ parma <- Initial.Values
 
 b <- '1234'
 
-cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_beta,
+cppFunction('double slackballs(NumericVector parm, NumericVector pos_den_beta,
             NumericVector pos_sigma_year,NumericVector pos_sigma_bi_year, NumericVector pos_sigma_region,
             NumericVector pos_sigma_density, NumericVector pos_den_time_terms,
             NumericVector pos_bi_time_terms,NumericVector pos_den_region_terms,
@@ -18,8 +18,7 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
             // init things you need
 
             NumericVector beta(pos_den_beta.size());
-
-            NumericVector sigma_year(pos_sigma_year.size());
+NumericVector sigma_year(pos_sigma_year.size());
 
             NumericVector sigma_bi_year(pos_sigma_bi_year.size());
 
@@ -29,7 +28,7 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
 
             beta = parm[pos_den_beta];
 
-            sigma_year = parm[pos_sigma_year];
+sigma_year = parm[pos_sigma_year];
 
             sigma_bi_year = parm[pos_sigma_bi_year];
 
@@ -37,7 +36,7 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
 
             sigma_density = parm[pos_sigma_density];
 
-            // Log priors
+// Log priors
 
             NumericVector den_time_terms = parm[pos_den_time_terms];
 
@@ -59,7 +58,7 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
 
             double sigma_density_prior = sum(dnorm(sigma_density, 0.1, 0.2, true));
 
-            //   ### Hurdle Log-Likelihood ----
+//   ### Hurdle Log-Likelihood ----
 
             NumericVector bi_beta = parm[pos_beta_to_use_binom];
 
@@ -73,6 +72,7 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
 
             NumericVector temp_hat(ncols);
 
+
             for(int i = 0; i < nrows; ++i) {
 
             for(int j = 0; j <ncols; ++j)
@@ -85,7 +85,7 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
 
             }
 
-            NumericVector prob_hat = exp(bi_hat)/(1 + exp(bi_hat));
+NumericVector prob_hat = exp(bi_hat)/(1 + exp(bi_hat));
 
             double bi_loglike =  sum(dbinom(binom_dep_var,1,prob_hat[0], true));
 
@@ -97,44 +97,43 @@ cppFunction('NumericVector slackballs(NumericVector parm, NumericVector pos_den_
 
             NumericVector mu(nrows);
 
-            for(int k = 0; k < nrows; ++k) {
+  NumericVector temp_mu(ncols);
 
-            NumericVector temp_mu(ncols);
+for(int i = 0; i <nrows; ++i ){
 
-            for(int l = 0; l <den_ncols; ++l)
-            {
-            temp_mu[l] = den_reg_mat(k,l) * den_beta[l];
-            }
-            mu[k] = sum(temp_mu);
+for(int j=0; j<den_ncols; ++j){
 
-            }
+temp_mu[j] = den_reg_mat(i,j) * den_beta[j];
 
-            double density_loglike = sum(pow(dnorm(dep_var, mu[0],sigma_density[0], true),binom_dep_var[0]));
+}
 
-            // Posterior
+mu[i] = sum(temp_mu);
 
-            double LP = density_loglike + bi_loglike  + year_priors + bi_year_priors + sigma_year_prior + sigma_bi_year_prior + region_priors + sigma_region_prior +sigma_density_prior;
+}
 
-            NumericVector out(2);
+double density_loglike = sum(pow(dnorm(dep_var, mu[0],sigma_density[0], true),binom_dep_var[0]));
 
-            //out[1] = LP;
+// Posterior
 
-            //out[2] = -2*(density_loglike + bi_loglike);
+double LP = density_loglike + bi_loglike ;
 
-            return(out);
+NumericVector out(2);
+
+out[1] = LP;
+
+out[2] = -2*(density_loglike + bi_loglike);
+
+            return(LP);
             }')
 
 damnit = slackballs(parm = parma, pos_den_beta = (pos_den_beta - 1),
-                pos_sigma_year = pos_sigma_year - 1,pos_sigma_bi_year = pos_sigma_bi_year - 1,
-                pos_sigma_region = pos_sigma_region - 1,pos_sigma_density = pos_sigma_density - 1,
-                pos_den_time_terms = pos_den_time_terms - 1, pos_bi_time_terms = pos_bi_time_terms - 1,
-                pos_den_region_terms = pos_den_region_terms - 1,
-                pos_beta_to_use_binom = pos_beta_to_use_binom-1,
-                reg_dat = Data$reg_dat, binom_dep_var = Data$binom_dep_var,
-                bi_reg_mat = bi_reg_mat, den_reg_mat = den_reg_mat, dep_var = Data$dep_var)
+                    pos_sigma_year = pos_sigma_year - 1,pos_sigma_bi_year = pos_sigma_bi_year - 1,
+                    pos_sigma_region = pos_sigma_region - 1,pos_sigma_density = pos_sigma_density - 1,
+                    pos_den_time_terms = pos_den_time_terms - 1, pos_bi_time_terms = pos_bi_time_terms - 1,
+                    pos_den_region_terms = pos_den_region_terms - 1,
+                    pos_beta_to_use_binom = pos_beta_to_use_binom-1,
+                    reg_dat = Data$reg_dat, binom_dep_var = Data$binom_dep_var,
+                    bi_reg_mat = bi_reg_mat, den_reg_mat = den_reg_mat, dep_var = Data$dep_var)
 
 print(head(damnit))
 
-slarg(6)
-
-print(6)

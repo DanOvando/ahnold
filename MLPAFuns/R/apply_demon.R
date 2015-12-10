@@ -9,14 +9,19 @@
 #' @param dat the dataframe associated with the
 #' demonoid object
 
-apply_demon <- function(demonpost,demon,dat)
+apply_demon <- function(demonpost,demon,dat, raw_data)
 {
 
-  #   demonpost = trimmed_post
-  #
-  #   demon <- bayes_reg$demon_fit
-  #
-  #   dat <- bayes_reg$Data
+#     demonpost = thinned_post
+#
+#     demon <- bayes_reg$demon_fit
+#
+#     dat <- bayes_reg$Data
+
+    rows_used <- as.numeric(rownames(dat$reg_dat))
+
+    odat <- data.frame(observation = rows_used,
+                       raw_data[rows_used,], stringsAsFactors = F)
 
   # Obtain predicted values ----
 
@@ -34,9 +39,7 @@ apply_demon <- function(demonpost,demon,dat)
 
   sigma_density$chain <- 1:dim(sigma_density)[1]
 
-  obs <- dim(predicted_density)[1]
-
-  predicted_density$observation <- 1:obs
+  predicted_density$observation <- rows_used
 
   posterior <- predicted_density %>%
     gather('chain','pred_log_density',which(grepl('V', colnames(.), fixed = T))) %>%
@@ -59,49 +62,27 @@ apply_demon <- function(demonpost,demon,dat)
 
   prob_zero$is_zero <- prob_zero$log_density > min(prob_zero$log_density)
 
-  obs <- dim(prob_zero)[1]
-
-  prob_zero$observation <- 1:obs
+  prob_zero$observation <- rows_used
 
   post_prob_zero <- prob_zero %>%
     gather('chain','prob_zero',which(grepl('V', colnames(.), fixed = T))) %>%
     mutate(chain = as.numeric(gsub('V', '',chain)))
 
+  mean_prob_zero <- post_prob_zero %>%
+    group_by(observation) %>%
+    summarise(mean_prob_zero = mean(prob_zero))
 
 
+  # Place mean observations in data -----------------------------------------------------------
+
+  post_dat <- posterior %>%
+    group_by(observation) %>%
+    summarise(mean_pred_log_den = mean(pred_log_density),
+              mean_sigma_den = mean(sigma_density),mean_post_pred_log_den = mean(post_predict),
+              mean_resid = mean(resid)) %>%
+    right_join(odat, by = 'observation') %>%
+    left_join(mean_prob_zero, by = 'observation')
 
 
-  # Scratch Plots -----------------------------------------------------------
-
-
-#   resid_plot <- posterior %>%
-#     group_by(observation) %>%
-#     summarise(obs = mean(obs_log_density), pred = mean(pred_log_density),
-#               post_pred = mean(post_predict), mean_resid = mean(resid)) %>%
-#     ggplot(aes(pred,mean_resid)) +
-#     geom_point(shape = 21, alpha = 0.5, fill = 'blue') +
-#     geom_abline(intercept = 0, slope = 0, color = 'red')
-#
-#
-#   obs_pred_plot <- posterior %>%
-#     group_by(observation) %>%
-#     summarise(obs = mean(obs_log_density), pred = mean(pred_log_density),
-#               post_pred = mean(post_predict)) %>%
-#     subset(obs>min(obs)) %>%
-#     ggplot(aes(obs,pred)) +
-#     geom_point(shape = 21, alpha = 0.5, fill = 'blue') +
-#     geom_abline(intercept = 0, slope = 1, color = 'red') +
-#     geom_smooth(method = 'lm')
-#
-#   please <- posterior %>%
-#     group_by(observation) %>%
-#     summarise(obs = mean(obs_log_density), pred = mean(pred_log_density),
-#               post_pred = mean(post_predict)) %>%
-#     ggplot(aes(obs,post_pred)) +
-#     geom_point(shape = 21, alpha = 0.5, fill = 'blue') +
-#     geom_abline(intercept = 0, slope = 1, color = 'red')
-#
-#   plots <- list(zero_plot = zero_plot, resid_plot = resid_plot, obs_pred_plot = obs_pred_plot)
-
-  return(list(posterior = posterior, post_prob_zero = post_prob_zero))
+  return(list(posterior = posterior, post_prob_zero = post_prob_zero, post_dat = post_dat))
 }

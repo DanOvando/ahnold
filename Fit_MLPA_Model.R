@@ -22,18 +22,18 @@ library(ggmap)
 library(texreg)
 library(AER)
 library(msm)
-library(mvtnorm)
+# library(mvtnorm)
 devtools::load_all('MLPAFuns')
 
 
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '3.0'
+runfolder <- '4.0 Life History Effects'
 
 scale_numerics <- T
 
-its <- 2e6
+its <- 10e6
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -46,14 +46,14 @@ if (dir.exists(runpath) == F)
 # Load Data ---------------------------------------------------------------
 
 
-rawdat <- read.csv('UCSB_FISH raw thru 2013.csv', stringsAsFactors = F)
+rawdat <- read.csv('MLPA Data/UCSB_FISH raw thru 2013.csv', stringsAsFactors = F)
 
-life.history <- read.csv('VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv', stringsAsFactors = F) %>%
+life.history <- read.csv('MLPA Data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv', stringsAsFactors = F) %>%
   rename(classcode = pisco_classcode)
 
-species.dat <- read.csv('master_spp_table.csv', stringsAsFactors = F)
+species.dat <- read.csv('MLPA Data/master_spp_table.csv', stringsAsFactors = F)
 
-site.dat <- read.csv('Final_Site_Table_UCSB.csv', stringsAsFactors = F) %>%
+site.dat <- read.csv('MLPA Data/Final_Site_Table_UCSB.csv', stringsAsFactors = F) %>%
   rename(site = SITE)
 
 mlpa_dat <- left_join(rawdat,life.history, by = 'classcode') %>%
@@ -80,7 +80,7 @@ conditions_dat <- mlpa_dat %>%
 # note that biomass is in units of mt/hectare and fish is un # per hectare
 
 
-processed_site_dat <- read.csv('ci_reserve_data_final3 txt.csv', stringsAsFactors = F) %>%
+processed_site_dat <- read.csv('MLPA Data/ci_reserve_data_final3 txt.csv', stringsAsFactors = F) %>%
   gather('concat.name','value', grep('_',colnames(.)),convert = T) %>%
   mutate(data.type = gsub('\\_.*', '', concat.name),
          classcode = gsub('.*\\_','',concat.name)) %>%
@@ -105,7 +105,7 @@ processed_dat <- processed_site_dat %>%
   rename(common_name = commonname) %>%
   group_by(site_side, common_name) %>%
   mutate(ever.seen = mean(biomass, na.rm = T)>0) %>%
-  subset(year != 1999 & ever.seen == T & grepl('YOY',classcode) == F) %>% #remove 1999, species never seen at a site, and young of the year. Why remove YOY again?
+  subset(year != 1999 & ever.seen == T & grepl('YOY',classcode) == F  & grepl('YOY',common_name) == F) %>% #remove 1999, species never seen at a site, and young of the year. Why remove YOY again?
   ungroup() %>%
   mutate(year_mlpa_mpa = year.mpa * as.numeric(year.mpa >= 2003)) %>%
   group_by(site_side) %>%
@@ -301,7 +301,7 @@ community_structure_plot <- species_siteside_year %>%
 
 correlations <- species_siteside_year %>%
   ungroup() %>%
-  select(mean_density,site_side,year,mean_temp,mean_vis,mpa_area) %>%
+  dplyr::select(mean_density,site_side,year,mean_temp,mean_vis,mpa_area) %>%
   gather('variable','value',year:mpa_area) %>%
   ggplot(aes(value,mean_density, fill = variable)) +
   geom_point(shape = 21, alpha = 0.75) +
@@ -378,13 +378,21 @@ eval_resid <- reg_results %>%
 
 dep_var <- 'log_density'
 
+# pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
+#               'region','species','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+#               'mean_temp_lag4')
+#
+# delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
+#                 'trophic.group',
+#                 'linf','na_temp','na_vis')
 
-pos_vars <- c('fished','mpa_applied','fished_x_mpa','factor_year',
-              'region','trophic.group','years_mpa','fished_x_yearsmpa',
+
+pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
+              'region','trophic.group',
               'linf','vbk','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
               'mean_temp_lag4')
 
-delta_vars <- c('fished','mpa_applied','fished_x_mpa','factor_year',
+delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
               'trophic.group',
               'linf','na_temp','na_vis')
 
@@ -417,15 +425,13 @@ devtools::load_all('MLPAFuns')
 
 bayes_reg <- run_delta_demon(dat = species_siteside_year, dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,
-                                 iterations = its,status = .025, acceptance_rate = 0.4, method = 'Summon Demon')
+                                 iterations = its,status = .025, acceptance_rate = 0.4, thin = its/1e5, method = 'Summon Demon')
 
-save(file = paste(runpath,'MCMC results.Rdata', sep = ''), bayes_reg)
+save(file = paste(runpath,'MCMC results.Rdata', sep = ""), bayes_reg)
 
-# bayes_reg$demon_fit <- Acceptance.Rate
+processed_demon <- process_demon(runfolder = runfolder)
 
-post <- bayes_reg$demon_fit$Posterior1
+save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""), processed_demon)
 
-thinned_post <- thin_mcmc(post[(.5*its):its,], thin_every = bayes_reg$demon_fit$Rec.Thinning)
 
-ggmcmc(ggs(mcmc(post)), file = paste(runpath,'mcmc diagnostics.pdf', sep = ''))
 
