@@ -41,8 +41,6 @@ apply_demon <- function(demonpost,dat, raw_data)
 
   predicted_density$observation <- rows_used
 
-  browser()
-
 
   posterior <- predicted_density %>%
     gather('chain','pred_log_density',which(grepl('V', colnames(.), fixed = T))) %>%

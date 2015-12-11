@@ -189,6 +189,9 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
 
 
+  jags_demon <-
+
+
   # Run Demon ----
   #
 if (method == 'Banish Demon')

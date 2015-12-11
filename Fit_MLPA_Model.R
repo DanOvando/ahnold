@@ -29,11 +29,11 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '5.0 LH'
+runfolder <- 'develop jags'
 
 scale_numerics <- F
 
-its <- 1e6
+its <- 1e3
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 

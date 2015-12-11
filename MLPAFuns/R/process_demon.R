@@ -221,7 +221,7 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     geom_density() +
     geom_vline(aes(xintercept = c(lower95,upper95)),alpha = 0.75) +
     geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
-    facet_wrap(~Variable) +
+    facet_grid(Variable~., scales = 'free') +
     theme_light() +
     theme(text = element_text(size = 18)) +
     ylab('Density')
