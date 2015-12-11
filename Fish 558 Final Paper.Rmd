@@ -38,7 +38,7 @@ devtools::load_all('MLPAFuns')
 
 ```{r load data, cache = T}
 
-runfolder <- '4.0 Old Treatment'
+runfolder <- '4.0 Life History Effects'
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -49,14 +49,17 @@ if (dir.exists(runpath) == F)
 
 load(paste(runpath,'species_siteside_year.Rdata', sep = ''))
 
-load(paste(runpath,'MCMC results.Rdata', sep = ''))
+# load(paste(runpath,'MCMC results.Rdata', sep = ''))
 
 load(paste(runpath,'Processed MCMC results.Rdata', sep = ''))
 
 
 plot_theme <- theme_classic() + theme(text = element_text(size = 18, family = 'Helvetica'))
 
-dat <- processed_demon
+dat <- outlist$data_and_predictions
+
+plots <- outlist$diagnostic_plots
+
 
 ```
 
