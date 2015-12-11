@@ -47,11 +47,14 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   bi_dat <- Data$bi_reg_mat
 
-  bi_hat <- bi_dat %*% bi_beta
+  bi_hat <- pmin(10,bi_dat %*% bi_beta)
 
   prob_hat <- exp(bi_hat)/(1 + exp(bi_hat))
 
-  bi_loglike <-  sum(dbinom(Data$binom_dep_var,1,prob_hat, log = T))
+  bi_loglike <-  sum(dbinom(Data$binom_dep_var,1,pmax(1e-15,prob_hat), log = T)) # actual values of 1 return -inf if not fulfilled
+
+#   wtf <- bi_hat[is.na(bi_loglike)]
+
   ### Density Log-likelihood ----
 
   mu <- Data$den_reg_mat %*% beta
@@ -62,9 +65,10 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   ### Log-Posterior
 
-
   LP <- density_loglike + bi_loglike  + year_priors + bi_year_priors +
     sigma_year_prior + sigma_bi_year_prior + region_priors + sigma_region_prior + sigma_density_prior
+
+#   if (is.finite(LP) == F){browser()}
 
   LL <- density_loglike + bi_loglike
 

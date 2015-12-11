@@ -210,7 +210,7 @@ show(proc.time() - a)
                          Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
                          parm.names = parm.names)
 #     show(proc.time() - a)
-
+#     browser()
 
   }
   if (method == 'Summon Parallel Demon')

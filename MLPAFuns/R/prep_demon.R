@@ -7,32 +7,40 @@
 #' @param  scale_numerics scale T or F to center and scale variables
 
 
-prep_demon <- function(demondat, pos_vars,scale_numerics = T,constant = T)
+prep_demon <- function(demondat, pos_vars,scale_numerics = F,constant = T)
 {
 
-  dep_vars <- demondat[,pos_vars] #pull out things you need
+  ind_vars <- demondat[,pos_vars] #pull out things you need
 
-  var_types <- sapply(dep_vars,class)
+  var_types <- sapply(ind_vars,class)
 
   factors <- pos_vars[which(var_types == 'character' | var_types == 'factor') ]
+
+#   binaries <- ind_vars %>%
+#     gather('var','value',convert = T) %>%
+#     subset(!var %in% factors) %>%
+#     mutate(value = as.numeric(value)) %>%
+#     group_by(var) %>%
+#     summarise(is_binary = sum(value == 0 | value == 1) == length(value)) %>%
+#     subset(is_binary == T)
 
   numerics <- pos_vars[which(var_types == 'numeric') ]
 
   if (scale_numerics == T)
   {
     for (j in 1:length(numerics)){
-      dep_vars[,numerics[j]] <- CenterScale(as.matrix(dep_vars[,numerics[j]]))
+      ind_vars[,numerics[j]] <- CenterScale(as.matrix(ind_vars[,numerics[j]]))
     }
   }
 
   for (f in 1:length(factors))
   {
-    dep_vars <- spread_factor(dep_vars,var = factors[f])
+    ind_vars <- spread_factor(ind_vars,var = factors[f])
   }
 
   if (constant == T){
-    dep_vars$constant <- 1
+    ind_vars$constant <- 1
   }
 
-return(dep_vars)
+return(ind_vars)
 }

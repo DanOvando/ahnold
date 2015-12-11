@@ -41,12 +41,21 @@ apply_demon <- function(demonpost,dat, raw_data)
 
   predicted_density$observation <- rows_used
 
+  browser()
+
+
   posterior <- predicted_density %>%
     gather('chain','pred_log_density',which(grepl('V', colnames(.), fixed = T))) %>%
     mutate(chain = as.numeric(gsub('V', '',chain))) %>%
     left_join(sigma_density, by = 'chain') %>%
     mutate(post_predict = rnorm(length(pred_log_density),pred_log_density, sigma_density),
            resid = pred_log_density - obs_log_density)
+
+#   subset(posterior, observation <40) %>%
+#     ggplot(aes(post_predict)) +
+#     geom_histogram() +
+#     geom_vline(aes(xintercept = obs_log_density)) +
+#     facet_wrap(~observation)
 
   # Obtain predicted zero probs ---------------------------------------------
 
