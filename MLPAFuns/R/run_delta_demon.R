@@ -203,13 +203,13 @@ show(proc.time() - a)
 
   if (method == 'Summon Demon')
   {
-    a <- proc.time()
+#     a <- proc.time()
 
     Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
                          Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
                          Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
                          parm.names = parm.names)
-    show(proc.time() - a)
+#     show(proc.time() - a)
 
 
   }

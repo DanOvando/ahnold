@@ -29,11 +29,11 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '4.0 Species Fixed Effects'
+runfolder <- '4.0 Life History Effects and MPA status'
 
 scale_numerics <- T
 
-its <- 5e6
+its <- 1e6
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -196,6 +196,8 @@ species_siteside_year <- processed_dat %>% #group data to the species, site_side
   mutate(eventual_mpa = max(years_mpa) >0) %>%
   subset(is.na(mean_density) == F & is.na(log_density) == F) %>%
   ungroup() %>%
+  mutate(fished_x_eventualmpa = fished * eventual_mpa,
+         fished_x_yearsmpa_x_eventualmpa = fished * eventual_mpa * years_mpa) %>%
   left_join(temp_lags, by = c('site_side','year'))
 
 # par(mfrow= c(1,2))
@@ -380,7 +382,7 @@ dep_var <- 'log_density'
 
 pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
               'region','species','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
-              'mean_temp_lag4')
+              'mean_temp_lag4' , 'eventual_mpa' , 'fished_x_yearsmpa_x_eventualmpa')
 
 delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
                 'trophic.group',
@@ -426,18 +428,18 @@ devtools::load_all('MLPAFuns')
 
 bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Demon',dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,
-                                 iterations = its,status = .025, acceptance_rate = 0.5, thin = its/1e5)
+                                 iterations = its,status = .025, acceptance_rate = 0.3, thin = its/1e5)
 
 
 reg_results <- list(acceptance_rate = bayes_reg$demon_fit$Acceptance.Rate, post =
                       bayes_reg$demon_fit$Posterior1, Data = bayes_reg$Data)
 
-save(file = paste(runpath,'MCMC results.Rdata', sep = ""), reg_results)
+save(file = paste(runpath,'MCMC results.Rdata', sep = ""), list = 'reg_results')
 
 processed_demon <- process_demon(runfolder = runfolder)
 
 outlist <- list(thinned_post = processed_demon$thinned_post,data_and_predictions = processed_demon$predictions, diagnostic_plots = processed_demon$plot_list)
-save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""), outlist)
+save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""), list = 'outlist')
 
 
 

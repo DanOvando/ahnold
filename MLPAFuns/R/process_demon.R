@@ -31,7 +31,7 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
   ggmcmc(ggs(mcmc(thinned_post)), file = paste(runpath,'ggMCMC Diagnostics.pdf', sep = ''))
 
   predictions <- apply_demon(demonpost = thinned_post,
-                             dat = bayes_reg$Data, raw_data = species_siteside_year)
+                             dat = reg_results$Data, raw_data = species_siteside_year)
 
 
   # Make three/4 plots:
