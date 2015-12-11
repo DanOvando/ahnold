@@ -30,7 +30,7 @@ mlpa_mcmc <- function(par_init,parm.names,dat,vcov,n_sim=1000,n_burn=0,n_thin=1,
 
   if (class(vcov) == 'data.frame'){ vcov <- as.matrix(vcov) }
 
-  likelihoods <- mlpa_likelihood(parm = par_curr, Data = dat)
+  likelihoods <- mlpa_delta_likelihood(parm = par_curr, Data = dat)
 
   ll_curr <- likelihoods$LP
 
@@ -59,17 +59,16 @@ mlpa_mcmc <- function(par_init,parm.names,dat,vcov,n_sim=1000,n_burn=0,n_thin=1,
   track_rate <- rep(NA,n_sim)
 
   ### run MCMC----
-
   for (i in 1 : n_sim)
   {
 
     vcov <- orig_vcov * vcov_scalar
 
-    par_next <- rmvnorm(n = 1, mean= par_curr, sigma =  vcov)
+    par_next <- rmvnorm(n = 1, mean= par_curr)
 
     colnames(par_next) <- parm.names
 
-    likelihoods <- mlpa_likelihood(parm = par_next, Data = dat)
+    likelihoods <- mlpa_delta_likelihood(parm = par_next, Data = dat)
 
     deviance_next <- likelihoods$Dev
 
@@ -93,11 +92,13 @@ mlpa_mcmc <- function(par_init,parm.names,dat,vcov,n_sim=1000,n_burn=0,n_thin=1,
     }
 
     track_rate[i] <- sel_count/i
-    if (i > n_burn) # store results
+#     a <- proc.time()
+    if (i > n_burn & (i %% n_thin)==0) # store results
     {
       i_count <- i_count + 1
-      par_out[i_count,] <- c(as.matrix(par_curr),ll_curr,deviance_curr)
+#       par_out[i_count,] <- c(par_curr,ll_curr,deviance_curr)
     } #else{
+#     proc.time() - a
     if (i %% round(.2*n_burn,0) == 0 & i <= n_burn) { #Tune variance covariance
 
       acceptance_rate <- sel_count/i

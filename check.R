@@ -4,9 +4,11 @@ p =Initial.Values
 Rprof()
 
 
-b <- proc.time()
+p <- Initial.Values
 
-for (i in 1:1000)
+a <- proc.time()
+
+for (i in 1:100)
 {
   a = mlpa_delta_likelihood(parm = p , Data = Data)
 }

@@ -24,8 +24,6 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   its <- dim(post)[1]
 
-  burn <- burn
-
   thinned_post <- thin_mcmc(post[(burn * its):its, ], thin_every = (its*(1-burn))/post_sample_size)
 
   ggmcmc(ggs(mcmc(thinned_post)), file = paste(runpath,'ggMCMC Diagnostics.pdf', sep = ''))
@@ -259,6 +257,9 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   plot_files <- local_files[grep('_plot', local_files, fixed = T)]
 
+  not_plot_files <- local_files[!grepl('_plot', local_files, fixed = T)]
+
+
   plot_list <- list()
 
   for (i in 1:length(plot_files))
@@ -266,6 +267,13 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     eval(parse( text = paste('plot_list$',plot_files[i],' <- ',plot_files[i], sep = '')))
   }
 
+  predicted_data <- predictions$post_dat
 
-return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions))
+  drop <- local_files[!local_files %in% c('plot_list','resids','thinned_post','predicted_data')]
+
+  rm(list = drop)
+
+
+  a = list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions = predicted_data)
+return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions = predicted_data))
 }

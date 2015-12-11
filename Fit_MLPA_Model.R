@@ -22,18 +22,18 @@ library(ggmap)
 library(texreg)
 library(AER)
 library(msm)
-# library(mvtnorm)
+library(mvtnorm)
 devtools::load_all('MLPAFuns')
 
 
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '4.0 Species Fixed Effects'
+runfolder <- '4.0 Life History Effects'
 
 scale_numerics <- T
 
-its <- 10e6
+its <- 1e3
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -423,15 +423,21 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 devtools::load_all('MLPAFuns')
 
-bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Parallel Demon',dep_var = dep_var,
+a <- proc.time()
+
+bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Demon',dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,
-                                 iterations = 100,status = .025, acceptance_rate = 0.4, thin = its/1e5)
+                                 iterations = its,status = .025, acceptance_rate = 0.4, thin = its/1e5)
+
+proc.time() - a
+
 
 save(file = paste(runpath,'MCMC results.Rdata', sep = ""), bayes_reg)
 
 processed_demon <- process_demon(runfolder = runfolder)
 
-save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""), processed_demon)
+outlist <- list(thinned_post = processed_demon$thinned_post,data_and_predictions = processed_demon$predictions, diagnostic_plots = processed_demon$plot_list)
+save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""), outlist)
 
 
 

@@ -177,14 +177,40 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
   Initial.Values <- GIV(mlpa_delta_likelihood, Data, PGF=TRUE)
 
+  vcov <- cov(reg_dat)
+
+  full_vcov <- diag(x = .1, nrow = length(parm.names), ncol = length(parm.names))
+
+  rownames(full_vcov) <- parm.names
+
+  colnames(full_vcov) <- parm.names
+
+  full_vcov[rownames(full_vcov) %in% colnames(reg_dat), colnames(full_vcov) %in% colnames(reg_dat) ] <- vcov
+
+
+
   # Run Demon ----
+  #
+if (method == 'Banish Demon')
+{
+  a <- proc.time()
+  Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
+                   dat = Data,vcov = full_vcov,n_sim  = iterations,
+                   n_burn =  burn*iterations, targ_accept_rate = 0.25,
+                   vcov_augment = (2.4/sqrt(length(parm.names)))^2, jumpyness = 1)
+show(proc.time() - a)
+  }
 
   if (method == 'Summon Demon')
   {
+    a <- proc.time()
+
     Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
                          Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
                          Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
                          parm.names = parm.names)
+    show(proc.time() - a)
+
 
   }
   if (method == 'Summon Parallel Demon')
