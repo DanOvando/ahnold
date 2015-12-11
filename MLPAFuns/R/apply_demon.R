@@ -9,7 +9,7 @@
 #' @param dat the dataframe associated with the
 #' demonoid object
 
-apply_demon <- function(demonpost,demon,dat, raw_data)
+apply_demon <- function(demonpost,dat, raw_data)
 {
 
 #     demonpost = thinned_post

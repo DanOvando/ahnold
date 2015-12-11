@@ -20,7 +20,9 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   plot_theme <- theme_classic() + theme(text = element_text(size = fontsize, family = 'Helvetica'))
 
-  post <- bayes_reg$demon_fit$Posterior1
+  post <- reg_results$post
+
+#   post <- bayes_reg$demon_fit$Posterior1
 
   its <- dim(post)[1]
 
@@ -28,7 +30,7 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   ggmcmc(ggs(mcmc(thinned_post)), file = paste(runpath,'ggMCMC Diagnostics.pdf', sep = ''))
 
-  predictions <- apply_demon(demonpost = thinned_post, demon = bayes_reg$demon_fit,
+  predictions <- apply_demon(demonpost = thinned_post,
                              dat = bayes_reg$Data, raw_data = species_siteside_year)
 
 

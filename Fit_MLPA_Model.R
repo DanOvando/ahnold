@@ -29,11 +29,11 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '4.0 Life History Effects'
+runfolder <- '4.0 Species Fixed Effects'
 
 scale_numerics <- T
 
-its <- 1e3
+its <- 5e6
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -423,16 +423,16 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 devtools::load_all('MLPAFuns')
 
-a <- proc.time()
 
 bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Demon',dep_var = dep_var,
                                  pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = T,
-                                 iterations = its,status = .025, acceptance_rate = 0.4, thin = its/1e5)
-
-proc.time() - a
+                                 iterations = its,status = .025, acceptance_rate = 0.5, thin = its/1e5)
 
 
-save(file = paste(runpath,'MCMC results.Rdata', sep = ""), bayes_reg)
+reg_results <- list(acceptance_rate = bayes_reg$demon_fit$Acceptance.Rate, post =
+                      bayes_reg$demon_fit$Posterior1, Data = bayes_reg$Data)
+
+save(file = paste(runpath,'MCMC results.Rdata', sep = ""), reg_results)
 
 processed_demon <- process_demon(runfolder = runfolder)
 
