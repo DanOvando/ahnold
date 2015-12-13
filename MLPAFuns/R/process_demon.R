@@ -275,7 +275,5 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   rm(list = drop)
 
-
-  a = list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions = predicted_data)
 return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions = predicted_data))
 }

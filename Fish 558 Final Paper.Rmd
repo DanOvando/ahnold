@@ -2,7 +2,9 @@
 title: "MLPA Effects"
 author: "Dan Ovando"
 date: "December 4, 2015"
-output: pdf_document
+output: 
+  pdf_document:
+  fig_caption: yes
 csl: fish-and-fisheries.csl
 bibliography: MLPA Effects.bib
 ---
@@ -38,7 +40,7 @@ devtools::load_all('MLPAFuns')
 
 ```{r load data, cache = T}
 
-runfolder <- '4.0 Life History Effects'
+runfolder <- '5.0 LH Aurora'
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -101,6 +103,10 @@ We utilize a dataset described by Caselle et al. [-@Caselle2015] in our model. T
 
 We performed a series of filtering steps to perpare the data for our analysis. Entries missing biomass densities were omitted. We also omit all entries from 1999, due to concerns about the reliability of the data from that year (survey protocols change substantially between 1999 and 2000). We omit transect sites that have not been consistently surveyed for more than two years. At each site, we omit all species that have never been observed at that site. This removes for example time series composed of zero densities of warm tropical species at the northern most CI (San Miguel). We also do not want to include rarely observed species, as their presence or absence is more likely due to observer error or transitory events than true indices of abundance. As such, we select the top 75th percentile by total observations of species for inclusion in the model. Lastly we only include entries that have all required data to run each of the candidate regressions, to ensure each run uses the same data and facilitate model comparison.
 
+
+The resulting database used in the regression contain `r dim(dat)[1]` observations including `r length(unique(dat$site))` sites, `r length(unique(dat$species))` species, from the years `r min(dat$year)` to `r max(dat$year)`. 
+
+
 ### Identification strategy
 
 We propose to use a difference-in-difference (DiD) estimator to determine the causal effect of the MLPA. The principal challenge of identifying causality in settings such as the MLPA is the lack of a clearly designed experiment. A more ideal MPA design strategy from the perspective of identifying causality would have been to geoengineer a few perfect replicas of the Channel Islands and randonmly assign and place MPAs in some of them. Unfortunately this is not possible. Seeing as the MLPA  is not a true (or even close to true) experiment, simply looking at densities before and after the MLPA is not sufficient to identify causality. Changes could be attributable to concurrent shifts in environmental conditions, changes in fisheries management, placement of MPAs in locations that were increasing or decreasing in density pre MLPA, or a whole host of other confounding factors.
@@ -144,7 +150,6 @@ $$p_{f,s,y} = \frac{e^{\gamma_{f,s,y}}}{1+e^{\gamma_{f,s,y}}}$$
   where we model $\gamma$ as a linear function of covariates selected to explain the probability of observing any fish at all
 
 $$\gamma_{f,s,y} = \tau_{0} + \tau_{1}$$
-
 
 
 
@@ -200,31 +205,133 @@ Lastly the prior on the standard deviation of the densities $\sigma$ is distribu
 
 $\sigma$ ~ gamma(2,0.5)
 
+### MCMC
+
+We used the 
+
 ## Results
 
+### Diagnostics
 
-You can reproduce most of the diagnostics from the Mosquito exercise. For now, let's focus on observed vs predicted to see if you're even in the same ballpark
+The DiD estiamtor depends critcially on the assumption that the trends in the outcome of interest, in this case fish densities, are the same between the treated and untreated groups pre-treatment. In essence, the DiD estimator assumes that the post treatement the untreated group should serve as a proxy for how the fish densities in the treated group would have evolved had they been untreated. In this example, our hypothesis is that the fished and unfished groups are both resonding in the same manner to the same environmental trends, even if the raw density values between the groups are different. 
 
-```{r assess MCMC fit}
+We can analyze trends in densities between the two groups pre-mlpa as an intital check of the validity of this assumption (Fig.XX). Visually inspecting the trends, we see that while the fished and unfished groups do not have matching trends, they to appear to be loosely reacting to the same regional trends. Both groups show declining trends in density pre-MLPA, and increases post-MLPA. This suggests that for this phase of the analysis using unfished species as a "control" for the theoretical trajectory of fished densities post-MLPA is not entirely unreasonable. However more quantiative tests should be applied at a later date. Specifically, we will run a "placebo" test in which we test whether slopes are significantly different between the two groups before and after a "placebo" start date of the MLPA, such as 2001. In theory for the DiD estimator to be valid in this context we should fail to reject the hypothesis that both groups have identical slopes pre and post placebo.  
 
-# load(paste(runpath,'MCMC Results.Rdata', sep = ''))
-#
-# dat <- bayes_reg$Data
-#
-# post <- bayes_reg$demon_fit$Posterior1
-#
-# its <- dim(post)[1]
-#
-# burn <- 0.5
-#
-# trimmed_post <- thin_mcmc(post[(burn*its):its,], thin_every = its/1000)
-#
-# ggmcmc(ggs(mcmc(trimmed_post)), file = paste(runpath,'mcmc diagnostics.pdf', sep = ''))
-#
+```{r denplot, fig.cap= 'Mean log densities of fish and unfished species over time. Dashed line shows implementation of MLPA reserve in the CIs'}
+density.by.year_plot <-
+  ggplot(subset(dat), aes(factor(year),log_density, fill = factor(targeted))) +
+  geom_boxplot(aes(fill = factor(targeted))) +
+  plot_theme 
 
+did_trend <- dat %>%
+#   subset(year<=2005) %>%
+  group_by(fished,year) %>%
+  summarize(mean_mean_density = mean(log_density)) %>%
+  ungroup() %>%
+  mutate(fished = fished == 1) %>%
+  ggplot(aes(year,mean_mean_density, color = factor(fished))) + 
+  scale_color_manual(name = 'Fished', values = c('orange','forestgreen')) + 
+  geom_line(size = 2) + 
+  geom_vline(aes(xintercept = 2003), linetype = 'longdash') + 
+  xlab('Year') + 
+  ylab('Mean Log Density') + 
+  plot_theme
+
+did_trend
+```
+
+Moving to our MCMC diagnostics, we broadly see evidence that substantially more runs are likely to be needed in order to achieve convergence. The acceptance rate over our 5e6 runs was 0.34XX. Examining our final thinned chain, we see that many of our coefficients fail the Geweke diagnostic, meaning that the means of the initial and final portions of the chain are significantly different than each other, indicating non-congervence of the thinned chain (Fig.XX). We also see that the Geweke stastic fails for many of our specific coefficients of interest, including the our "treatment on the treated" estimator "Fished X Years MLPA". 
+
+
+```{r geweke, fig.cap='Geweke diagnostics of MCMC runs'}
+plots$gweke_plot + 
+  theme(axis.text.y = element_text(size = 8))
+```
+
+We also see that substantial autocorrelation remains 
+
+
+```{r acf, fig.cap='Histogram of lag-1 autocorrelation'}
+plots$acf_hist_plot 
+```
+
+```{r ess, fig.cap='Effective sample size of model coefficients'}
+plots$eff_sample_plot
+```
+
+```{r post_predict, fig.cap='Observed vs. mean posterior predicted'}
+plots$fit_plot
 ```
 
 
-### Diagnostis
+```{r partial_chain, fig.cap='Partial chain comparisson'}
+
+
+of_interest <- as.data.frame(outlist$thinned_post) %>%
+  select(fished,years_mpa,fished_x_yearsmpa) 
+
+heidel <- heidel.diag(mcmc(of_interest))
+
+
+bi_of_interest <- as.data.frame(outlist$thinned_post) %>%
+  select(bi.fished,bi.years_mpa,bi.fished_x_yearsmpa) 
+
+partial_of_interest <- ggs_compare_partial(ggs(mcmc(of_interest))) + 
+  plot_theme
+
+partial_of_interest
+
+acf_of_interest <- ggs_autocorrelation(ggs(mcmc(of_interest))) + 
+  plot_theme
+
+bi_partial_of_interest <- ggs_compare_partial(ggs(mcmc(bi_of_interest))) + 
+  plot_theme
+
+```
+
+```{r qqnorm, fig.cap='Normal quantile-quantile plot of observed vs theoretical residuals of positive densities' }
+
+plots$qq_plot
+
+```
+
+```{r, fig.cap = 'Residuals by time'}
+
+plots$resids_by_time_plot
+```
+
+
+```{r, fig.cap = 'Residuals by site'}
+
+plots$resids_by_site_plot
+```
+
+```{r, fig.cap = 'Residuals by species'}
+
+plots$resids_by_species_plot
+```
+
+### Estimated Effects
+
+```{r result, fig.cap='Results of interest'}
+
+plots$outs_of_interest_plot
+
+```
+
+```{r result2, fig.cap='Results of interest'}
+
+plots$outs_of_interest_binomial_plot
+```
+
+
+```{r year_trend,fig.cap='year coefficients'}
+plots$year_trend_plot
+```
+
+
+
+
+
 
 ## Discussion

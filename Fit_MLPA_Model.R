@@ -29,11 +29,13 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- 'develop jags'
+runfolder <- '7.0'
 
-scale_numerics <- F
+scale_numerics <- T
 
-its <- 1e3
+its <- 1e4
+
+run_mcmc <- T
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -115,7 +117,10 @@ processed_dat <- processed_site_dat %>%
   ungroup() %>%
   mutate(year_mpa2 = capfun(year_mlpa_mpa)) %>%
   group_by(region,year) %>%
-  mutate(region_has_mpas = any(year_mpa2 <= year)) %>% #redefining 'MPA' as an MLPA created MPA
+  mutate(region_has_mpas = any(year_mpa2 <= year)) %>%
+  ungroup() %>%
+  group_by(region) %>%
+  mutate(year_region_has_mlpa_mpas = min(year[year >= year_mpa2])) %>% #redefining 'MPA' as an MLPA created MPA
   ungroup() %>%
   group_by(common_name) %>%
   mutate(total_species_samples = sum(biomass>0, na.rm = T)) %>%
@@ -161,14 +166,15 @@ for (i in 1:dim(temp_lags)[1]){
 species_siteside_year <- processed_dat %>% #group data to the species, site_side, year level
   subset(is.na(targeted) == F & targeted != '' & mpaareanm2 >0) %>%
   group_by(year,site_side,classcode) %>%
-  summarise(mpa.period = unique(region_has_mpas),
+  summarise(mpa_period = unique(region_has_mpas),
             mean_density = mean(biomass, na.rm = T),
-#             num_transects = length(biomass),
-#             num_pos_transects = sum(biomass > 0, na.rm = T),
             site.type = unique(mpa.status),
             site = unique(site),
+            site_will_be_mlpa = unique(will_be_mlpa),
             year_mlpa = unique(year_mlpa_mpa),
-            years_mpa = max(0,(year - (year_mlpa_mpa-1)) * as.numeric(year_mlpa_mpa>0)),
+            year_region_has_mlpas = unique(year_region_has_mlpa_mpas),
+            years_mpa = max(0,(year - (year_mlpa_mpa-1)) * as.numeric(year_mlpa_mpa>0)), #years a site_side has been an MLPA MPA
+            years_mlpa_mpas = max(0,(year - (year_region_has_mlpa_mpas-1)) * as.numeric(year_region_has_mlpa_mpas>0)), #years a region has had MLPA mpas
             region = unique(region),
             targeted = unique(targeted),
             trophic.group = unique(trophicgroup),
@@ -179,7 +185,6 @@ species_siteside_year <- processed_dat %>% #group data to the species, site_side
             broadtrophic = unique(broadtrophic),
             mean_vis = mean(mean_vis, na.rm = T),
             species = unique(common_name)) %>%
-  #   ungroup() %>% min(mean_density[mean_density>0], na.rm = T)
   ungroup() %>%
   group_by(site_side, species) %>%
   mutate(anybio = sum(mean_density, na.rm = T)) %>%
@@ -188,25 +193,23 @@ species_siteside_year <- processed_dat %>% #group data to the species, site_side
   mutate(trunc_mean_density = pmax(quantile(unique(mean_density[mean_density >0]),.001, na.rm = T),mean_density)
          ,log_density = log(trunc_mean_density),
          fished = as.numeric(targeted == 'Targeted'),
-         mpa_applied = as.numeric(mpa.period == 'TRUE'),
+         mpa_applied = as.numeric(mpa_period == 'TRUE'),
          fished_x_mpa = fished * mpa_applied,
+         fished_x_yearsmlpa = fished * years_mlpa_mpas,
          fished_x_yearsmpa = fished * years_mpa,
          factor_year = as.factor(year)) %>%
   group_by(site_side) %>%
   mutate(eventual_mpa = max(years_mpa) >0) %>%
   subset(is.na(mean_density) == F & is.na(log_density) == F) %>%
   ungroup() %>%
-  mutate(fished_x_eventualmpa = fished * eventual_mpa,
-         fished_x_yearsmpa_x_eventualmpa = fished * eventual_mpa * years_mpa) %>%
+  mutate(fished_x_eventualmpa = fished * site_will_be_mlpa,
+         fished_x_yearsmlpa_x_eventualmpa = fished * site_will_be_mlpa * years_mlpa_mpas) %>%
   left_join(temp_lags, by = c('site_side','year'))
 
-# par(mfrow= c(1,2))
-# hist(species_siteside_year$mean_temp)
-# hist(processed_dat$mean_temp)
 
 varnames <- colnames(species_siteside_year)
 
-species_siteside_year$MLPA <- ordered((species_siteside_year$mpa.period), levels = c('BEFORE','AFTER'))
+species_siteside_year$MLPA <- ordered((species_siteside_year$mpa_period), levels = c('BEFORE','AFTER'))
 
 species_siteside_year$na_temp <- (species_siteside_year$mean_temp)
 
@@ -378,15 +381,7 @@ eval_resid <- reg_results %>%
 
 # Prep Bayesian Regression ------------------------------------------------------------
 
-dep_var <- 'log_density'
 
-pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
-              'region','species','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
-              'mean_temp_lag4' , 'eventual_mpa' , 'fished_x_yearsmpa_x_eventualmpa')
-
-delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
-                'trophic.group',
-                'linf','na_temp','na_vis')
 
 
 # pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
@@ -401,7 +396,7 @@ delta_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
 any_fish <- species_siteside_year$log_density > min(species_siteside_year$log_density, na.rm = T)
 
 logit_model = glm(any_fish ~  fished + mpa_applied + fished_x_mpa + trophic.group +
-        + linf + na_temp + na_vis ,family = 'binomial', data = species_siteside_year)
+                    + linf + na_temp + na_vis ,family = 'binomial', data = species_siteside_year)
 
 logit_reg <- augment(logit_model)
 
@@ -423,18 +418,46 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 # Run Bayesian Regression -------------------------------------------------
 
-devtools::load_all('MLPAFuns')
+if (run_mcmc == T){
+
+  devtools::load_all('MLPAFuns')
+
+  check <- subset(species_siteside_year, mean_density >0)
+
+  dep_var <- 'log_density'
+
+#   pos_vars <- c('fished','years_mpa','fished_x_yearsmpa','factor_year',
+#                 'region','linf','vbk','trophic.group','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+#                 'mean_temp_lag4')
+
+  pos_vars <- c('fished','years_mlpa_mpas','fished_x_yearsmlpa','factor_year',
+                'region','linf','vbk','trophic.group','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+                'mean_temp_lag4')
+
+#   species_siteside_year %>%
+#     group_by(region,years_mlpa_mpas) %>%
+#     summarise() %>%
+#     ggplot(aes)
 
 
-bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Demon',dep_var = dep_var,
-                                 pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = scale_numerics,
-                                 iterations = its,status = .05, acceptance_rate = 0.3, thin = its/1e5)
+  delta_vars <- c('fished','years_mlpa_mpas','fished_x_yearsmlpa','factor_year',
+                  'trophic.group',
+                  'linf','na_temp','na_vis')
+
+  reg_fmla <- formula(paste('log_density ~',paste(pos_vars, collapse = '+'), sep = ''))
+
+  summary(lm(reg_fmla, data = check))
+
+  bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Demon',dep_var = dep_var,
+                               pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = scale_numerics,
+                               iterations = its,status = .05, acceptance_rate = 0.3, thin = its/1e4)
 
 
-reg_results <- list(acceptance_rate = bayes_reg$demon_fit$Acceptance.Rate, post =
-                      bayes_reg$demon_fit$Posterior1, Data = bayes_reg$Data)
+  reg_results <- list(acceptance_rate = bayes_reg$demon_fit$Acceptance.Rate, post =
+                        bayes_reg$demon_fit$Posterior1, Data = bayes_reg$Data)
 
-save(file = paste(runpath,'MCMC results.Rdata', sep = ""), list = 'reg_results')
+  save(file = paste(runpath,'MCMC results.Rdata', sep = ""), list = 'reg_results')
+}
 
 processed_demon <- process_demon(runfolder = runfolder)
 

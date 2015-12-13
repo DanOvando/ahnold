@@ -188,10 +188,7 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
   full_vcov[rownames(full_vcov) %in% colnames(reg_dat), colnames(full_vcov) %in% colnames(reg_dat) ] <- vcov
 
 
-
-  jags_demon <-
-
-
+#   jags_demon <-
   # Run Demon ----
   #
 if (method == 'Banish Demon')
@@ -207,9 +204,8 @@ show(proc.time() - a)
   if (method == 'Summon Demon')
   {
 #     a <- proc.time()
-
     Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
-                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=1,
+                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=thin,
                          Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
                          parm.names = parm.names)
 #     show(proc.time() - a)
@@ -227,7 +223,7 @@ show(proc.time() - a)
                                         ncol = length(Initial.Values), byrow = T) + disperse_mat
 
     Fit <- LaplacesDemon.hpc(mlpa_delta_likelihood, Data=Data, Initial.Values = par_initial_values,
-                         Covar=NULL, Iterations=100, Status=iterations*status, Thinning=1,
+                         Covar=NULL, Iterations=100, Status=iterations*status, Thinning=thin,
                          Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
                           Chains = num_chains, CPUs = num_chains)
 
