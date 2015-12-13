@@ -29,11 +29,11 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '7.0'
+runfolder <- '8.0'
 
 scale_numerics <- T
 
-its <- 1e3
+its <- 10e6
 
 run_mcmc <- T
 
