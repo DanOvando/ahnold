@@ -14,10 +14,12 @@
 **/*.out
 Results**/*.csv
 Results**/*.*
+MLPA Effects Results**/*.csv
+MLPA Effects Results**/*.*
 .txt
 **/*.txt
 Presentations**/*.*
-Results/
+MLPA Effects Results/
 **/*.docx
 Paper**/*.csv
 Paper**/*.*

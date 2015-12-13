@@ -33,7 +33,7 @@ runfolder <- '7.0'
 
 scale_numerics <- T
 
-its <- 1e4
+its <- 1e3
 
 run_mcmc <- T
 
@@ -199,7 +199,7 @@ species_siteside_year <- processed_dat %>% #group data to the species, site_side
          fished_x_yearsmpa = fished * years_mpa,
          factor_year = as.factor(year)) %>%
   group_by(site_side) %>%
-  mutate(eventual_mpa = max(years_mpa) >0) %>%
+  mutate(eventual_mpa = as.numeric(max(years_mpa) >0)) %>%
   subset(is.na(mean_density) == F & is.na(log_density) == F) %>%
   ungroup() %>%
   mutate(fished_x_eventualmpa = fished * site_will_be_mlpa,
@@ -420,7 +420,7 @@ save(file = paste(runpath,'MLPA Plots.Rdata', sep = ''), list = plots)
 
 if (run_mcmc == T){
 
-  devtools::load_all('MLPAFuns')
+#   devtools::load_all('MLPAFuns')
 
   check <- subset(species_siteside_year, mean_density >0)
 
@@ -432,7 +432,7 @@ if (run_mcmc == T){
 
   pos_vars <- c('fished','years_mlpa_mpas','fished_x_yearsmlpa','factor_year',
                 'region','linf','vbk','trophic.group','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
-                'mean_temp_lag4')
+                'mean_temp_lag4', 'eventual_mpa')
 
 #   species_siteside_year %>%
 #     group_by(region,years_mlpa_mpas) %>%

@@ -211,8 +211,8 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
 
   outs_of_interest_plot <- as.data.frame(thinned_post) %>%
-    dplyr::select(fished,years_mpa,fished_x_yearsmpa) %>%
-    rename(Fished = fished,'Years MLPA' = years_mpa, 'Fished X Years MLPA' = fished_x_yearsmpa) %>%
+    dplyr::select(fished,years_mlpa_mpas,fished_x_yearsmlpa) %>%
+    rename(Fished = fished,'Years MLPA' = years_mlpa_mpas, 'Fished X Years MLPA' = fished_x_yearsmlpa) %>%
     gather('Variable','Coefficient') %>%
     group_by(Variable) %>%
     mutate(lower95 = quantile(Coefficient, 0.025), upper95 = quantile(Coefficient, 0.975)) %>%
@@ -227,8 +227,8 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     ylab('Density')
 
   outs_of_interest_binomial_plot <- as.data.frame(thinned_post) %>%
-    dplyr::select(bi.fished,bi.years_mpa,bi.fished_x_yearsmpa) %>%
-    rename(Fished = bi.fished,'Years MLPA' = bi.years_mpa, 'Fished X Years MLPA' = bi.fished_x_yearsmpa) %>%
+    dplyr::select(bi.fished,bi.years_mlpa_mpas,bi.fished_x_yearsmlpa) %>%
+    rename(Fished = bi.fished,'Years MLPA' = bi.years_mlpa_mpas, 'Fished X Years MLPA' = bi.fished_x_yearsmlpa) %>%
     gather('Variable','Coefficient') %>%
     group_by(Variable) %>%
     mutate(lower95 = quantile(Coefficient, 0.025), upper95 = quantile(Coefficient, 0.975)) %>%
