@@ -35,7 +35,7 @@ scale_numerics <- T
 
 its <- 10e6
 
-run_mcmc <- T
+run_mcmc <- F
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -283,15 +283,16 @@ mean_density_plot <- species_siteside_year %>%
 
 perc_targeted_plot <- species_siteside_year %>%
   group_by(site_side) %>%
-  summarize(perc_targeted = mean(targeted == 'Targeted')) %>%
+  summarize(perc_targeted = mean(targeted == 'Targeted'), MPA = unique(eventual_mpa)) %>%
   ungroup() %>%
   mutate(factor_site_side = as.factor(site_side)) %>%
-  ggplot(aes(reorder(factor_site_side,perc_targeted), perc_targeted,fill= perc_targeted)) +
+  ggplot(aes(reorder(factor_site_side,perc_targeted), perc_targeted,fill= factor(MPA) )) +
   geom_bar(stat = 'identity', position = 'dodge') +
   scale_y_continuous(labels = percent) +
   xlab('Site Side') +
   ylab("% of Species Targeted") +
-  coord_flip()
+  coord_flip() +
+  theme(axis.text.y = element_text(size = 4), axis.title.y = element_blank())
 
 community_structure_plot <- species_siteside_year %>%
   ggplot(aes(site_side,fill= trophic.group)) +
@@ -434,11 +435,6 @@ if (run_mcmc == T){
                 'region','linf','vbk','trophic.group','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
                 'mean_temp_lag4', 'eventual_mpa')
 
-#   species_siteside_year %>%
-#     group_by(region,years_mlpa_mpas) %>%
-#     summarise() %>%
-#     ggplot(aes)
-
 
   delta_vars <- c('fished','years_mlpa_mpas','fished_x_yearsmlpa','factor_year',
                   'trophic.group',
@@ -450,20 +446,20 @@ if (run_mcmc == T){
 
   bayes_reg <- run_delta_demon(dat = species_siteside_year, method = 'Summon Demon',dep_var = dep_var,
                                pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = scale_numerics,
-                               iterations = its,status = .05, acceptance_rate = 0.3, thin = its/1e4)
+                               iterations = its,status = .01, acceptance_rate = 0.3, thin = its/1e4)
 
 
   reg_results <- list(acceptance_rate = bayes_reg$demon_fit$Acceptance.Rate, post =
                         bayes_reg$demon_fit$Posterior1, Data = bayes_reg$Data)
 
-  save(file = paste(runpath,'MCMC results.Rdata', sep = ""), list = 'reg_results')
+  save(file = paste(runpath,'MCMC results.Rdata', sep = ""), bayes_reg)
 }
 
-processed_demon <- process_demon(runfolder = runfolder)
+processed_demon <- process_demon(runfolder = runfolder, post_sample_size = 500)
 
-outlist <- list(thinned_post = processed_demon$thinned_post,data_and_predictions = processed_demon$predictions, diagnostic_plots = processed_demon$plot_list)
+# outlist <- list(thinned_post = processed_demon$thinned_post,data_and_predictions = processed_demon$predictions, diagnostic_plots = processed_demon$plot_list)
 
-save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""), list = 'outlist')
+save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""),  processed_demon)
 
 
 

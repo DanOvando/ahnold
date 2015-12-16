@@ -4,7 +4,9 @@ author: "Dan Ovando"
 date: "December 4, 2015"
 output: 
   pdf_document:
-  fig_caption: yes
+    fig_caption: yes
+    fig_height: 5
+    fig_width: 6
 csl: fish-and-fisheries.csl
 bibliography: MLPA Effects.bib
 ---
@@ -40,7 +42,11 @@ devtools::load_all('MLPAFuns')
 
 ```{r load data, cache = T}
 
-runfolder <- '5.0 LH Aurora'
+# Load this now please
+# 
+ B <- 1
+#
+runfolder <- '8.0'
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -51,43 +57,42 @@ if (dir.exists(runpath) == F)
 
 load(paste(runpath,'species_siteside_year.Rdata', sep = ''))
 
-# load(paste(runpath,'MCMC results.Rdata', sep = ''))
+load(paste(runpath,'MCMC results.Rdata', sep = ''))
 
 load(paste(runpath,'Processed MCMC results.Rdata', sep = ''))
 
-
 plot_theme <- theme_classic() + theme(text = element_text(size = 18, family = 'Helvetica'))
 
-dat <- outlist$data_and_predictions
+dat <- processed_demon$predictions
 
-plots <- outlist$diagnostic_plots
+# dat <- out
 
+plots <- processed_demon$plot_list
+
+thinned_post <- as.data.frame(processed_demon$thinned_post)
 
 ```
 
 
-
-
 ## Introduction
 
-Natural resource management is based on our belief that we as managers can have a casual impact on the world. If our policies do not cause outcomes, then we may as well relax and go along for nature's ride. However, we are faced then with a challenge. While some policies have intuitively clear outcomes, e.g. catching less fish will leave more fish in the water, other actions have far less clear outcomes, e.g. what are the employment impacts of rights-based fishery management? Management decisions must often be made then in face of uncertainty in the actual effect of our policies. 
+Natural resource management is based on our belief that humans as managers can have a casual impact on the world. If our policies do not cause outcomes, then we may as well relax and go along for nature's ride. However, we are faced then with a challenge. While some policies have intuitively clear outcomes, e.g. catching less fish will leave more fish in the water, other actions have far less clear outcomes, e.g. what are the employment impacts of rights-based fishery management? Management decisions must often be made then in face of uncertainty in the actual effect of our policies. 
 
-To confront this challenge, especially in the murky world of fisheries management, we have often turned to concepts such as management strategy evaluation (MSE) [@Punt2015] Butterworth19XX to guide policy choices. Since we generally cannot experimentally test policies before applying them, we use model simulations to consider the likely outcomes of policies and select those that best meet the objectives of management. While this is a critical tool in the fisheries management toolkit, there still often remains a question: did the enacted policy cause its intended outcome?
+To confront this challenge, especially in the murky world of fisheries management, we have often turned to concepts such as management strategy evaluation (MSE) [@Smith1994] to guide policy choices [@Punt2015]. Since we generally cannot experimentally test policies before applying them, we use model simulations to consider the likely outcomes of policies and select those that best meet the objectives of management. While this is a critical tool in the fisheries management toolbox, there still often remains a question: did the enacted policy cause its intended outcome?
 
-This question of causality is rarely addressed in natural resources management. An informal investigation of GoogleScholar results for "fisheries + causality" mostly returns papers with the phrase "correlation does not mean causation". Many examples that do exist are more focused on detecting the effects of environmental drivers [e.g. @Sugihara2012]. There are many sound reasons for this. Fisheries, marine ecosystems in general, are highly complex systems. The environmental, assessment, and management processes introduce vast amounts of uncertainty, and can make the act of teasing apart causation from correlation exceedingly difficult. 
+This question of causality is rarely addressed in natural resources management. An informal investigation of Google Scholar results for "fisheries + causality" mostly returns papers with the phrase "correlation does not equal causation". Many examples that do exist are more focused on detecting the effects of environmental drivers [e.g. @Sugihara2012]. There are many sound reasons for this. Fisheries, and marine ecosystems in general, are highly complex systems. The environmental, assessment, and management processes introduce vast amounts of uncertainty, and can make the act of teasing apart causation from correlation exceedingly difficult. 
 
-However, the field of economics has a rich history of causal detection in a diversity of complex systems, such as the effects of Individual Transferable Quotas on fishery collapse [@Costello2008a], the relationship between alcohol taxes and drunk driving [@Ruhm1996], or the casual effect of Seaseme Street on school readiness [@Kearney2015]. While still challenging (and often dependent on fortuitous natural experiments), econometric techniques provide a robust and underutilized avenue for exploring causality in fisheries. 
+However, the field of economics has a rich history of causal detection in a diversity of complex systems, such as the effects of Individual Transferable Quotas on fishery collapse [@Costello2008a], the relationship between alcohol taxes and drunk driving [@Ruhm1996], or the casual effect of Sesame Street on school readiness [@Kearney2015]. While still challenging (and often dependent on fortuitous natural experiments), econometric techniques provide a robust and underutilized avenue for exploring causality in fisheries. 
 
-This paper utilizes econometric techniques to ask: what effect has the California Marine Life Protection Act had on fish densities in the Channel Islands National Marine Sanctuary? The Marine Life Protection Act (MLPA) created XX no-take marine protected areas (MPAs) reserves in the Channel Islands (CI) in 2003. We propose to use a dataset of visual fish abundance surveys that have run in the CIs since 1999 to assess what effect the MLPA has had on commercially fished and unfished species throughout the Islands. 
+This paper utilizes econometric techniques to ask: what effect has the California Marine Life Protection Act had on fish densities in the Channel Islands National Marine Sanctuary? The Marine Life Protection Act (MLPA) created a network of no-take marine protected areas (MPAs) reserves in the Channel Islands (CI) in 2003. We propose to use a database of visual fish abundance surveys that have run in the CIs since 1999 to assess what effect the MLPA has had on commercially fished and unfished species throughout the Islands. 
 
-At its face this question may not appear particularly novel. The concept itself is rather obvious: Stopping fishing in an area should increase the abundance of species that used to be fished inside that area. Many studies have documented increases in numbers, biomass, species richness, and other metrics inside the borders of protected areas [@Lester2009, @Halpern2003], though it should be noted that these results are mostly correlational. We propose two novel extensions however. First, we utililze a difference-in-difference technique to attempt to assign a causal effect to the MLPA. Second, we extend our analysis ourside the borders of the MPAs, to isolate the effect of the MLPA on the Channel Islands as a whole. 
+At its face this question may not appear particularly novel. The concept itself is rather obvious: Stopping fishing in an area should increase the abundance of species that used to be fished inside that area. Many studies have documented increases in numbers, biomass, species richness, and other metrics inside the borders of protected areas [@Lester2009, @Halpern2003], though it should be noted that these results are mostly correlational. We propose two novel extensions. First, we utilize a difference-in-difference technique to attempt to assign a causal effect to the MLPA. Second, we extend our analysis outside the borders of the MPAs, to isolate the effect of the MLPA on the Channel Islands as a whole. 
 
-Costello & rassweiler papers on MPA benefits. Can't prove that the simulation was wrong, but by designing programs to be evaluated and tested we can start to develop empirical evidence on the effects of policies. 
-
+In addition, the MPAs were designed in with the goal of achieving promoting conservation while supporting livelihoods. In addition to the review process, models were used help design the MLPA reserves that explicitly sought to examine the tradeoffs and outcomes for conservation and fishing as a result of MPA network configurations (though these models were not explicitly incorporated into the planning process) [@Rassweiler2012,@Costello2010]. Empirical analysis such as this allow us to begin evaluating to what extent these design objectives are being realised. 
 
 ## Methods
 
-We model the effect of the MLPA on densities in the channel islands using a Bayesian hiererchichal delta model. Below we describe the data, model contruction, posterior probability distribution construction, and model fitting.
+We model the effect of the MLPA on densities in the Channel Islands using a Bayesian hierarchical delta model. Below we describe the data, model construction, posterior probability distribution construction, and model fitting.
 
 ### MLPA
 
@@ -99,23 +104,22 @@ Caselle et al [-@Caselle2015] provides an excellent basis for understanding obse
 
 ### Data
 
-We utilize a dataset described by Caselle et al. [-@Caselle2015] in our model. The data span the years ` min(dat$year)` to ` max(dat$year)`, covering r l XX sites throughout the Islands and including over 90 species. The dependent variable used in this analysis are densities, expressed in tons per hectare, of fish per site-side (the location of a transect within a broader site). Density data were processed and provided by Dr. Jenn Caselle.  The resolution of the data is at the level of mean density of a species seen at a given site-side in a year. We use these data as our metric of fish density in order to provide comparable results to Caselle et al. [-@Caselle2015]. A wide variety of covariates are avaiable to test the effects of the MLPA, including water temperature, visibility, surge, kelp cover, along with life history attribtues such as the length, size at maturity, and trophic niche of surveyed species (Fig.XX).
+We utilize a data set described by Caselle et al. [-@Caselle2015] in our model. The data span the years ` min(dat$year)` to ` max(dat$year)`, covering `r length(unique(dat$site))` throughout the Islands and including over 90 species. The dependent variable used in this analysis are densities, expressed in tons per hectare, of fish per site-side (the location of a transect within a broader site). Density data were processed and provided by Dr. Jenn Caselle.  The resolution of the data is at the level of mean density of a species seen at a given site-side in a year. We use these data as our metric of fish density in order to provide comparable results to Caselle et al. [-@Caselle2015]. A wide variety of covariates are available to test the effects of the MLPA, including water temperature, visibility, surge, kelp cover, along with life history attributes such as the length, size at maturity, and trophic niche of surveyed species.
 
-We performed a series of filtering steps to perpare the data for our analysis. Entries missing biomass densities were omitted. We also omit all entries from 1999, due to concerns about the reliability of the data from that year (survey protocols change substantially between 1999 and 2000). We omit transect sites that have not been consistently surveyed for more than two years. At each site, we omit all species that have never been observed at that site. This removes for example time series composed of zero densities of warm tropical species at the northern most CI (San Miguel). We also do not want to include rarely observed species, as their presence or absence is more likely due to observer error or transitory events than true indices of abundance. As such, we select the top 75th percentile by total observations of species for inclusion in the model. Lastly we only include entries that have all required data to run each of the candidate regressions, to ensure each run uses the same data and facilitate model comparison.
-
+We performed a series of filtering steps to prepare the data for our analysis. Entries missing biomass densities were omitted. We also omit all entries from 1999, due to concerns about the reliability of the data from that year (survey protocols change substantially between 1999 and 2000). We omit transect sites that have not been consistently surveyed for more than two years. At each site, we omit all species that have never been observed at that site. This removes for example time series composed of zero densities of warm tropical species at the northern most CI (San Miguel). We also do not want to include rarely observed species, as their presence or absence is more likely due to observer error or transitory events than true indices of abundance. As such, we select the top 75th percentile by total observations of species for inclusion in the model. Lastly we only include entries that have all required data to run each of the candidate regressions, to ensure each run uses the same data and facilitate model comparison.
 
 The resulting database used in the regression contain `r dim(dat)[1]` observations including `r length(unique(dat$site))` sites, `r length(unique(dat$species))` species, from the years `r min(dat$year)` to `r max(dat$year)`. 
 
 
 ### Identification strategy
 
-We propose to use a difference-in-difference (DiD) estimator to determine the causal effect of the MLPA. The principal challenge of identifying causality in settings such as the MLPA is the lack of a clearly designed experiment. A more ideal MPA design strategy from the perspective of identifying causality would have been to geoengineer a few perfect replicas of the Channel Islands and randonmly assign and place MPAs in some of them. Unfortunately this is not possible. Seeing as the MLPA  is not a true (or even close to true) experiment, simply looking at densities before and after the MLPA is not sufficient to identify causality. Changes could be attributable to concurrent shifts in environmental conditions, changes in fisheries management, placement of MPAs in locations that were increasing or decreasing in density pre MLPA, or a whole host of other confounding factors.
+We propose to use a difference-in-difference (DiD) estimator to determine the causal effect of the MLPA. The principal challenge of identifying causality in settings such as the MLPA is the lack of a clearly designed experiment. A more ideal MPA design strategy from the perspective of identifying causality would have been to geoengineer a few perfect replicas of the Channel Islands and randomly assign and place MPAs in some of them. Unfortunately this is not possible. Seeing as the MLPA  is not a true (or even close to true) experiment, simply looking at densities before and after the MLPA is not sufficient to identify causality. Changes could be attributable to concurrent shifts in environmental conditions, changes in fisheries management, placement of MPAs in locations that were increasing or decreasing in density pre MLPA, or a whole host of other confounding factors.
 
 The DiD estimator allows us to isolate causality by controlling for time-invariant differences among groups before and after a treatment. Consider an outcome of interest *Z* measured at two sites *s*, one of which (*t*) is exposed to a treatment in year *Y*,  and another *c* which is not. The DiD estimator is then
 
 $$\beta = (Z_{s = t,y{\geq}Y} - Z_{s = t,y<Y}) - (Z_{s = c,y{\geq}Y} - Z_{s = c,y<Y}) $$
 
-  and it can be shown algebraicly that time-invariant differences between *t* and *c* that affect *Z* drop out of the equation. This allows us in theory to isolate the causal effect of the treatment.
+  and it can be shown algebraically that time-invariant differences between *t* and *c* that affect *Z* drop out of the equation. This allows us in theory to isolate the causal effect of the treatment.
 
 This formulation can be generalized to a regression estimator of the form
 
@@ -123,23 +127,62 @@ $$ \hat{Z_{i,y,s}} = \beta_{0} + \beta_{1}T_{i,y} + {\beta_{2}G_{i,s}}
 + \beta_{3}T_{i,y}G_{i,g} + \beta{...} $$
 
 
-  where *T* and *G* are fixed effects indicating whether the treatment has occured occured in year *y* and whether the site *s* is treated, respectively. the DiD estimator itself then is $\beta_{1}$: the effect of the treatment on the treated. Additional covariates can be included as needed to improve the fit of the model, control for variables that may not be constant over time, or that may vary below the group level.
+  where *T* and *G* are fixed effects indicating whether the treatment has occurred occurred in year *y* and whether the site *s* is treated, respectively. the key DiD estimator itself then is $\beta_{1}$: the effect of the treatment on the treated. Additional covariates can be included as needed to improve the fit of the model, control for variables that may not be constant over time, or that may vary below the group level.
 
-With this model in mind, we can turn to considering our "experiment" for the DiD estimator. One strategy might be to consider sites that eventually become MPAs as the "treatment" group, and the other sites the "controls". However this poses two problems for us. First, "treatment" group data are not available pre treatment, so we have no way to calculate "difference" for this group. Second, even if we had these data, through a site-level treatement effect we would be treating each site as independent, walled off units that are treated or untreated by an MPA. While this may be acceptable if we want to consider the effects of the MLPA inside the borders of the MPA, we are interested in the effects of the MLPA across the Channel Islands.
+With this model in mind, we can turn to considering our "experiment" for the DiD estimator. One strategy might be to consider sites that eventually become MPAs as the "treatment" group, and the other sites the "controls". However this poses two problems for us. First, "treatment" group data are not available pre treatment, so we have no way to calculate "difference" for this group. Second, even if we had these data, through a site-level treatment effect we would be treating each site as independent, walled off units that are treated or untreated by an MPA. While this may be acceptable if we want to consider the effects of the MLPA inside the borders of the MPA, we are interested in the effects of the MLPA across the Channel Islands.
 
-For these two reason, we use whether or not a given species is targeted by fishing, commercially or recreationallyXX, in Southern California. Under this experimental structure, the application of the MLPA can be thought of as an exogenous shock to the fish species, some of which were fished and some of which were unfished. While it is certainly true that MPAs may have been applied in sites with higher (or lower) concentrations of fished species, at the level of the Channel Islands species certainly could not themselves influence the creation of the MLPA, or select whether or not to be in the Islands at all. Therefore, the application of the MLPA on fished or unfished groups serves as a rough approximation of an exogenous shock to the species living in the Channel Islands (though we discuss potential limitations to this assumption in the discussion).
+For these two reason, we use whether or not a given species is targeted by fishing, commercially or recreational, in Southern California. Under this experimental structure, the application of the MLPA can be thought of as an exogenous shock to the fish species, some of which were fished and some of which were unfished. While it is certainly true that MPAs may have been applied in sites with higher (or lower) concentrations of fished species, at the level of the Channel Islands species certainly could not themselves influence the creation of the MLPA, or select whether or not to be in the Islands at all. Therefore, the application of the MLPA on fished or unfished groups serves as a rough approximation of an exogenous shock to the species living in the Channel Islands (though we discuss potential limitations to this assumption in the discussion). Examining the data, we see a relatively even distribution of the percentage of species observed at a site targeted by fishing, overall 35% targeted in non-MPA sites and 36% targeted in MPAs (Fig.XX). 
+
+```{r dist_fished , fig.cap='Percentage of species targeted by fishing at each site-side'}
+
+
+perc_targeted_plot <- species_siteside_year %>%
+  group_by(site_side) %>%
+  summarize(perc_targeted = mean(targeted == 'Targeted'), MPA = unique(eventual_mpa)) %>%
+  ungroup() %>%
+  mutate(factor_site_side = as.factor(site_side)) %>%
+  ggplot(aes(reorder(factor_site_side,perc_targeted), perc_targeted,fill= factor(MPA) )) +
+  geom_bar(stat = 'identity', position = 'dodge') +
+  scale_y_continuous(labels = percent) +
+  scale_fill_discrete(name = 'MPA') + 
+  xlab('Site Side') +
+  ylab("% of Species Targeted") +
+  coord_flip() +
+  plot_theme+
+  theme(axis.text.y = element_text(size = 4), axis.title.y = element_blank())
+
+ perc_targeted_summary<- species_siteside_year %>%
+  group_by(site_side) %>%
+  summarize(perc_targeted = mean(targeted == 'Targeted'), MPA = unique(eventual_mpa)) %>%
+  group_by(MPA) %>%
+  summarize(mean_perc_targeted = mean(perc_targeted))
+
+perc_targeted_plot
+
+```
 
 ### Model
 
-Our dependent variable is log(tons/hectars): *d*. We choose this form for two reasons. First, the processes affecting density are likely to be multiplicative in nature. By log transforming the densities our independent variables in a linear regression more closely represent multiplicative effects. Second, by logging the dependent variable, the coefficients of the independent variables become slightly simpler to interpret in this context. The coefficients of a log-linear regression roughly correspond to a percent change in the dependent variable per unit marginal change in the independent variable. In other words, it is easier to interpret the significant of a coefficient of 0.2 when it corresponds to a marginal effect of 20%, than a marginal increase of 0.2 in raw densities.
+Our dependent variable is log(tons/hectares): *d*. We choose this form since by logging the dependent variable, the coefficients of the independent variables become slightly simpler to interpret in this context. The coefficients of a log-linear regression roughly correspond to a percent change in the dependent variable per unit marginal change in the independent variable. In other words, it is easier to interpret the significant of a coefficient of 0.2 when it corresponds to a marginal effect of 20%, than a marginal increase of 0.2 in raw densities.
 
 The next step to consider the the type of model to be used. Starting from the most basic model, we could consider an ordinary least squares (OLS) regression. We can assume that the log densities are normally distributed, since densities and CPUEs are often log-normally distributed and if so the log densities are normally distributed. OLS may then  be a candidate since we are working with normally distributed data.
 
-However, the data contain a large amount of zeros at the species-site/side-year resolution (Fig.XX). This is a common problem in many density or catch-per-unit effort style datasets. The large numbers of zeros means that we cannot simply fit an OLS regression to this dataset. Instead we need to account for the zeros in the data. The standard econometric technique for continuous zero-truncated data, as we have here, is a tobit model. The tobit model works through data augmentation to simulate the dependent variables that we might observe if they could fall below zero. It can then be shown that the likelihood of the model conditional on the augmented data is proportional to the likelihood of the model conditional on the real data, which we cannot obtain directly.
+However, the data contain a large amount of zeros at the species-site/side-year resolution (Fig.XX). This is a common problem in many density or catch-per-unit effort style data sets. The large numbers of zeros means that we cannot simply fit an OLS regression to this data set. Instead we need to account for the zeros in the data. The standard econometric technique for continuous zero-truncated data, as we have here, is a Tobit model. The Tobit model works through data augmentation to simulate the dependent variables that we might observe if they could fall below zero. It can then be shown that the likelihood of the model conditional on the augmented data is proportional to the likelihood of the model conditional on the real data, which we cannot obtain directly.
 
-The tobit model is not feasible for this analysis though. The tobit model requires normality in the data. A prime candidate for a tobit model might be hours of work. Workers cannot work negative hours (unless you count particularly unproductive graduate students), and we can measure hours continuously (e.g 0.01 hours). If we plot a histogram of hours worked we can image it appearing as a truncated-normal distribution, and we can imagine the left-hand tail of that distribution...
+```{r zeros,fig.cap='Histogram of mean biomass densities in the Channel Islands database. Zero values had a small constant added to appear in log space'}
+dense_hist <- species_siteside_year %>%
+  ggplot(aes(log_density)) + 
+  geom_histogram(color = 'black',fill = 'steelblue2') +
+  plot_theme+
+  xlab('Log Density (tons/hectare)') + 
+  ylab('Count')
 
-We instead use a hurdle or delta modeling approach. Under this model, we consider the data two have two stages. First, a given observation must pass a "hurdle" of being seen or not (having *d* >0) with some probability *p*. Under this approach, the data has to cross a "hurdle", in which we model the likelihood of a given observation being greater than 0, and then the likelihood of the positive density data conditional on the likelihood of being greater than 0. Following Babcock & McAllister [-@Babcock2002], we can break the likelihood into two components, a binomial process modeling the likelihood of the observed densities being greater than 0, and a normal likelihood for the distribution of the log-trasformed densities.
+dense_hist
+```
+
+The Tobit model is not feasible for this analysis though. The Tobit model requires normality in the data. A prime candidate for a Tobit model might be hours of work. Workers cannot work negative hours (unless you count particularly unproductive graduate students), and we can measure hours continuously (e.g 0.01 hours). If we plot a histogram of hours worked we can image it appearing as a truncated-normal distribution, and we can imagine the left-hand tail of that distribution...
+
+We instead use a hurdle or delta modeling approach. Under this model, we consider the data two have two stages. First, a given observation must pass a "hurdle" of being seen or not (having *d* >0) with some probability *p*. Under this approach, the data has to cross a "hurdle", in which we model the likelihood of a given observation being greater than 0, and then the likelihood of the positive density data conditional on the likelihood of being greater than 0. Following Babcock & McAllister [-@Babcock2002], we can break the likelihood into two components, a binomial process modeling the likelihood of the observed densities being greater than 0, and a normal likelihood for the distribution of the log-transformed densities.
 
 
 We consider the binomial portion of the hurdle first. For a given observation at the species(*f*)-site/side(*s*)-year(*y*) level, we can model the probability of that observation being greater than 0 through a logit model
@@ -152,12 +195,11 @@ $$p_{f,s,y} = \frac{e^{\gamma_{f,s,y}}}{1+e^{\gamma_{f,s,y}}}$$
 $$\gamma_{f,s,y} = \tau_{0} + \tau_{1}$$
 
 
-
-  We include the DiD estimator within the hurdle portion of the model to estiamte the effect of the MLPA on the probability of zero-density observations.
+  We include the DiD estimator within the hurdle portion of the model to estimate the effect of the MLPA on the probability of zero-density observations.
 
 For the observations with *d* > 0, we model the expected density as
 
-$$ d_{f,s,y} = \beta_{1}fished_{f} + \beta_{2}mpa_{s,y} + \beta_{3}FxM_{f,s,y} +
+$$ \hat{d_{f,s,y}} = \beta_{1}fished_{f} + \beta_{2}mpa_{s,y} + \beta_{3}FxM_{f,s,y} +
   \sum\beta_{4}region_{s} + \sum\beta_{5}trophic_{f} +  \beta_{6}yearsmpa_{s,y} +... $$
 
   $$\beta_{7}FxYM_{f,s,y} + \beta_{7}linf_{f} + \beta_{8}vbk_{f} + \beta_{9}temp_{s,y} +
@@ -166,22 +208,29 @@ $$ d_{f,s,y} = \beta_{1}fished_{f} + \beta_{2}mpa_{s,y} + \beta_{3}FxM_{f,s,y} +
   $$ \beta_{11}templag1_{s,y} + \beta_{12}templag2_{s,y} + \beta_{13}templag3_{s,y} +
   \beta_{14}templag4_{s,y} + \beta_{15} $$
 
-  ### Likelihoods
+
+### Likelihoods
 
 
-  For the first part we can tally the number of candidate transects *n* and the number of transects with positive densities *w* that comprised that density estimate. This translates to a binomial process where the likelihood of a given aggregation is given as
+  For the hurdle component of the model we can tally the number of candidate transects *n* and the number of transects with positive densities *w* that comprised that density estimate. This translates to a binomial process where the with a probability density given by
 
-$$ Binomial likelihood $$
+$$ll^{h}_{f,s,y} = log(\left(
+    \begin{array}{c}
+      n_{f,s,y} \\
+      o_{f,s,y}
+    \end{array}
+  \right) p_{f,s,y}^{w_{s,f,y}}(1-p_{f,s,y})^{n_{f,s,y}-o_{f,s,y}})$$
 
-  where *p* is the estimated probability of the the number of positive densities.
 
-$$ LL^{bin}_{f,s,y} = dbinom(w_{f,s,y},n_{f,s,y},p_{f,s,y}) $$
+  where *p* is the estimated probability of the the number of positive densities and *ll* is the log likelihood of a given observation for hurdle *h* or density *d* for the positive density model. 
 
-  For the observations with *d*>0, the we assume a normal likelihood.
-
+  For the observations with *d*>0, the we assume a normal likelihood with a density function of 
+  
+  $$ll^{d}_{f,s,y}=log(\frac{1}{\sqrt{2{\pi}{\sigma}}}e^{ \frac{ (\hat{d_{f,s,y}} - d_{f,s,y})^{2} }{2} })$$
+  
 ### Priors
 
-We construct a series of hierarchichal priors to account for clustering in the data. All parameters not listed here are assumed to have uniform priors. We model the year-term fixed effects as originating from a common normal prior
+We construct a series of hierarchical priors to account for clustering in the data. All parameters not listed here are assumed to have uniform priors. We model the year-term fixed effects as originating from a common normal prior
 
 Year~y~ ~N(0,$\sigma^{y}$)
 
@@ -195,7 +244,7 @@ Year~y~^p^ ~ N(0,$\sigma^{y,b}$)
 
 $\sigma^{y,b}$ ~ gamma(2,0.5)
 
-We also assume that the prior on the regional fixed effects is distribtued normal per
+We also assume that the prior on the regional fixed effects is distributed normal per
 Region~r~ ~ N(0,$\sigma^{r}$)
 
 with hyperprior
@@ -207,15 +256,15 @@ $\sigma$ ~ gamma(2,0.5)
 
 ### MCMC
 
-We used the 
+We used the LaplacesDemon package in *R* [@RCoreTeam2015] to fit our hierarchical Bayesian delta model. We ran 10 million iterations, discarded the first 6 million, and thinned every XXth sample to obtain our final thinned chain of `r dim(processed_demon$thinned_post)[1]` draws from the posterior distribution. 
 
 ## Results
 
 ### Diagnostics
 
-The DiD estiamtor depends critcially on the assumption that the trends in the outcome of interest, in this case fish densities, are the same between the treated and untreated groups pre-treatment. In essence, the DiD estimator assumes that the post treatement the untreated group should serve as a proxy for how the fish densities in the treated group would have evolved had they been untreated. In this example, our hypothesis is that the fished and unfished groups are both resonding in the same manner to the same environmental trends, even if the raw density values between the groups are different. 
+The DiD estimator depends critically on the assumption that the trends in the outcome of interest, in this case fish densities, are the same between the treated and untreated groups pre-treatment. In essence, the DiD estimator assumes that the post treatment the untreated group should serve as a proxy for how the fish densities in the treated group would have evolved had they been untreated. In this example, our hypothesis is that the fished and unfished groups are both responding in the same manner to the same environmental trends, even if the raw density values between the groups are different. 
 
-We can analyze trends in densities between the two groups pre-mlpa as an intital check of the validity of this assumption (Fig.XX). Visually inspecting the trends, we see that while the fished and unfished groups do not have matching trends, they to appear to be loosely reacting to the same regional trends. Both groups show declining trends in density pre-MLPA, and increases post-MLPA. This suggests that for this phase of the analysis using unfished species as a "control" for the theoretical trajectory of fished densities post-MLPA is not entirely unreasonable. However more quantiative tests should be applied at a later date. Specifically, we will run a "placebo" test in which we test whether slopes are significantly different between the two groups before and after a "placebo" start date of the MLPA, such as 2001. In theory for the DiD estimator to be valid in this context we should fail to reject the hypothesis that both groups have identical slopes pre and post placebo.  
+We can analyze trends in densities between the two groups pre-MLPA as an initial check of the validity of this assumption (Fig.XX). Visually inspecting the trends, we see that while the fished and unfished groups do not have matching trends, they to appear to be loosely reacting to the same regional trends. Both groups show declining trends in density pre-MLPA, and increases post-MLPA. This suggests that for this phase of the analysis using unfished species as a "control" for the theoretical trajectory of fished densities post-MLPA is not entirely unreasonable. However more quantitative tests should be applied at a later date. Specifically, we will run a "placebo" test in which we test whether slopes are significantly different between the two groups before and after a "placebo" start date of the MLPA, such as 2001. In theory for the DiD estimator to be valid in this context we should fail to reject the hypothesis that both groups have identical slopes pre and post placebo.  
 
 ```{r denplot, fig.cap= 'Mean log densities of fish and unfished species over time. Dashed line shows implementation of MLPA reserve in the CIs'}
 density.by.year_plot <-
@@ -240,46 +289,30 @@ did_trend <- dat %>%
 did_trend
 ```
 
-Moving to our MCMC diagnostics, we broadly see evidence that substantially more runs are likely to be needed in order to achieve convergence. The acceptance rate over our 5e6 runs was 0.34XX. Examining our final thinned chain, we see that many of our coefficients fail the Geweke diagnostic, meaning that the means of the initial and final portions of the chain are significantly different than each other, indicating non-congervence of the thinned chain (Fig.XX). We also see that the Geweke stastic fails for many of our specific coefficients of interest, including the our "treatment on the treated" estimator "Fished X Years MLPA". 
-
+Moving to our MCMC diagnostics, we broadly see evidence that substantially more runs are likely to be needed in order to achieve convergence. The acceptance rate over our 5e6 runs was 0.34XX. Examining our final thinned chain, we see that many of our coefficients fail the Geweke diagnostic, meaning that the means of the initial and final portions of the chain are significantly different than each other, indicating non-convergence of the thinned chain (Fig.XX). However the DiD estimators do pass the Geweke statistic. 
 
 ```{r geweke, fig.cap='Geweke diagnostics of MCMC runs'}
 plots$gweke_plot + 
   theme(axis.text.y = element_text(size = 8))
 ```
 
-We also see that substantial autocorrelation remains 
+We can further examine the convergence of the density DiD estimators by examining the partial-chain comparisons (Fig.XX) and Heidelberger-Welsh statistics for the DiD estimator parameters. The "fished" and "years MLPA" coefficients both pass the Heidelberger-Welsh test, but the interaction term (fished x YearsMLPA) did not. Interestingly, examining the partial chain comparisons, we the exact opposite result: the complete and partial chains of the "fished" and "years MLPA" do not match, while the partial chain comparison of the interaction term appears stable (Fig.XX). Considering the DiD estimators for the hurdle component of the model, only the interaction term passes the Heidelberger-Welsh test. As with the density regression, only the interaction term in the hurdle model component appears to indicate stability in the chain (Fig.XX).
+
+```{r partial_chain, fig.cap='Partial chain comparisson of the density linear regression'}
 
 
-```{r acf, fig.cap='Histogram of lag-1 autocorrelation'}
-plots$acf_hist_plot 
-```
-
-```{r ess, fig.cap='Effective sample size of model coefficients'}
-plots$eff_sample_plot
-```
-
-```{r post_predict, fig.cap='Observed vs. mean posterior predicted'}
-plots$fit_plot
-```
-
-
-```{r partial_chain, fig.cap='Partial chain comparisson'}
-
-
-of_interest <- as.data.frame(outlist$thinned_post) %>%
-  select(fished,years_mpa,fished_x_yearsmpa) 
+of_interest <- as.data.frame(processed_demon$thinned_post) %>%
+  select(fished,years_mlpa_mpas,fished_x_yearsmlpa) 
 
 heidel <- heidel.diag(mcmc(of_interest))
 
+bi_of_interest <- as.data.frame(processed_demon$thinned_post) %>%
+  select(bi.fished,bi.years_mlpa_mpas,bi.fished_x_yearsmlpa) 
 
-bi_of_interest <- as.data.frame(outlist$thinned_post) %>%
-  select(bi.fished,bi.years_mpa,bi.fished_x_yearsmpa) 
+bi.heidel <- heidel.diag(mcmc(bi_of_interest))
 
 partial_of_interest <- ggs_compare_partial(ggs(mcmc(of_interest))) + 
   plot_theme
-
-partial_of_interest
 
 acf_of_interest <- ggs_autocorrelation(ggs(mcmc(of_interest))) + 
   plot_theme
@@ -287,7 +320,48 @@ acf_of_interest <- ggs_autocorrelation(ggs(mcmc(of_interest))) +
 bi_partial_of_interest <- ggs_compare_partial(ggs(mcmc(bi_of_interest))) + 
   plot_theme
 
+all_of_interest <- ggs_compare_partial(ggs(mcmc(cbind(of_interest,bi_of_interest)))) + 
+  plot_theme
+
+all_of_interest
+
 ```
+
+
+We also see that substantial auto-correlation remains in the samples. Observing the lag-1 auto-correlation of all `r dim(processed_demon$thinned_post)[2]` parameters, we see that a substantial number... (Fig.XX).
+
+
+```{r acf, fig.cap='Histogram of lag-1 autocorrelation'}
+plots$acf_hist_plot 
+```
+
+We also see that due to this auto-correlation issues, the effective sample size of the vast majority of our samples are incredibly small. This further supports that so far many of the coefficients of the model are very poorly estimated. 
+
+```{r ess, fig.cap='Effective sample size of model coefficients'}
+plots$eff_sample_plot + 
+    theme(axis.text.y = element_text(size = 8))
+
+```
+
+We see some explanation for this behavior by examining the cross-correlation plot of the estimated coefficients. Specifically, we see very high correlation among the year and region fixed effects. We see that the year terms are almost perfectly positively correlated. The year terms are almost perfectly negatively correlated with the region fixed effects as well. All this suggests that we may need to more directly account for the covariance among the coefficients. 
+
+```{r crosscorr, fig.cap='Cross-correlations of model coefficients. bi indicates components used the the binomial hurdle model'}
+
+ggs_crosscorrelation(ggs(mcmc(processed_demon$thinned_post))) + 
+      theme(axis.text = element_text(size = 5)) + 
+  scale_fill_gradient2(low = ('orange'),high = ('green'),mid = 'white',midpoint = 0,name = 'Scaled Correlation', limits = c(-1,1))
+```
+
+Moving to the posterior predictives, we see that the medians of the posterior predictive distribution of densities do not capture the observed densities very well (Fig.XX). In fact xxx
+
+```{r post_predict, fig.cap='Observed vs. median posterior predicted'}
+plots$fit_plot
+
+processed_demon$resids
+
+```
+
+The preceding MCMC diagnostics provide evidence that we will need to perform substantially more iterations than my computer and timeline can handle at this moment. However a XX million iteration will be running during my drive to Santa Barbara. Beyond the MCMC diagnostics, we should consider standard regression diagnostics to understand the validity of our coefficients. For now we focus on the density model. Our assumption is that the log-densities are normally distributed. Looking at a normal quantile-quantile plot of the residuals of the density model, we see that our assumption of normality appears justified. 
 
 ```{r qqnorm, fig.cap='Normal quantile-quantile plot of observed vs theoretical residuals of positive densities' }
 
@@ -295,16 +369,28 @@ plots$qq_plot
 
 ```
 
-```{r, fig.cap = 'Residuals by time'}
+For now we focus As we explore the development of this model, we should also consider potential violations of the *iid* assumptions as we consider how best to address the nested nature of the data. Looking broadly at the residuals, we do not see evidence of model misspecification, though there is some evidence of heteroskedasticity (Fig.XX)
 
+```{r model_spes, fig.cap='Residuals as a function of predicted density'}
+
+plots$misspec_plot
+
+```
+
+We can now turn to the nested nature of the data. We know that the data are clustered by year, site-side, and species. Looking at the residuals by time, it appears that the inclusion of year fixed effects and lagged temperature effects were sufficient to remove heteroskedasticity and correlation in the residuals over time (Fig.XX)
+
+```{r, fig.cap = 'Residuals by time'}
 plots$resids_by_time_plot
 ```
 
+Turning to the regional effects, we would expect there to be correlation in the residuals among nearby sites. We do not include site-specific fixed effects as the model quickly becomes over-fit at that point. We do include region fixed effects with a hyperprior in an effort to control for spatial correlations in densities. We see that while there is clear correlation in the residuals, it appears that the region effects were able to substantially account for this (Fig.XX). 
 
 ```{r, fig.cap = 'Residuals by site'}
 
 plots$resids_by_site_plot
 ```
+
+Lastly, we can consider the residuals by species. We might assume that the life history characteristics included in the model would be best represented by a multivariate normal distribution, as clearly parameters such as *L~inf~* and *k* are correlated. However we have not yet accounted for this, partly to reduce the complexity of the model at this stage. Examining the residuals by species group, we can see that there is clear within-species correlation in the residuals, though there does not appear to be within tropic-group correlation. This indicates that while the degree of spatial correlation does not appear severe enough to warrant more complex modeling of spatial correlations, we will need to address the within-species correlations. 
 
 ```{r, fig.cap = 'Residuals by species'}
 
@@ -313,25 +399,92 @@ plots$resids_by_species_plot
 
 ### Estimated Effects
 
-```{r result, fig.cap='Results of interest'}
+Having poured over diagnostics, we can now consider the actual estimated DiD coefficients (keeping in mind that diagnostics suggest that we need many more runs and improved accounting for species correlations; see SI for full posterior distributions). We consider the DiD estimators for both the hurdle and density components of the delta model. Looking first at the density model, we see that the median estimated coefficient of the "fished" group is
+`r round(median(thinned_post$fished),2)` (95% credibility interval (CI) of `r round(quantile(thinned_post$fished,.025),2)` - `r round(quantile(thinned_post$fished,.975),2)`, indicating that all else equal fished species have ~50% higher densities than unfished. Interestingly the coefficient on the number of years post-MLPA (aka 2003 for the Channel Islands) was highly negative, with a median value of `r round(median(thinned_post$years_mlpa_mpas),2)` (95% CI of `r round(quantile(thinned_post$years_mlpa_mpas,.025),2)` - `r round(quantile(thinned_post$years_mlpa_mpas,.975),2)`. Lastly the "treatment on the treated" coefficient of the interaction between being fished and the number of years post-MLPA was not significantly different than 0, with a median value of `r round(median(thinned_post$fished_x_yearsmlpa),2)` (95% CI of `r round(quantile(thinned_post$fished_x_yearsmlpa,.025),2)` - `r round(quantile(thinned_post$fished_x_yearsmlpa,.975),2)`. This indicates that the model cannot detect a significant effect of the MLPA on fished species at the regional level. 
+
+```{r result, fig.cap='DiD estimators for the regression predicting densites of fish > 0'}
 
 plots$outs_of_interest_plot
 
 ```
 
-```{r result2, fig.cap='Results of interest'}
+Looking at the hurdle component of the model, we see that whether or not a species is fished has no significant effect on the probability of observing a school. Interestingly the DiD estimators of the remaining terms are perhaps more of what might be expected, with the "Years MLPA" and interaction term significantly increasing the probability of a given observed density being > 0 (Fig.XX). This suggests that the MLPA has decreased the probability of "zero" observations of fished species. 
+
+```{r result2, fig.cap='DiD estimators for the regression predicting probability of densities > 0'}
 
 plots$outs_of_interest_binomial_plot
 ```
 
+```{r sigmas, fig.cap= 'Posterior distributions of sigma parameters'}
+
+plots$outs_of_interest_sigma
+
+```
+
+
+Lastly, we can consider this process as roughly analogous to a CPUE standardization in the "delta" manner summarized by Maunder & Punt [-@Maunder2004]. From that perspective, the coefficients of the year fixed effects in the density model (which are scaled relative to the year 2000) being the standardized indices of abundance. From this perspective, we see an interesting (and troublesome) trend of increasing densities post 2003, coincidentally the same year as the MLPA. 
 
 ```{r year_trend,fig.cap='year coefficients'}
 plots$year_trend_plot
 ```
 
-
-
-
-
-
 ## Discussion
+
+Somewhat unsurprisingly, this project became much more complicated than expected. However this analysis has helped guide the future development of this project and has produced some interesting insights already. 
+
+Our initial goal was to attempt to detect the causal effect of the MLPA on fish densities throughout the Channel Islands region. Preliminary results indicate that:
+
+  1. All else equal, the model identifies the contribution of the MLPA as having reduced densities. In the specific interpretation of the fixed effects, the data suggests that the MLPA has reduced densities of unfished species throughout the Channel Islands.
+  2. We can detect no significant effect of the MLPA on fished species throughout the region
+
+This in and of itself is a novel finding. Caselle et al. [-@Caselle2015] reports a significant increase in densities of fished species inside the MPAs post MLPA. Ignoring for a moment the question of causality, at the Channel Islands regional level we are unable to detect a significant impact of the MLPA on the densities of fished species, as compared to unfished.  
+
+This is clearly an initial investigation and it remains to be seen if these results hold. There are several key issues that need to be investigated. First examining Fig.XX, we see that the trend in abundances, as measured by the coefficients of the year fixed effects, shows an general increase beginning in and continuing since 2003, the year in which the MLPA MPAs were implemented in the Channel Islands. Given that we only have data from the Channel Islands at this point, we have no "contrast" in the number of years protected by the MLPA: all regions start in 2003. As such, it is very difficult for the model to separate out the effects of the MLPA from the year fixed effects. We can verify this by examining Fig.XX, which shows that year effects and the DiD estimators related to years protected by the MLPA are highly correlated. This suggests that obtaining robust estimates of the individual coefficients of each term may be challenging. Data from the south and central coast, which have different start-dates for the MLPA, should help provide much clearer contrast in the data to separate out the effects of the MLPA from time-trends. 
+
+Further consideration of the hierarchical nature of the data also warrants consideration. While our results show that we have accounted for spatial and temporal correlations reasonably well, we have not properly accounted for the within-species nesting of the data. However, we would expect that heteroskedasticity at the species level would not bias our results, but would be more likely to influence the distribution around the expected value.  
+
+As some support for the notion that we may not need to be as concerned with the nested nature of the data in order to obtain expected values of coefficients, we compared the estimates obtained from the Bayesian regression described here, to an ordinary least squares estimate of the coefficients for the same parameters. We see that by and large, and very depressingly, the two methods yield nearly identical results for most of the coefficients in the model. So, this suggests that inclusion our hierarchical priors is not substantially influencing our point estimates of coefficients. It also calls into question the next phase of this analysis, seeing as the frequentist version takes three lines of code and runs in less than second, while the Bayesian approach is currently running for nine hours on the NCEAS server. Once we extend this analysis to multiple regions, or attempt to link the model to a more explicit model of the data collection process, or link to model estimates of spatial fishing patterns, the Bayesian framework may still prove useful. 
+
+From the perspective of causality, the inclusion of the DiD estimator gives us greater confidence that we are estimating the causal effect of the MLPA, as opposed to inside-outside or fished-unfished comparisons. In addition, by including a representative suite of plausible covariates we likely improve the point estimates of the coefficients, since omission of factors such as the life history of species or time trends are highly likely to suffer from omitted variable bias. 
+
+Substantial work remains though before we can be certain that we have reasonable identification of the causal effect of the MLPA. First, we should still consider more rigorous model selection, possibly through reversible jump MCMC, or through frequentist or non-parametric methods. Second, at the moment we only include two "groups" for our DiD estimator: fished or unfished. The simple DiD estimator employed here works best with >30 groups, for example examining 30 different cities, some of which were exposed to a treatment. As a first step our simple approach is ideal to explore the data, but to identify causality we should explore strategies for improving this. One alternative may be to break fished and unfished into groups of treatment level (e.g. degree to which they are fished), or into groups of species categories. However both of these strategies will increase the number of model parameters, and the strong correlations between many of the included variables suggests that we may have trouble obtaining reliably parameter estimates with many more fixed effects. Alternatively, bootstrapping methods exist for the DiD estimator when the number of groups is small. 
+
+The DiD estimator should become more robust once we can add additional regions and obtain contrast in the year of MPA implementation. Given that the data are noisy though we should not put all our eggs in one basket. One of the next steps is to explore fitting the same model using propensity scores based on species traits. This provides us another avenue towards identification, which we can compare to the DiD estimator. 
+
+As a final consideration, it is worth noting what a poor predictor of densities our model is (Fig.XX). This is perhaps not surprising, given the relatively fine scale resolution of the data (species level along a transect of 30 meters), but is still worth considering. From a general perspective, this indicates the complicated evolution of fish populations over time, which those of us who engage in simulation studies of MPA effects should take seriously consider. 
+
+Our preliminary results then do not detect a significant causal effect of the MLPA on the positive densities of fished species throughout the Channel Islands. While substantial work remains before we can hang our hat on this result, it does have one clear implication: the signal of the MLPA on regional fish densities is far from clear. While within-MPA results may show stronger contrast, we might not expect improved statistical methods to identify much clearer signals in the regional effects of the MLPA (though improved isolation of the MLPA effects and the year terms may yield dramatically different results). Given that the link between the MLPA and fish densities is relatively simpler than the link between the MLPA and fishing profits, it will be interesting to see how that next phase of the analysis goes. 
+  
+
+```{r frequentist, fig.cap='Comparison of posterior distributions of estimated coefficients from bayesian (boxplots) and point estimated from linear OLS (red points)'}
+
+  pos_vars <- c('fished','years_mlpa_mpas','fished_x_yearsmlpa','factor_year',
+                'region','linf','vbk','trophic.group','na_temp','na_vis', 'mean_temp_lag1', 'mean_temp_lag2','mean_temp_lag3',
+                'mean_temp_lag4', 'eventual_mpa')
+
+  reg_dat <- data.frame(reg_results$Data$dep_var,reg_results$Data$den_reg_mat)
+
+  freak_reg <- tidy(lm(log_density ~. - 1, data = subset(reg_dat, log_density >min(log_density)))) %>%
+  rename(coefficient = term, freq_estimate = estimate)
+  
+  comp <- thinned_post %>%
+    gather('coefficient','estimate', convert = T) %>%
+    subset(!grepl('bi.',coefficient) & !grepl('sigma',coefficient)) %>%
+    left_join(freak_reg, by = 'coefficient') %>%
+    ggplot(aes(factor(coefficient),estimate)) + 
+    geom_boxplot() + 
+    geom_point(aes(factor(coefficient),freq_estimate), shape = 16, color = 'red') + 
+    plot_theme  + 
+    theme(axis.text = element_text(size = 7), 
+          axis.title.y = element_blank()) + 
+    ylab('Coefficient') + 
+    geom_hline(aes(yintercept = 0), linetype = 'longdash', size = 1)+ 
+    coord_flip() 
+  
+  comp
+
+
+```
+
+
+## Works Cited

@@ -104,7 +104,8 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
   resids <- predictions$posterior %>%
     subset(obs_log_density > min(obs_log_density)) %>%
     group_by(observation) %>%
-    summarise(mean_resid = mean(resid), mean_obs = mean(obs_log_density),mean_pred = mean(pred_log_density), mean_post_pred = mean(post_predict))
+    summarise(mean_resid = mean(resid), mean_obs = mean(obs_log_density),mean_pred = mean(pred_log_density), mean_post_pred = mean(post_predict),
+              median_post_pred = median(post_predict))
 
   resid_plot <- resids %>%
     ggplot(aes(mean_resid)) +
@@ -155,15 +156,15 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
   #+ geom_text(x = -8,y= -3, label = lm_eqn(lm(mean_pred ~ mean_obs,resids )), parse = T)
 
   post_pred_plot <- resids %>%
-    ggplot(aes(mean_obs,mean_post_pred)) +
+    ggplot(aes(mean_obs,median_post_pred)) +
     geom_point(shape = 21, fill = 'steelblue4', size = 3, alpha = 0.5) +
     geom_abline(aes(slope = 1, intercept = 0)) +
     geom_smooth(method = 'lm', color = 'red',linetype = 'longdash') +
     plot_theme +
     xlab('Observed') +
-    ylab('Posterior Predicted')
+    ylab('Median Posterior Predicted')
 
-  r2 <- round(summary(lm(mean_post_pred ~ mean_obs,resids ))$r.squared, digits = 2)
+  r2 <- round(summary(lm(median_post_pred ~ median_post_pred,resids ))$r.squared, digits = 2)
 
   gweke_plot <- ggs_geweke(ggs(mcmc(thinned_post))) +
     plot_theme
@@ -223,7 +224,23 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
     facet_grid(Variable~., scales = 'free') +
     theme_light() +
-    theme(text = element_text(size = 18)) +
+    theme(text = element_text(size = 12),strip.text.y = element_text(size = 11)) +
+    ylab('Density')
+
+  outs_of_interest_sigma_plot <- as.data.frame(thinned_post) %>%
+    dplyr::select(contains('sigma')) %>%
+#     rename(Fished = fished,'Years MLPA' = years_mlpa_mpas, 'Fished X Years MLPA' = fished_x_yearsmlpa) %>%
+    gather('Variable','Coefficient') %>%
+    group_by(Variable) %>%
+    mutate(lower95 = quantile(Coefficient, 0.025), upper95 = quantile(Coefficient, 0.975)) %>%
+    ggplot(aes(Coefficient, fill = Variable)) +
+    scale_fill_brewer(guide = F, palette = 'Spectral') +
+    geom_density() +
+    geom_vline(aes(xintercept = c(lower95,upper95)),alpha = 0.75) +
+    geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
+    facet_grid(Variable~., scales = 'free') +
+    theme_light() +
+    theme(text = element_text(size = 12), strip.text.y = element_text(size = 11)) +
     ylab('Density')
 
   outs_of_interest_binomial_plot <- as.data.frame(thinned_post) %>%
@@ -239,7 +256,7 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
     facet_grid(Variable~.) +
     theme_light() +
-    theme(text = element_text(size = 18)) +
+    theme(text = element_text(size = 12),strip.text.y = element_text(size = 11)) +
     ylab('Density')
 
   year_trend_plot <- as.data.frame(thinned_post) %>%
@@ -271,9 +288,9 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   predicted_data <- predictions$post_dat
 
-  drop <- local_files[!local_files %in% c('plot_list','resids','thinned_post','predicted_data')]
+  drop <- local_files[!local_files %in% c('plot_list','resids','thinned_post','predicted_data','predictions')]
 
   rm(list = drop)
 
-return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions = predicted_data))
+return(list(plot_list = plot_list, resids = resids, thinned_post = thinned_post,predictions = predicted_data, post_pred = predictions))
 }
