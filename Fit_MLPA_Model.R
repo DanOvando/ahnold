@@ -455,7 +455,7 @@ if (run_mcmc == T){
   save(file = paste(runpath,'MCMC results.Rdata', sep = ""), bayes_reg)
 }
 
-processed_demon <- process_demon(runfolder = runfolder, post_sample_size = 500)
+processed_demon <- process_demon(runfolder = runfolder, post_sample_size = 1000)
 
 # outlist <- list(thinned_post = processed_demon$thinned_post,data_and_predictions = processed_demon$predictions, diagnostic_plots = processed_demon$plot_list)
 
