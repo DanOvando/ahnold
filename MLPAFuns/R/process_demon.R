@@ -220,7 +220,8 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     ggplot(aes(Coefficient, fill = Variable)) +
     scale_fill_brewer(guide = F, palette = 'Spectral') +
     geom_density() +
-    geom_vline(aes(xintercept = c(lower95,upper95)),alpha = 0.75) +
+    geom_vline(aes(xintercept = lower95),alpha= 0.75) +
+    geom_vline(aes(xintercept = upper95),alpha= 0.75)+
     geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
     facet_grid(Variable~., scales = 'free') +
     theme_light() +
@@ -236,7 +237,8 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     ggplot(aes(Coefficient, fill = Variable)) +
     scale_fill_brewer(guide = F, palette = 'Spectral') +
     geom_density() +
-    geom_vline(aes(xintercept = c(lower95,upper95)),alpha = 0.75) +
+    geom_vline(aes(xintercept = lower95),alpha = 0.75) +
+    geom_vline(aes(xintercept = upper95),alpha = 0.75) +
     geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
     facet_grid(Variable~., scales = 'free') +
     theme_light() +
@@ -252,7 +254,8 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
     ggplot(aes(Coefficient, fill = Variable)) +
     scale_fill_brewer(guide = F, palette = 'Spectral') +
     geom_density() +
-    geom_vline(aes(xintercept = c(lower95,upper95)),alpha = 0.75) +
+    geom_vline(aes(xintercept = lower95),alpha = 0.75) +
+    geom_vline(aes(xintercept = upper95),alpha = 0.75) +
     geom_vline(aes(xintercept = 0), linetype = 'longdash', color = 'red')+
     facet_grid(Variable~.) +
     theme_light() +

@@ -375,7 +375,7 @@ summary(tobit_reg)
 
 eval_resid <- reg_results %>%
   ggplot(aes(observed,.fitted, fill = factor.region.)) +
-  geom_point(shape = 21, aes = .4) +
+  geom_point(shape = 21, alpha = .4) +
   geom_abline(intercept = 0, slope = 1, color = 'red')
 
 

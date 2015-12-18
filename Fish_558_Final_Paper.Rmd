@@ -1,8 +1,10 @@
 ---
-title: "The Effects of the Marine Life Protection Act on Fish Densities in the Channel Islands"
+title: The Effects of the Marine Life Protection Act on Fish Densities in the Channel
+  Islands
 author: "Dan Ovando"
 date: "December 17, 2015"
-output: 
+output:
+  html_document: default
   pdf_document:
     fig_caption: yes
     fig_height: 4
@@ -44,7 +46,8 @@ devtools::load_all('MLPAFuns')
 
 # Load this now please
 # 
- B <- 1
+ B <- 5
+M <- 7
 #
 runfolder <- '8.0'
 
@@ -360,6 +363,9 @@ We see that the observed test statistics fall within the 95% credibility interva
 
 ```{r post_predict, fig.cap='Posterior predictive test statistics. Black lines are 95% CI, red dashed line is the observed value', cache = T}
 
+b <- 2 
+#load me now
+
 den_post_preds <- processed_demon$post_pred$posterior %>%
   subset(obs_log_density > min(obs_log_density)) 
 
@@ -394,10 +400,11 @@ check <- subset(den_post_preds, observation %in% samps) %>%
     ungroup() %>%
     mutate(stat_name = gsub('\\_.*', '', statistic))%>%
     left_join(select(reals,stat_name,real), by = 'stat_name') %>%
-    group_by(statistic) %>%
+    #group_by(statistic) %>%
     ggplot(aes(value)) + 
     geom_histogram() + 
-    geom_vline(aes(xintercept = c(lower95,upper95))) + 
+    geom_vline(aes(xintercept = lower95)) + 
+    geom_vline(aes(xintercept = upper95)) + 
     geom_vline(aes(xintercept = real), linetype = 'longdash', color = 'red') + 
     facet_wrap(~stat_name, scales = 'free_x') + 
     plot_theme + 
