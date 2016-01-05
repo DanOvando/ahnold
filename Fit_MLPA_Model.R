@@ -29,13 +29,13 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '8.0'
+runfolder <- 'Resurrect'
 
 scale_numerics <- T
 
-its <- 10e6
+its <- 1e4
 
-run_mcmc <- F
+run_mcmc <- T
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
