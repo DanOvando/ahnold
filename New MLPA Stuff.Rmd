@@ -1,0 +1,35 @@
+---
+title: "Modified DiD Estimator"
+author: "Dan Ovando"
+date: "January 27, 2016"
+output: pdf_document
+---
+
+Our goal is to estimate the casual effects of the MPA on densities *d* of fished and unfished species in the Channel Islands. Our treatment groups are fish species *s* that are targeted by commerical fishing *f*, where *f* is 1 if fished, 0 if not. The treatment is the application of the MPAs in year (*y*) 2003, *m*. We might normally consider the difference in difference estimator, ignoring additional covariates and constants at this point (and mentally adding coefficients in front of each of these terms)
+
+$$ d_{y,s} = \beta_{1}f_{s} + \beta_{2}m_{y} + \beta_{3}f_{s}m_{y} $$
+
+However, especially in marine environments with complext environmental dynamics, we might want to control for regional temporal trends, as well as the fact that the effect of the MPAs is likely to kick in gradually over time
+
+Therefore, in the last version of the results, we used a DiD estimator including a term *t* which is the number of years post MPA (0 pre MPA, 1 in the first year, 2 in the second year, etc.)
+
+$$ d_{y,s} = \beta_{1}f_{s} + \beta_{2}t_{y} + \beta_{3}f_{s}t_{y} + \sum_{y}\beta_{y}X_{y} $$ 
+
+where X is a fixed effect for each year, ommitting one. 
+
+This created a problem since there is no contrast in the year of MPA implementation. So, 2 years with MPA in the *t* variable always corresponds to the year 2004. This made the DiD terms and the year fixed effects highly colinear, making estimation difficult. 
+
+The new proposal, following Deschenes et al 2012 is to use an estimator of the form
+
+$$ d_{y,s} = \beta_{1}f_{s} + \beta_{2}m_{y} + f_{s}\sum_{y}\beta_{y}X_{y} $$
+
+setting $\beta_{2012} = 0$
+
+So, the interpretation of the $\beta_{1}$ term is the marginal effect of being a fished species, $\beta_{2}$ is the marginal effect of being in the post MPA period, regardless of treatment status, and the year fixed effects represent the marginal effect of the MPA on fished species in a given year, relative to a fixed zero pre MPA?
+
+This doesn't seem quite right to me. Can we meet to discuss?
+
+Aha, ok so we're going to do this. 
+
+$$ d_{y,s} = \beta_{1}f_{s} + \beta_{2}m_{y} + \sum_{y\geq{2003}}\beta_{y}f_{s}Y_{y} $$
+

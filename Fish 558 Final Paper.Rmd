@@ -199,19 +199,20 @@ $$\hat{\gamma_{f,s,y}} = \tau_{1}fished_{f} + \tau_{2}YearsMLPAMpas_{s,y} + \tau
  $$ \sum\tau_{4}trophic_{f} + \tau_{5}linf_{f}  + \tau_{7}temp_{s,y} +
   \tau_{7}vis_{s,y}  + \tau_{8}$$
 
+*** Add year fixed effects
 
   We include the DiD estimator within the logit portion of the model to estimate the effect of the MLPA on the probability of zero-density observations.
 
 For the observations with *d* > 0, we model the expected density as
 
-$$ \hat{d_{f,s,y}} = \beta_{1}fished_{f} + \beta_{2}YearsMLPAMpas_{s,y} + \beta_{3}FxM{f,s,y} +
-  \sum\beta_{4}region_{s} + \sum\beta_{5}trophic_{f} + ... $$
+$$ \hat{d_{f,s,y}} = \beta_{1}fished_{f} + \beta_{2}YearsMLPAMpas_{s,y} + \beta_{3}FxM{f,s,y} +  \sum\beta_{4}rYeasr_{y} + 
+  \sum\beta_{5}region_{s} + \sum\beta_{6}trophic_{f} + ... $$
 
-  $$\beta_{6}linf_{f} + \beta_{7}vbk_{f} + \beta_{8}temp_{s,y} +
-  \beta_{9}vis_{s,y} + $$
+  $$\beta_{7}linf_{f} + \beta_{8}vbk_{f} + \beta_{9}temp_{s,y} +
+  \beta_{10}vis_{s,y} + $$
 
-  $$ \beta_{10}templag1_{s,y} + \beta_{11}templag2_{s,y} + \beta_{12}templag3_{s,y} +
-  \beta_{13}templag4_{s,y} + \beta_{14} $$
+  $$ \beta_{11}templag1_{s,y} + \beta_{12}templag2_{s,y} + \beta_{13}templag3_{s,y} +
+  \beta_{14}templag4_{s,y} + \beta_{15} $$
 
 
 ### Likelihoods

@@ -38,7 +38,7 @@ devtools::load_all('MLPAFuns')
 
 ```{r load results}
 
-run_name <- '3.0'
+run_name <- '8.0'
 
 runpath <- paste('MLPA Effects Results/',run_name,'/', sep = '')
 
