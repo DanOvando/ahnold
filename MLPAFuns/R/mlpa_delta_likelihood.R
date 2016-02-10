@@ -44,7 +44,9 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
 
   prob_hat <- exp(bi_hat)/(1 + exp(bi_hat))
 
-  bi_loglike <-  sum(dbinom(Data$binom_dep_var,1,pmax(1e-15,prob_hat), log = T)) # actual values of 1 return -inf if not fulfilled
+  bi_loglike <-  sum(dbinom(Data$binom_dep_var,Data$sites_checked,pmax(1e-15,prob_hat), log = T)) # actual values of 1 return -inf if not fulfilled
+
+#   bi_loglike <-  sum(dbinom(Data$binom_dep_var,1,pmax(1e-15,prob_hat), log = T)) # actual values of 1 return -inf if not fulfilled
 
 #   wtf <- bi_hat[is.na(bi_loglike)]
 
@@ -53,8 +55,7 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
   mu <- Data$den_reg_mat %*% beta
 
 #   observed_density <- Data$dep_var
-
-  density_loglike <- sum(dnorm(Data$dep_var, mu,sigma_density, log=TRUE)^(Data$binom_dep_var))
+  density_loglike <- sum(dnorm(Data$dep_var, mu,sigma_density, log=TRUE)^(Data$any_seen))
 
   ### Log-Posterior
 

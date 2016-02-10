@@ -127,7 +127,11 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
   dat <- dat[possible[,which_contrains],]
 
-  binom_dep_var <- as.numeric(dat[,dep_var] > min(dat[,dep_var]))
+  binom_dep_var <- dat$sites_seenat
+
+  #   any_seen <- as.numeric(dat$sites_seenat > 0)
+
+  any_seen <- as.numeric(dat[,dep_var] > min(dat[,dep_var]))
 
   N <- dim(dat)[1]
 
@@ -173,9 +177,32 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
                dep_var = as.matrix(dat[,dep_var]),
                time_vars = time_vars,
                site_vars = site_vars,
-               species_vars = species_vars)
+               species_vars = species_vars,
+               sites_checked = dat$sites_checked,
+               any_seen = any_seen)
 
   Initial.Values <- GIV(mlpa_delta_likelihood, Data, PGF=TRUE)
+
+  dense_vars <- colnames(Data$reg_dat[,Data$pos_den_beta])
+
+  binary_vars <- colnames(Data$reg_dat[,Data$pos_beta_to_use_binom])
+
+  quickreg <- as.data.frame(Data$reg_dat)
+
+  quickreg$mean_density <- exp(Data$dep_var)
+
+  quickreg$mean_density[quickreg$mean_density == min(quickreg$mean_density)] <- 0
+
+  #Run a quick delta lognormal glm for starting guesses
+  density_fmla <- formula(paste('mean_density ~ -1 +',paste(dense_vars, collapse = '+'), sep = ''))
+
+  logit_fmla <- formula(paste('~ -1 +',paste(binary_vars, collapse = '+'), sep = ''))
+
+  delta_glm <- deltaLN(ln.form = density_fmla,binary.form = logit_fmla, data =quickreg)
+
+  Initial.Values[Data$pos_den_beta] <- as.numeric(delta_glm$coefs$ln)
+
+  Initial.Values[Data$pos_beta_to_use_binom] <- as.numeric(delta_glm$coefs$binary)
 
   vcov <- cov(reg_dat)
 
@@ -188,28 +215,28 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
   full_vcov[rownames(full_vcov) %in% colnames(reg_dat), colnames(full_vcov) %in% colnames(reg_dat) ] <- vcov
 
 
-#   jags_demon <-
+  #   jags_demon <-
   # Run Demon ----
   #
-if (method == 'Banish Demon')
-{
-  a <- proc.time()
-  Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
-                   dat = Data,vcov = full_vcov,n_sim  = iterations,
-                   n_burn =  burn*iterations, targ_accept_rate = 0.25,
-                   vcov_augment = (2.4/sqrt(length(parm.names)))^2, jumpyness = 1)
-show(proc.time() - a)
+  if (method == 'Banish Demon')
+  {
+    a <- proc.time()
+    Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
+                     dat = Data,vcov = full_vcov,n_sim  = iterations,
+                     n_burn =  burn*iterations, targ_accept_rate = 0.25,
+                     vcov_augment = (2.4/sqrt(length(parm.names)))^2, jumpyness = 1)
+    show(proc.time() - a)
   }
 
   if (method == 'Summon Demon')
   {
-#     a <- proc.time()
+    #     a <- proc.time()
     Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
-                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=thin,
-                         Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
+                         Covar=NULL, Iterations=iterations, Status = iterations*status, Thinning=thin,
+                         Algorithm = 'HARM', Specs=list(alpha.star = acceptance_rate, B = NULL),
                          parm.names = parm.names)
-#     show(proc.time() - a)
-#     browser()
+    #     show(proc.time() - a)
+    #     browser()
 
   }
   if (method == 'Summon Parallel Demon')
@@ -220,12 +247,12 @@ show(proc.time() - a)
     disperse_mat <- matrix(runif(length(jitter_inits),-2,2),nrow = num_chains, ncol = length(Initial.Values))
 
     par_initial_values <- matrix(jitter_inits,nrow = num_chains,
-                                        ncol = length(Initial.Values), byrow = T) + disperse_mat
+                                 ncol = length(Initial.Values), byrow = T) + disperse_mat
 
     Fit <- LaplacesDemon.hpc(mlpa_delta_likelihood, Data=Data, Initial.Values = par_initial_values,
-                         Covar=NULL, Iterations=100, Status=iterations*status, Thinning=thin,
-                         Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
-                          Chains = num_chains, CPUs = num_chains)
+                             Covar=NULL, Iterations=100, Status=iterations*status, Thinning=thin,
+                             Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
+                             Chains = num_chains, CPUs = num_chains)
 
   }
   if (method == 'Summon Reversible Demon'){

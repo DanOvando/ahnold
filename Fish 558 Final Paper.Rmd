@@ -58,7 +58,7 @@ if (dir.exists(runpath) == F)
   dir.create(runpath, recursive = T)
 }
 
-load(paste(runpath,'species_siteside_year.Rdata', sep = ''))
+load(paste(runpath,'reg_data.Rdata', sep = ''))
 
 load(paste(runpath,'MCMC results.Rdata', sep = ''))
 
@@ -173,7 +173,7 @@ The next step to consider the the type of model to be used. Starting from the mo
 However, the data contain a large amount of zeros at the species-site/side-year resolution (Fig.2). This is a common problem in many density or catch-per-unit effort style data sets. The large numbers of zeros means that we cannot simply fit an OLS regression to this data set. Instead we need to account for the zeros in the data. The standard econometric technique for continuous zero-truncated data, as we have here, is a Tobit model. The Tobit model works through data augmentation to simulate the dependent variables that we might observe if they could fall below zero. It can then be shown that the likelihood of the model conditional on the augmented data is proportional to the likelihood of the model conditional on the real data, which we cannot obtain directly.
 
 ```{r zeros,fig.cap='Histogram of mean biomass densities in the Channel Islands database. Zero values had a small constant added to appear in log space'}
-dense_hist <- species_siteside_year %>%
+dense_hist <- reg_data %>%
   ggplot(aes(log_density)) + 
   geom_histogram(color = 'black',fill = 'steelblue2') +
   plot_theme+

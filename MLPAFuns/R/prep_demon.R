@@ -9,7 +9,6 @@
 
 prep_demon <- function(demondat, pos_vars,scale_numerics = F,constant = T)
 {
-
   ind_vars <- demondat[,pos_vars] #pull out things you need
 
   var_types <- sapply(ind_vars,class)

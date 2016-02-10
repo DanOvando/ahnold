@@ -30,7 +30,6 @@ apply_demon <- function(demonpost,dat, raw_data)
   ind_vars <- dat$reg_dat[,dat$beta_to_use_binom == F]
 
   predicted_density <- as.data.frame(t(betas %*% t(ind_vars)))
-
   predicted_density$obs_log_density <- dat$dep_var
 
   sigma_density <- as.data.frame(demonpost[,'sigma_density'])
