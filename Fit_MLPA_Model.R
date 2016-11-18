@@ -26,6 +26,8 @@ library(mvtnorm)
 library(stringr)
 library(grid)
 library(fishMod)
+library(runjags)
+library(rjags)
 
 devtools::load_all('MLPAFuns')
 
@@ -33,15 +35,19 @@ devtools::load_all('MLPAFuns')
 # Run Options -------------------------------------------------------------
 
 
-runfolder <- '4.0'
+runfolder <- '4.1 Jagged Demon'
 
 agg_level <- 'site'
 
+MPA_Only <- TRUE
+
 scale_numerics <- T
 
-its <- 1e6
+its <- 20e6
 
 run_mcmc <- T
+
+model_form <- 'Jagged Demon'
 
 runpath <- paste('MLPA Effects Results/',runfolder,'/', sep = '')
 
@@ -335,6 +341,9 @@ reg_data$na_vis <- (reg_data$mean_vis)
 
 reg_data$na_vis[is.na(reg_data$mean_vis)] <- mean(reg_data$mean_vis, na.rm = T)
 
+if (MPA_Only == TRUE){
+  reg_data <- filter(reg_data, eventual_mpa == T)
+}
 
 # Plot some stuff ---------------------------------------------------------
 
@@ -435,64 +444,64 @@ write.csv(file = paste(runpath,'processed reg_data.csv', sep = ''),
 
 # Run Regression ----------------------------------------------------------
 
-tobit_reg <- tobit(log_density ~
-                     factor(year) +
-                     factor(region) +
-                     years_mpa*fished +
-                     factor(trophic.group) +
-                     years_mpa +
-                     linf +
-                     vbk +
-                     mpa_applied +
-                     fished +
-                     mpa_applied*fished +
-                     na_temp +
-                     na_vis +
-                     mean_temp_lag1 +
-                     mean_temp_lag2 +
-                     mean_temp_lag3 +
-                     mean_temp_lag4,
-                   data = subset(reg_data, is.na(log_density) == F),
-                   left = min(reg_data$log_density, na.rm = T))
-
-vcov_plot <- as.data.frame(vcov(tobit_reg)) %>%
-  mutate(var2 = rownames(.)) %>%
-  gather('var1','vcov',1:(dim(.)[2]-1)) %>%
-  ggplot(aes(var1,var2,fill = vcov)) +
-  geom_raster() +
-  scale_fill_gradient2(low = 'red', high = 'green', mid = 'white',midpoint = 0)
-
-summary(tobit_reg)
-
-reg_results <- augment(tobit_reg)
-
-reg_results$observed <- reg_results$.fitted + reg_results$.resid
-
-
-write.csv(file = paste(runpath,'tobit data.csv', sep = ''),
-          reg_results)
-
-pdf(file = paste(runpath,'tobit diagnostics.pdf', sep = ''))
-par(mfrow = c(2,3))
-plot((reg_results$factor.year.),reg_results$.resid)
-boxplot(reg_results$.resid ~ reg_results$factor.region.)
-plot(reg_results$observed,reg_results$.fitted)
-abline(0,1, col = 'blue')
-abline(lm(reg_results$.fitted ~ reg_results$observed), col="red") # regression line (y~x)
-hist(reg_results$.resid)
-abline(v = mean(reg_results$.resid))
-qqnorm(reg_results$.resid)
-qqline(reg_results$.resid)
-dev.off()
-
-summary(tobit_reg)
-
-
-eval_resid <- reg_results %>%
-  ggplot(aes(observed,.fitted, fill = factor.region.)) +
-  geom_point(shape = 21, alpha = .4) +
-  geom_abline(intercept = 0, slope = 1, color = 'red')
-
+# tobit_reg <- tobit(log_density ~
+#                      factor(year) +
+#                      factor(region) +
+#                      years_mpa*fished +
+#                      factor(trophic.group) +
+#                      years_mpa +
+#                      linf +
+#                      vbk +
+#                      mpa_applied +
+#                      fished +
+#                      mpa_applied*fished +
+#                      na_temp +
+#                      na_vis +
+#                      mean_temp_lag1 +
+#                      mean_temp_lag2 +
+#                      mean_temp_lag3 +
+#                      mean_temp_lag4,
+#                    data = subset(reg_data, is.na(log_density) == F),
+#                    left = min(reg_data$log_density, na.rm = T))
+#
+# vcov_plot <- as.data.frame(vcov(tobit_reg)) %>%
+#   mutate(var2 = rownames(.)) %>%
+#   gather('var1','vcov',1:(dim(.)[2]-1)) %>%
+#   ggplot(aes(var1,var2,fill = vcov)) +
+#   geom_raster() +
+#   scale_fill_gradient2(low = 'red', high = 'green', mid = 'white',midpoint = 0)
+#
+# summary(tobit_reg)
+#
+# reg_results <- augment(tobit_reg)
+#
+# reg_results$observed <- reg_results$.fitted + reg_results$.resid
+#
+#
+# write.csv(file = paste(runpath,'tobit data.csv', sep = ''),
+#           reg_results)
+#
+# pdf(file = paste(runpath,'tobit diagnostics.pdf', sep = ''))
+# par(mfrow = c(2,3))
+# plot((reg_results$factor.year.),reg_results$.resid)
+# boxplot(reg_results$.resid ~ reg_results$factor.region.)
+# plot(reg_results$observed,reg_results$.fitted)
+# abline(0,1, col = 'blue')
+# abline(lm(reg_results$.fitted ~ reg_results$observed), col="red") # regression line (y~x)
+# hist(reg_results$.resid)
+# abline(v = mean(reg_results$.resid))
+# qqnorm(reg_results$.resid)
+# qqline(reg_results$.resid)
+# dev.off()
+#
+# summary(tobit_reg)
+#
+#
+# eval_resid <- reg_results %>%
+#   ggplot(aes(observed,.fitted, fill = factor.region.)) +
+#   geom_point(shape = 21, alpha = .4) +
+#   geom_abline(intercept = 0, slope = 1, color = 'red')
+#
 
 
 # Prep Bayesian Regression ------------------------------------------------------------
@@ -561,7 +570,6 @@ if (run_mcmc == T){
   save(file = paste(runpath,'reg_data.Rdata', sep = ''), reg_data)
 
   delta_glm <- deltaLN(ln.form = density_fmla,binary.form = logit_fmla, data = reg_data)
-
 #   reg_data$binom_predict <- exp(predict(delta_glm$binMod))/(1+exp(predict(delta_glm$binMod)))
 #
 #   reg_data$binom <- as.numeric(reg_data$mean_density >0)
@@ -596,8 +604,7 @@ if (run_mcmc == T){
 #
 #   summary(lm(reg_fmla, data = check))
 
-
-  bayes_reg <- run_delta_demon(dat = reg_data, method = 'Summon Demon',dep_var = dep_var,
+  bayes_reg <- run_delta_demon(dat = reg_data, method = model_form,dep_var = dep_var,
                                pos_vars = pos_vars, delta_vars = delta_vars,runpath = runpath,scale_numerics = scale_numerics,
                                iterations = its,status = .01, acceptance_rate = 0.43, thin = its/1e4)
 
@@ -608,16 +615,18 @@ if (run_mcmc == T){
   save(file = paste(runpath,'MCMC results.Rdata', sep = ""), reg_results)
 }
 
-processed_demon <- process_demon(runfolder = runfolder, post_sample_size = 1000)
+processed_demon <- process_demon(runfolder = runfolder, post_sample_size = 1000, burn = 0.75)
 
 grid.draw(processed_demon$plot_list$density_summary_plot)
 
 ggsave(file = paste(runpath,'Posterior summary plot.pdf', sep = ""), processed_demon$plot_list$density_summary_plot)
 
-pres_figures <- mpa_presentation_figs(run = '3.3', out = 'PhD Symposium Figs')
 # outlist <- list(thinned_post = processed_demon$thinned_post,data_and_predictions = processed_demon$predictions, diagnostic_plots = processed_demon$plot_list)
-
 save(file = paste(runpath,'Processed MCMC results.Rdata', sep = ""),  processed_demon)
+
+pres_figures <- mpa_presentation_figs(run = runfolder,
+                                      out = 'PhD Symposium Figs',
+                                      fig_width = 14, fig_height = 8, font_size = 25)
 
 
 

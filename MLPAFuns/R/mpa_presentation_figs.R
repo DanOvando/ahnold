@@ -1,9 +1,11 @@
 mpa_presentation_figs <- function(run, out,font_size = 18, font_family = 'Helvetica',
-                                  base_theme = theme_grey(), fig_width = 8, fig_height = 6)
+                                  base_theme = theme_grey(), fig_width = 10, fig_height = 8)
 {
 
 
-  plot_theme <- base_theme + theme(text = element_text(size = font_size, family = font_family))
+  plot_theme <- base_theme +
+    theme(text = element_text(size = font_size, family = font_family),
+          axis.title.y = element_text(angle = 0, hjust = 0))
 
   runfolder <- run
 
@@ -84,23 +86,49 @@ mpa_presentation_figs <- function(run, out,font_size = 18, font_family = 'Helvet
 #     geom_ribbon(aes(x = year, ymax = upper95, ymin = lower95, fill = `Fished?`)) +
     geom_vline(aes(xintercept = 2003), linetype = 'longdash', color = 'black', size = 1.5) +
     xlab('Year') +
-    ylab('Mean Log Density') +
+    ylab('Density (log)') +
     plot_theme
 
 
   ggsave(filename = paste(out_folder,'Density Trend Plot.pdf', sep = ''), density_plot, width = fig_width,
          height = fig_height)
 
-temp_trend_plot <- reg_data %>%
+  density_trend2 <- reg_data %>%
+#     filter(log_density > min(log_density)) %>%
+    group_by(year,fished) %>%
+    summarize(mean_density = mean(log_density),
+              upper95 = quantile(log_density,.75),
+              lower95 = quantile(log_density,0.25) ) %>%
+    mutate(`Fished?` = 'Yes')
+
+  density_trend2$`Fished?`[density_trend2$fished == 0] <- 'No'
+
+
+  density_plot2 <- ggplot(density_trend2,aes(year,mean_density,color = `Fished?`, fill = `Fished?`)) +
+    #     geom_smooth(span = .6,size = 2) +
+    geom_line(size = 2) +
+    #     geom_ribbon(aes(x = year, ymax = upper95, ymin = lower95, fill = `Fished?`)) +
+    geom_vline(aes(xintercept = 2003), linetype = 'longdash', color = 'black', size = 1.5) +
+    xlab('Year') +
+    ylab('Density (log)') +
+    plot_theme
+
+
+  ggsave(filename = paste(out_folder,'Density Trend Plot 2.pdf', sep = ''), density_plot2, width = fig_width,
+         height = fig_height)
+
+
+
+  temp_trend_plot <- reg_data %>%
   group_by(year) %>%
   mutate(mmt = mean(mean_temp)) %>%
   ggplot(aes(factor(year),mean_temp)) +
-  geom_boxplot(aes(fill = mmt)) +
+  geom_point(alpha = 0.75,size = 4,shape = 21, aes(fill = mean_temp)) +
   geom_smooth(method = 'lm', aes(group = 1), color = 'red') +
   scale_fill_gradient(low = 'steelblue1', high = 'orangered', guide = F) +
-    ylab(expression(paste('Site Temperature (',degree ~ C,')', sep = ''))) +
+    ylab(expression(paste(degree ~ C, sep = ''))) +
   xlab('Year') +
-  geom_hline(aes(yintercept = mean(mean_temp)), linetype = 'longdash')
+#   geom_hline(aes(yintercept = mean(mean_temp)), linetype = 'longdash')
   plot_theme
 
 ggsave(filename = paste(out_folder,'Temp Trend Plot.pdf', sep = ''), temp_trend_plot, width = fig_width,
@@ -137,13 +165,30 @@ ggsave(filename = paste(out_folder,'Temp Trend Plot.pdf', sep = ''), temp_trend_
     geom_boxplot(aes(fill = mean_effect)) +
     plot_theme +
     xlab('Year') +
-    ylab('Effect on Densities of Fished Species') +
+    ylab('Effect on Densities') +
+    scale_fill_gradient2(guide = F,low = 'red',mid = 'white',high = 'green',midpoint = 0) +
+    geom_hline(yintercept = 0, size = 2, linetype = 'longdash')
+
+  mpa_time_effect2_plot <- as.data.frame(processed_demon$thinned_post) %>%
+    select(contains('fishedeffect')) %>%
+    select(-contains('bi'))  %>%
+    gather('year_term','coefficient') %>%
+    mutate( year = str_match(year_term, paste('_', '(.+)', '_', sep=''))[,2]) %>%
+    group_by(year) %>%
+    mutate(mean_effect = mean(coefficient)) %>%
+    ggplot(aes(year,coefficient)) +
+    geom_violin(aes(fill = mean_effect)) +
+    plot_theme +
+    xlab('Year') +
+    ylab('Effect on Densities') +
     scale_fill_gradient2(guide = F,low = 'red',mid = 'white',high = 'green',midpoint = 0) +
     geom_hline(yintercept = 0, size = 2, linetype = 'longdash')
 
   ggsave(filename = paste(out_folder,'MPA Effect.pdf', sep = ''), mpa_time_effect_plot, width = fig_width,
          height = fig_height)
 
+  ggsave(filename = paste(out_folder,'MPA Effect 2.pdf', sep = ''), mpa_time_effect2_plot, width = fig_width,
+         height = fig_height)
   bimpa_time_effect_plot <- as.data.frame(processed_demon$thinned_post) %>%
     select(contains('fishedeffect')) %>%
     select(contains('bi'))  %>%

@@ -28,6 +28,19 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
                             num_chains = 2) {
 
 
+#   dat = reg_data #[1:6000,]
+#   method = 'Jagged Demon'
+#   dep_var = dep_var
+#   pos_vars = pos_vars
+#   delta_vars = delta_vars
+#   runpath = runpath
+#   scale_numerics = scale_numerics
+#   iterations = its
+#   status = .01
+#   acceptance_rate = 0.43
+#   thin = its/1e4
+
+
   # Convert data to regression format----
   observed_dat <- prep_demon(dat,pos_vars = pos_vars, scale_numerics = scale_numerics)
 
@@ -217,53 +230,111 @@ run_delta_demon <- function(dat,dep_var,pos_vars,delta_vars,iterations = 1000,st
 
   #   jags_demon <-
   # Run Demon ----
-  #
-  if (method == 'Banish Demon')
-  {
-    a <- proc.time()
-    Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
-                     dat = Data,vcov = full_vcov,n_sim  = iterations,
-                     n_burn =  burn*iterations, targ_accept_rate = 0.25,
-                     vcov_augment = (2.4/sqrt(length(parm.names)))^2, jumpyness = 1)
-    show(proc.time() - a)
-  }
 
-  if (method == 'Summon Demon')
-  {
-    #     a <- proc.time()
-    Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
-                         Covar=NULL, Iterations=iterations, Status = iterations*status, Thinning=thin,
-                         Algorithm = 'HARM', Specs=list(alpha.star = acceptance_rate, B = NULL),
-                         parm.names = parm.names)
-    #     show(proc.time() - a)
-    #     browser()
-
-  }
-  if (method == 'Summon Parallel Demon')
+  if (method == 'Jagged Demon')
   {
 
-    jitter_inits <- c(rep(Initial.Values,num_chains))
+    den_dat <- Data$den_reg_mat #[Data$dep_var > min(Data$dep_var),]
 
-    disperse_mat <- matrix(runif(length(jitter_inits),-2,2),nrow = num_chains, ncol = length(Initial.Values))
+    model_dat <- list(den_dat = den_dat, binom_dat = Data$bi_reg_mat,
+                      n = dim(den_dat)[1], d = dim(Data$den_reg_mat)[2],
+                      b = dim(Data$bi_reg_mat)[2],any_seen = any_seen,
+                      den_dep_var = Data$dep_var, binom_dep_var = Data$binom_dep_var,
+                      sites_checked = Data$sites_checked)
+    #
+    #     model_dat <- list(den_dat = den_dat, binom_dat = Data$bi_reg_mat,
+    #                       n = dim(den_dat)[1], d = dim(Data$den_reg_mat)[2],
+    #                       b = dim(Data$bi_reg_mat)[2],z = dim(Data$bi_reg_mat)[1], any_seen = any_seen,
+    #                       den_dep_var = Data$dep_var, binom_dep_var = Data$binom_dep_var,
+    #                       sites_checked = Data$sites_checked)
+    #
 
-    par_initial_values <- matrix(jitter_inits,nrow = num_chains,
-                                 ncol = length(Initial.Values), byrow = T) + disperse_mat
+    inits <- list(den_beta = as.numeric(delta_glm$coefs$ln),
+                  binom_beta = as.numeric(delta_glm$coefs$binary),
+                  sigma_density = 0.05, .RNG.name = "base::Super-Duper", .RNG.seed=1)
 
-    Fit <- LaplacesDemon.hpc(mlpa_delta_likelihood, Data=Data, Initial.Values = par_initial_values,
-                             Covar=NULL, Iterations=100, Status=iterations*status, Thinning=thin,
-                             Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
-                             Chains = num_chains, CPUs = num_chains)
+    model <-  'model{
+    for (i in 1:n) {
+
+    den_hat[i] <- (den_dat[i,] %*% den_beta)
+    den_dep_var[i,] ~ dnorm(den_hat[i],sigma_density)
+#     den_dep_var[i,] ~ ifelse( den_dep_var[i,] > 0,dnorm(den_hat[i],sigma_density),1)
+#     den_dep_var[i,] <- den_dep_var[i,]^(any_seen[i])
+#     }
+# for (l in 1:z){
+    binom_hat[i] <- min(10, binom_dat[i,] %*% binom_beta)
+    prob_hat[i] <- exp(binom_hat[i])/(1 + exp(binom_hat[i]))
+    binom_dep_var[i] ~ dbinom(prob_hat[i], sites_checked[i])
+    }
+
+sigma_density ~ dunif(1e-5,5)
+
+for (j in 1:d){
+den_beta[j] ~ dunif(-1000,1000)
+}
+for (k in 1:b){
+binom_beta[k] ~dunif(-1000,1000)
+}
+
+} #close model'
+
+# jagged_demon <- run.jags(model=model, monitor=c("den_beta",'binom_beta','sigma_density'),
+#                          data=model_dat, n.chains=1, method="rjags", inits=inits,plots=F,monitor.deviance=F,
+#                          silent.jag=F,burnin = 1000,thin = 10)
+jagged_demon <- run.jags(model=model, monitor=c("den_beta",'binom_beta','sigma_density'),
+                         data=model_dat, n.chains=1, method="rjags", inits=inits,plots=F,monitor.deviance=F,
+                         silent.jag=F,modules=c("dic","glm","bugs"),
+                         sample=1000,adapt=15000,burnin=150000,thin=500)
 
   }
-  if (method == 'Summon Reversible Demon'){
 
-    Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
-                         Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=thin,
-                         Algorithm = 'RJ', Specs=list(bin.n=bin.n, bin.p=bin.p,
-                                                      parm.p=parm.p, selectable=selectable,
-                                                      selected=selected), parm.names = parm.names)
 
-  }
+if (method == 'Banish Demon')
+{
+  a <- proc.time()
+  Fit <- mlpa_mcmc(par_init = Initial.Values,parm.names = parm.names,
+                   dat = Data,vcov = full_vcov,n_sim  = iterations,
+                   n_burn =  burn*iterations, targ_accept_rate = 0.25,
+                   vcov_augment = (2.4/sqrt(length(parm.names)))^2, jumpyness = 1)
+  show(proc.time() - a)
+}
 
-  return(list(demon_fit = Fit,Data = Data))
+if (method == 'Summon Demon')
+{
+  #     a <- proc.time()
+  Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
+                       Covar=NULL, Iterations=iterations, Status = iterations*status, Thinning=thin,
+                       Algorithm = 'HARM', Specs=list(alpha.star = acceptance_rate, B = NULL),
+                       parm.names = parm.names)
+  #     show(proc.time() - a)
+  #     browser()
+
+}
+if (method == 'Summon Parallel Demon')
+{
+
+  jitter_inits <- c(rep(Initial.Values,num_chains))
+
+  disperse_mat <- matrix(runif(length(jitter_inits),-2,2),nrow = num_chains, ncol = length(Initial.Values))
+
+  par_initial_values <- matrix(jitter_inits,nrow = num_chains,
+                               ncol = length(Initial.Values), byrow = T) + disperse_mat
+
+  Fit <- LaplacesDemon.hpc(mlpa_delta_likelihood, Data=Data, Initial.Values = par_initial_values,
+                           Covar=NULL, Iterations=100, Status=iterations*status, Thinning=thin,
+                           Algorithm = 'HARM', Specs=list(alpha.star=acceptance_rate, B = NULL),
+                           Chains = num_chains, CPUs = num_chains)
+
+}
+if (method == 'Summon Reversible Demon'){
+
+  Fit <- LaplacesDemon(mlpa_delta_likelihood, Data=Data, Initial.Values = Initial.Values,
+                       Covar=NULL, Iterations=iterations, Status=iterations*status, Thinning=thin,
+                       Algorithm = 'RJ', Specs=list(bin.n=bin.n, bin.p=bin.p,
+                                                    parm.p=parm.p, selectable=selectable,
+                                                    selected=selected), parm.names = parm.names)
+
+}
+
+return(list(demon_fit = Fit,Data = Data))
 }

@@ -26,7 +26,6 @@ process_demon <- function(runfolder,fontsize = 14,post_sample_size = 1000, burn 
 
   its <- dim(post)[1]
   thinned_post <- thin_mcmc(post[(burn * its):its, ], thin_every = (its*(1-burn))/post_sample_size)
-
   ggmcmc(ggs(mcmc(thinned_post)), file = paste(runpath,'ggMCMC Diagnostics.pdf', sep = ''))
 
   predictions <- apply_demon(demonpost = thinned_post,

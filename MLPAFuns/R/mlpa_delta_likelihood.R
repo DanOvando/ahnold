@@ -41,6 +41,9 @@ mlpa_delta_likelihood <- function(parm, Data,reg_model = 'tobit')
   bi_dat <- Data$bi_reg_mat
 
   bi_hat <- pmin(10,bi_dat %*% bi_beta)
+# browser()
+#   bi_hat <- pmin(10,rowSums(bi_dat * bi_beta))
+#
 
   prob_hat <- exp(bi_hat)/(1 + exp(bi_hat))
 
