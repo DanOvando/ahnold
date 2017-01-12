@@ -1,0 +1,37 @@
+---
+title: "Regression Exploration"
+output: html_notebook
+---
+
+Now that you've finally gotten a handle on the hierarchical nature of the data, your next task before your meeting is to dive deeper into regression, and see how sensitive your results are to modeling assumptions.
+
+## Candidate variables
+
+Data exploration and candidate variable selection.
+
+Correlation plots among data, relationships between data and variables of interest
+
+## Bare-bones regression
+
+Apply simple Bayesian model to full model
+
+## Apply `rstanarm` regression
+
+Now use `rstanarm` to fit a hierarchichal model, using `stan_glmer`
+
+Standard diagnostics
+
+## Apply using custom `STAN`
+
+Try and replicate the above, but using your own `stan` code
+
+Standard diagnostics
+
+
+## Expanded hierarchy
+
+Try out the double nested thing from Gelman and Hill, where you estiamte species specific fixed effects, which come from a distribution with mean defined by life history traits 
+
+Standard diagnostics
+
+

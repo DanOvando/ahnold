@@ -1,0 +1,1076 @@
+---
+title: "ahnold_labbook"
+author: "Dan Ovando"
+date: "December 14, 2016"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+---
+
+```{r libraries, echo=F, message=F, warning=F, include=F}
+library(tidyverse)
+library(forcats)
+library(rstanarm)
+library(lubridate)
+library(ggsci)
+library(broom)
+library(car)
+library(stringr)
+library(rvest)
+
+demons::load_functions(func_dir = '../functions')
+
+```
+
+A running labbook for ideas in the Ahnold project
+
+## Bioregions
+
+Looking at @Hamilton2010, bioregions clearly play a role. You could include them simply as covariates. But, that doesn't account for the potential interactions between MPAs and regions. Might need to either run them as seperate models (worth it to see), with interaction effects with MPA to see if there are differences among bioregions in MPA effects
+
+## Interspecies Interactions
+
+Can you look at the spatial-covariance matrix of these species?
+
+Or is there enough data to sugihara the damn thing, and ask whether some species seem to cause decreases in others?
+
+## Landings data
+
+*[Can be found here](https://www.wildlife.ca.gov/Fishing/Commercial/Landings#260041375-2015)
+* Can pretty easily figure out a way to scrape all this
+
+
+## Fixed effects, random effects, and errors in variables, and clustering
+
+It's important that you get this straightened out. 
+
+The "errors in variables" relates to the idea that your covariate data are now random draws from some distribution. So, for example, you observe length data, which you fit to a model that predicts length data and a standard deviation, and you pass those predicted length data to some other part of the model. See box 6.2.2 in bayesian primer. This is just basically saying as another random variable in the liklihood, instead of taking it as given (where you would just use the length data)
+
+Basically, what I'm trying to figure out here is how to properly deal with the the clustering of the data in the time series. So, for any categorical variable that is at a higher level than the data, it seems reasonable to just give it a prior (e.g. all the year coefficients share a common prior), all the species effects share a prior by group, etc, where all of those share a common prior. 
+
+What do you do about things like linf though? Repeated a whole ton over time, but you can't just give it a hierarchical prior.... Looking at Gelman and Hill
+
+
+OOOOOOOHHHHHH, maybe this is the right approach. Give it species fixed effects, and then make the species fixed effects a regression of species effects coefficients on life history traits. So, a multi-level modeling approach, like Gelman and Hill page 241. 
+
+From a hierarchichal perspective then, the idea is now to think of these as a bunch of nested regressions for each level of the data, with the right random effects linking each layer together. 
+
+So, you have year terms, and those year terms are a function of yearly things like temperature and el niño, species terms, etc. The problem that you've been having, and this probably explains some of the convergance issues, is that you have massive colinearity when you try and include fixed effects for things like species, and then the covariates at the species level? So, this allows you to sort of get the best of both worlds, where you now get the "intercepts" by the right thing, but those intercepts take into account the data at the intercept level that you have that can influence the outcome. So it looks though from Gelman and Hill page 281 that to do this, you don't have to include those terms in the mixed effects part of the regression itself, but only put them in, but with the appropriate priors. So, that's where the common prior comes in? You'll just need to mess with this one with code once you can code it in STAN
+
+You should test this by getting the thing written in STAN, and comparing two versions, one where you do it the usual way (estimate the mean of the prior), one where you include covariates in the model, the other where you fit them seperately
+
+  AHA@@!!@!#@!@#! THAT'S WHY THE MEAN OF THE PRIOR IS 0!!!! think about it. Say you want to include fixed effects for each site. Under the model as it get's written all over the place here, they are distributed with mean(u,sigma). Now, when you include the fixed effects mean in that context: those are deviations from a mean 0! So, you've already accounted for the change from the mean effect by including the intercept. If you then say include site specific temperature in there, you'd just chuck it in as a variable, which would do the exact same thing as saying N(site + temp,sigma), or site + temp + n(0,sigma). All those terms are getting soaked up in the intercept. Suppose that it should be N(.2,sigma). So, no matter what, ever year term is going to be .2 +- some term. That is the same then as just adding .2 to the intercept, and then setting the mean of the prior to 0. So, they real key here then is simply specifying the group-level standard deviation. Wow. 
+
+
+
+**Everything is a random effect in bayes, the key is is it grouped**
+
+## Model Structure
+
+Let's go through the thing from scratch and think through how you want this thing to look, from a model diagramming perspective. 
+
+### Hurdle component
+
+### Data
+
+So may be you need to be thinking about this kind of like a CPUE standardization, where on one hand you're fitting a poisson distribution to the transect data, and using that to estimate densities, based on deterministic equations and a sigma (or maybe treating that part as data to make things a bit easier), and then fitting the regression to those densities. The challenging part is how you rationalize the two distributions for density; that implied by the regressin and that implied by the error from the logit model 
+
+AHA, so the key here is thinking about the marginal posterior of the regression coefficients, not just the regression coefficients. The sigma of the regression model us saying taking those data as observations from a ranfom event, how well does the model explain that. But, that's just under that one scenario. So, if you were doing this in a simple way where the posterior is analytical, then you get the betas out. But, the full marginal now would take into account the range of worlds that the densities could live in, so you'd sample from the joint posterior to get the betas of interest!
+
+### Process
+
+See box 6.2.2 in a Bayesian Primer for ideas on this. 
+
+The way I'm leaning towards is something like this: There is a true biomass that is a random draw from a distribution with mean observed biomass and a variance defined by.... something (observer, group, a function of kelp, vis, etc.). The inverse of that, that the observed are a random draw from some true distribution with mean true and sigma above seems hard to do in this context: you'd have to fit a massive number, or possibly an unidentifiable number, of means, unless you want to say that that there's some clustering (e.g. mean by species by site by year, which I think are the raw aggregation anyways). 
+
+Ah wait, you're making this wayyyy to complicated. The thing you're thinking about here are errors in **predictor** variables, not dependent variables like the density, which is what you're trying to explain. Under a traditional Bayesian framework, the dependent variabels are already considered random draws (until they are obsered), while the rest are considered data. But, the stuff you were thinking of there are for independent variables, things like temperature. So, you could say that temperature is imperfectyl measured, and comes from a distribution with some true mean and sigma. 
+
+So, you don't need to mess with the "errors" in density, since it's already considered a random draw, from a distribution with mean expeced density from the model itself, and a sigma estiamted by the model. 
+
+Now, where things could then get interesting is using a model to estimate the sigmas. i.e. sigma is a linear function of say a constant, plus kelp cover + vis + research group... etc. 
+
+Now, that's all assuming that the biomass densities are in fact your data. There's another way you could do this, somewhat similar to @Karnauskas2011. The idea here. you have **two**ish data sources. One are the actual lengths. The other are the observed densities. The goal is still to fit a regression to the densities. The issue now though is that you're going to fit the regression to densities estimated from the raw length data. So, you'd take the length data. You'd then use that length data to build up a model of densities that you then fit the regression on. The problem is, you'd need a model relating something back to the length data, which you aren't really doing here. i.e what would the lengths be conditional on? Alternatively, you treat the lengths as data, and the densities as random variables. Now, you have the observed densities, that are draws from a distribution with mean of predicted density, where predicted density is a function of the lengths? That is a bit of double dipping though. Now one option could be to train the regression on "density" data generated from the lengths. So now, you say the observed densities are drawn from a distribution predicted by the regression, where the regression is trained on the expected densities predicted from the length data, estimating sigmas all the way. This seems maybe the most robust option, but also a royal pain in the ass. And do you really gain a whole lot from that?
+
+It seems like you have something like three different model structures all models can share a common hierarchical nature to the data, the question really is how do you want to model errors, especially conditional on what you really care about are doing a good job on the estimators, not on the out-of-sample prediction
+
+1. The standard model, with potential for clustering of errors in densities as a function of appropriate levels (e.g. species groups, etc. ).That's really what equation 6.2.51 in BP is doing: making a more complex model of the error structure associated with the observations. 
+
+2. A model for standard deviations in the densities, where sigma is a linear function of an intercept and apprpriate covariates (like visibility, kelp, etc.) Could be an interesting way to test things that need to be accounted for in the model. That's really what equation 6.2.51 in BP is doing: making a more complex model of the error structure associated with the observations. 
+
+3. A data-generation model, where the length frequency are taken as perfectly observed, or are used to generate draws from a poisson, a la @Karnauskas2011, converted to densities, and then the regression is fit to those densities, and then used to predict the observed densities. Seems like a worse and worse idea, especially if you're not as interested in prediction as you are in estimation.
+
+### Parameters
+
+Let's think about the covariates first. The question is basically how do you want to cluster the errors. 
+#### Sites
+
+You have site specific parameters, like location, region, etc. These stay constant at each site over time. Those should almost certainly be modeled as random effects, where maybe each site gets an intercept, drawn from the region that it's in, and each region then get's an uninformative prior, since the region's aren't really random effects, but constant enities in this world.
+
+Now one question I have then is how does that fit in a regression framework, i.e. relative to "controlling" for the region effect in the regression itself. I don't think that it matters, you just need to stop thinking abotu things so linearly. You're only goal is to model the variation in density as a function of things, and this goes in there, the effect of region just isn't a linear additive term, but rather affects the site specific terms
+
+### Species
+
+You also have a bunch of species-specific effects. Now, on one level, these make more sense to me as fixed effects (the idea is that they aren't really random draws from a population, but rather "true" values). But, where I get confused then is how to deal with these correctly in a panel framework, given that they are repeated. If I remember my Gelman, the way to deal with this in the year terms for example is by giving them a hierarchichal nature. 
+
+So, maybe one way to think of all the life history things is that each life history value is a draw from a "random" model that genrates life history traits. So, you estimate the coefficients for linf, where linf is a random variable drawn a global distribution. 
+
+AHA, i think your confusion is in differentiating the data from the coefficients. I think the "random effects" vs "fixed effects" question relates to how you want to model the data itself, as either the data, or draws from some distribution that you then estimate as well. 
+
+"In Bayesian hierarchical modeling, random effects are used to describe variation that occurs beyond variation that arises from sampling alone"
+
+Hobbs, N. Thompson; Hooten, Mevin B.. Bayesian Models: A Statistical Primer for Ecologists (Page 114). Princeton University Press. Kindle Edition. 
+
+
+### Priors
+
+
+## Jan 3 2017
+
+### New thoughts on model structure
+
+OK, after doing some reading I think I'm geting a better handle on this. The key question: how do you properly account for the sampling nature of the MLPA data
+
+
+The problem is you've been thinking about this rather confusedly between the unclear distinction between hierarchical and state space (see your evernore entry on state space modeling). 
+
+So let's start from the ground up. 
+
+1. You observe samples of length data, binned by size
+2. These sample arrise from a underlying true length structure, let's say a Poisson, meaning that the mean and SD are the same. So, you fit a model that replicates this process WRONG!!!
+    * The samples are the data! they are the mean values of the true poisson distribution. So, if that's the case, none of this matters ha, since there's nothing to estimate. 
+
+
+If that's the case, maybe you go back to an explicit observation model, where the error in the length structures/biomass are a function of covariates. 
+
+
+
+    
+```{r}
+
+library(tidyverse)
+
+huh <- rpois(1000,100)
+
+data_frame(huh = huh) %>% 
+  ggplot(aes(huh)) + 
+  geom_bar()
+
+rmultinom(10, size = 12, prob = c(0.1,0.2,0.8,.1))
+
+```
+
+    
+## 1/4/17
+
+OK, that was a good road to head down, but not a great place to start. It seems like there's not really a huge upside to be had from the crazy length-up modeling process. At the end of the day, unless you introduce a bias term or something like that, you're just going to get the mean of the prediction back. So, you could certainly introduce a bit more uncertainty, but not really a substantive change in the outcome. 
+
+```{r}
+library(tidyverse)
+dat <- read_csv('../data/UCSB_FISH raw thru 2013.csv')
+
+dat <-  dat %>% 
+  mutate(size_range = ifelse(is.na(max_tl - min_tl), 0, max_tl - min_tl ))
+
+dat %>% 
+  ggplot(aes(size_range)) +
+  geom_histogram() + 
+  scale_y_log10()
+
+```
+Almost all the observations have no real range to them. Looking at a histogram of the range of the sizes reported (max - min), where 0 corresponds to no range reported, almost all are within a few centimeters, which really isn't going to play our in the biomass all that much. only `r 100*mean(dat$size_range > 10)`% of samples have size ranges above 10 centimeters. So, to be really really precise, you could simulate length frequences for those, but really hardly seems worth the effort. 
+
+The bigger question then is if you want to try and model bias in the observations; e.g. counts of certain species really should be higher/lower under different conditions. Something like a "standardized" survey index. i.e. maybe counts should be higher, taking into account poor vis or the like. Basically, it will be important if it introduces bias, or there is substantially more error around particular kinds of species. But beyond that, not like your analysis is fundamentally flawed or anything, and it's unclear how much benefit you get from controlling for those factors at the ground level, vs. controlling for them in the regression itself (i.e. all else being equal visibility drives down/up counts). 
+
+There's still the biomass issue (converting lengths into biomass). There's obviously error in there, but probably not bias, so again, the issue would really be in just adding more noise. It's hard to know how you'd deal with that since there's not really a signal in the data to tell you anything about that error. It would be nice to work with Jen to do the translation from lengths to densities right there in the model, but again that seems like a second order thing: I don't think the existing densities are wrong or anything. The biggest thing though is that doing the densities raw would allow you to actually tally them up at the aggregation level you want, instead of taking means/medians across space and time, which could disguise some trends. Let's work on that actually. 
+
+So, I think you're back go the important thing being doing a good job of dealing with the hierarchical nature of the data themselves. So let's spend the next few days focusing on that. 
+
+## Data Exploration
+
+Let's go back to square one and think a little about the nature of the data that you're dealing with, and explore the relationships of the data with density and length. 
+
+```{r load data}
+
+
+length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>% 
+    magrittr::set_colnames(.,tolower(colnames(.)))
+
+
+temperature_data <- length_data %>% 
+  group_by(site,side,year) %>% 
+  summarise(mean_temp = mean(temp, na.rm = T))
+
+life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>% 
+  magrittr::set_colnames(.,tolower(colnames(.)))
+
+site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
+    magrittr::set_colnames(.,tolower(colnames(.)))
+
+
+length_data <- length_data %>% 
+  left_join(life_history_data, by = 'classcode') %>% 
+  left_join(site_data, by = c('site','side'))
+
+```
+
+## Converting length to biomass/density
+
+One thing I'd like to be able to do is move directly from the lengths to the density at any aggregation that I'm interested in by actually tallying the length structure. As it stands right now, you need to take means/medians to aggregate densities over time, which I don't really like
+
+Let's take a look at the actual density data that Jen provides
+
+```{r density data}
+
+density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
+  magrittr::set_colnames(.,tolower(colnames(.))) %>% 
+  gather('concat.name','value', grep('_',colnames(.)),convert = T) %>%
+  mutate(data.type = gsub('\\_.*', '', concat.name),
+         classcode = gsub('.*\\_','',concat.name)) %>%
+  mutate(value = as.numeric(value)) %>%
+  spread(data.type,value) %>%
+  rename(site_side = site.side)
+
+density_example <- density_data %>% 
+  filter(is.na(biomass) == F & biomass >0) %>% 
+  sample_n(1)
+
+density_example
+
+```
+Let's take a look and see if you can replicate this density example. 
+
+
+
+
+
+```{r}
+
+
+length_to_weight <-
+  function(mean_length,
+  min_length,
+  max_length,
+  count,
+  weight_a,
+  weight_b,
+  length_units = 'cm',
+  weight_units = 'g',
+  length_for_weight_units = 'mm',
+  length_type_for_weight,
+  tl_sl_a,
+  tl_sl_b,
+  tl_sl_type,
+  tl_sl_formula) {
+  #
+  # generate_lengths <- function(count,mean_length, min_length, max_length){
+  
+  if (is.na(count) | count == 0){
+    
+    outweight <-  0
+  }  else {
+    
+  if (is.na(min_length) |
+  is.na(max_length)) {
+  #generate distribution of lengths
+  
+  lengths <-  rep(mean_length, count)
+  
+  } else{
+  # lengths <-  pmax(min_length,pmin(max_length,rpois(count, lambda = mean_length)))
+  lengths <- runif(count, min = min_length, max = max_length)
+  }
+
+  if (length_type_for_weight == 'SL') {
+  if (tl_sl_type  == 'TYPICAL') {
+  weight_lengths <-  lengths * tl_sl_a + tl_sl_b
+  } else{
+  weight_lengths <- (lengths - tl_sl_b) / tl_sl_a
+  
+  }
+  
+  } else {
+  weight_lengths <-  lengths
+  }
+  
+  if (length_units == 'cm' & length_for_weight_units == 'mm') {
+  weight_lengths <- weight_lengths * 10
+  }
+  
+  weight <-  weight_a * weight_lengths ^ weight_b
+  
+  if (weight_units == 'kg') {
+  weight <- weight * 1000
+  }
+  outweight = sum(weight)
+  }
+    return(outweight)
+  } #close function
+  
+length_example <- length_data %>% 
+  filter(classcode == toupper(density_example$classcode)
+, site == density_example$site, 
+         side == density_example$side, year == density_example$year) 
+
+length_example <-   length_data %>% 
+  filter(is.na(commonname) == F) %>% 
+  mutate(biomass_g = pmap_dbl(list(mean_length = fish_tl,
+                                      min_length = min_tl,
+                                      max_length = max_tl,
+                                      count = count,
+                                      weight_a = wl_a,
+                                      weight_b = wl_b,
+                                      length_type_for_weight = wl_input_length,
+                                      length_for_weight_units = wl_l_units,
+                                      tl_sl_a = lc.a._for_wl,
+                                      tl_sl_b = lc.b._for_wl,
+                                      tl_sl_type = lc_type_for_wl,
+                                      tl_sl_formula = ll_equation_for_wl), length_to_weight))
+
+length_example %>% 
+  select(biomass_g)
+
+biomass_data <- length_example %>% 
+  group_by(classcode, site, side, year, transect) %>% 
+  summarise(total_biomass_g = sum(biomass_g)) 
+```
+First, need to add back in zeros. You need a function that goes through trip by trip, and adds in zeros for all species seen at that site at some point but not on that trip. 
+
+
+```{r}
+
+species_sightings <- length_data %>% 
+  group_by(site) %>% 
+  summarise(species_seen = list(unique(classcode)))
+
+
+biomass_data <- biomass_data %>% 
+  ungroup() %>% 
+  select(site,side,year, transect) %>% 
+  unique() %>%  {
+  pmap(
+    list(
+      this_site = .$site,
+      this_side = .$side,
+      this_year = .$year,
+      this_transect = .$transect
+    ),
+    add_missing_fish,
+    observations = biomass_data,
+    species_sightings = species_sightings
+  )
+} %>% 
+  bind_rows()
+
+man_density_data <- biomass_data %>% 
+  group_by(classcode, site, side,year) %>% 
+  summarise(mean_biomass_g = mean(total_biomass_g, na.rm = T)) %>% 
+  mutate(
+            biomass_g_per_m2 = mean_biomass_g / (30*4),
+            biomass_g_per_hectare = biomass_g_per_m2 * 10000,
+            biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6)
+
+
+```
+
+
+```{r}
+
+
+```
+
+
+
+OK! You've got hand calculated densities now, let's compare them to jens
+
+```{r}
+
+density_comp_plot <- density_data %>% 
+  select(classcode, site, side, year, biomass) %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+  left_join(man_density_data, by = c('classcode','site','side','year')) %>% 
+  left_join(life_history_data, by = 'classcode') %>% 
+  ggplot(aes(biomass,biomass_ton_per_hectare, color = commonname)) + 
+             geom_abline(aes(intercept = 0, slope = 1), linetype= 2) +
+
+           geom_point() + 
+  scale_color_discrete(guide = F) + 
+  labs( y = 'Biomass (tons per hectare) - calculated from lengths and weights', x = 'Biomass (tons per hectare) - from ci_reserve_data_final3 txt.csv', 
+  caption = 'Resolution is at species-year-site-side')
+
+density_comp_plot
+ggsave(density_comp_plot, file = 'density comparison plot.pdf')
+# plotly::ggplotly(density_comp_plot)
+
+```
+
+
+Not Bad. It's a good starting point, and makes me confident that I'm understanding things right. You'll need to talk with Jen to figure out why this isn't 1:1. This also let's you compare outcomes under the two sources. 
+## Exploring relationships
+
+Let's dig into things a bit here and just look at trends in the (to start with) two versions of the database
+
+```{r}
+
+man_density_data <- man_density_data %>% 
+  left_join(life_history_data, by = 'classcode') %>% 
+  left_join(site_data, by = c('site','side'))
+
+man_density_data %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(region, year, targeted) %>% 
+  summarise(median_biomass = mean(biomass_ton_per_hectare, na.rm = T)) %>% 
+  ggplot(aes(year,median_biomass, color = targeted)) + 
+  geom_line() + 
+  facet_wrap(~region)
+
+
+```
+
+Now same thing, but with Jen's data
+
+```{r}
+density_data %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+    left_join(life_history_data, by = 'classcode') %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(region, year, targeted) %>% 
+  summarise(mean_biomass = mean(biomass, na.rm = T)) %>% 
+  ggplot(aes(year,mean_biomass, color = targeted)) + 
+  geom_line() + 
+  facet_wrap(~region)
+```
+
+
+
+And just a really quick regression exploration
+
+```{r}
+
+
+
+reg_data <- density_data %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+    left_join(life_history_data, by = 'classcode') %>% 
+      left_join(temperature_data, by = c('site','side','year')) %>% 
+  filter(is.na(targeted) == F) %>% 
+  filter(biomass > 0) %>% 
+  mutate(log_biomass = log(biomass),
+         mlpa_in_effect = as.numeric(year > 2003),
+         fished = as.numeric(targeted == 'Targeted'),
+         did = as.numeric(fished * year * mlpa_in_effect))
+
+reg_fmla <- as.formula('log_biomass ~  as.factor(year) + fished +  as.factor(did) + trophicgroup + vbgf.linf +
+                       mean_temp')
+
+
+basic_reg <- lm(reg_fmla, data = reg_data)
+
+# stan_reg <- rstanarm::stan_glm(reg_fmla, data = reg_data)
+
+summary(basic_reg)
+
+broom::tidy(basic_reg)
+
+  basic_reg %>%
+    broom::tidy() %>%
+    filter(str_detect(term,'did')) %>%
+    mutate(year = as.numeric(str_replace(term,'as.factor\\(did\\)','')) )%>%
+    ggplot() +
+    geom_hline(aes(yintercept = 0)) + 
+    geom_pointrange(aes(x = year, y = estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96 * std.error)) +
+    geom_smooth(aes(x = year, y = estimate), method = 'lm')
+
+  
+    # stan_reg %>%
+    # broom::tidy() %>%
+    # filter(str_detect(term,'did')) %>%
+    # mutate(year = as.numeric(str_replace(term,'as.factor\\(did\\)','')) )%>%
+    # ggplot() +
+    # geom_pointrange(aes(x = year, y = estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96 * std.error)) + 
+    #       geom_smooth(aes(x = year, y = estimate), method = 'lm')
+
+
+
+```
+
+
+```{r}
+
+reg_data <- man_density_data %>% 
+  ungroup() %>% 
+  filter(is.na(targeted) == F) %>% 
+  filter(biomass_ton_per_hectare > 0) %>% 
+  mutate(log_biomass = log(biomass_ton_per_hectare),
+         mlpa_in_effect = as.numeric(year > 2003),
+         fished = as.numeric(targeted == 'Targeted'),
+         did = as.numeric(fished * year * mlpa_in_effect))
+
+reg_fmla <- as.formula('log_biomass ~  as.factor(year) + fished +  as.factor(did) + trophicgroup + vbgf.linf')
+
+
+basic_reg <- lm(reg_fmla, data = reg_data)
+
+# stan_reg <- rstanarm::stan_glm(reg_fmla, data = reg_data)
+
+# summary(basic_reg)
+# 
+# broom::tidy(basic_reg)
+
+  basic_reg %>%
+    broom::tidy() %>%
+    filter(str_detect(term,'did')) %>%
+    mutate(year = as.numeric(str_replace(term,'as.factor\\(did\\)','')) )%>%
+    ggplot() +
+    geom_hline(aes(yintercept = 0)) + 
+    geom_pointrange(aes(x = year, y = estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96 * std.error)) +
+    geom_smooth(aes(x = year, y = estimate), method = 'lm')
+
+  
+    # stan_reg %>%
+    # broom::tidy() %>%
+    # filter(str_detect(term,'did')) %>%
+    # mutate(year = as.numeric(str_replace(term,'as.factor\\(did\\)','')) )%>%
+    # ggplot() +
+    # geom_pointrange(aes(x = year, y = estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96 * std.error)) + 
+    #       geom_smooth(aes(x = year, y = estimate), method = 'lm')
+
+
+
+```
+
+
+Well that's not encouraging: this suggests that the density calculation really does matter here. You'll go with Jen's data for now, but big red flag of something that needs fixing here. 
+
+
+
+## Are unfished and fished valid controls?
+
+There are a few ways you could think about testing for this. 
+
+1. Does the MLPA come out as a causal factor on the unfished species?
+
+2. Do fished speices/unfished species cause each other (do lags of fished species predict unfished and vice versa)
+
+
+
+```{r}
+reg_data <- density_data %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+    left_join(life_history_data, by = 'classcode') %>% 
+  left_join(temperature_data, by = c('site','side','year')) %>% 
+  filter(is.na(targeted) == F) %>% 
+  filter(biomass > 0) %>% 
+  mutate(log_biomass = log(biomass),
+         mlpa_in_effect = as.numeric(year > 2003),
+         unfished = as.numeric(targeted != 'Targeted'),
+         did = as.numeric(unfished * year * mlpa_in_effect))
+
+reg_fmla <- as.formula('log_biomass ~  as.factor(year) + mean_temp+unfished +  as.factor(did) + trophicgroup + vbgf.linf')
+
+
+basic_reg <- lm(reg_fmla, data = reg_data)
+
+# stan_reg <- rstanarm::stan_glm(reg_fmla, data = reg_data)
+
+summary(basic_reg)
+
+broom::tidy(basic_reg)
+
+  basic_reg %>%
+    broom::tidy() %>%
+    filter(str_detect(term,'did')) %>%
+    mutate(year = as.numeric(str_replace(term,'as.factor\\(did\\)','')) )%>%
+    ggplot() +
+    geom_hline(aes(yintercept = 0)) + 
+    geom_pointrange(aes(x = year, y = estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96 * std.error)) +
+    geom_smooth(aes(x = year, y = estimate), method = 'lm')
+
+
+```
+
+I don't think that that's a valid comparison, since you at least assume that the fished aren't a control. You could also just do a changepoint analysis?
+
+Alternatively, let's think about this mechanistically. If you believe that the "targeted" classification is real, then by definition the MPA has no direct effect on the fished species. The real question then is whether there are trophic interactions that cause a problem. So, why not run a regression of unfished densities as a function of targeted abundance, controlling for other crap?
+
+```{r}
+trophic_data <- density_data %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+    left_join(life_history_data, by = 'classcode') %>% 
+  left_join(temperature_data, by = c('site','side','year')) %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(targeted, region, year) %>% 
+  summarise(log_mean_biomass = log(mean(biomass, na.rm = T)),
+                                mean_temp = mean(mean_temp, na.rm = T)) %>% 
+  spread(targeted, log_mean_biomass) %>% 
+  group_by(region) %>% 
+  mutate(mb_lag1 = dplyr::lag(Targeted,1),
+         mb_lag2 = dplyr::lag(Targeted, 2),
+         mb_lag3 = dplyr::lag(Targeted, 3),
+         mb_lag4 = dplyr::lag(Targeted, 4),
+         temp_lag1 = dplyr::lag(mean_temp,1),
+         temp_lag2 = dplyr::lag(mean_temp, 2),
+         temp_lag3 = dplyr::lag(mean_temp, 3),
+         temp_lag4 = dplyr::lag(mean_temp, 4)
+         )
+
+library(rstanarm)
+trophic_reg <- stan_glmer(`Non-targeted` ~ Targeted + mb_lag1 + mb_lag2 + mb_lag3 + mb_lag4 + 
+                    mean_temp + ( 1 |year) + temp_lag1 + temp_lag2 + temp_lag3 + temp_lag4, data = trophic_data )
+
+# launch_shinystan(trophic_reg)
+
+summary(trophic_reg)
+
+post_interval <- trophic_reg %>% 
+  posterior_interval()
+
+post_vars <- row.names(post_interval)
+
+post_interval <- post_interval %>% 
+  as_data_frame() %>% 
+  mutate(term = post_vars)
+
+trophic_reg %>% 
+  posterior_interval() %>% 
+  as_data_frame(row.names = rownames(.))
+
+reg_plot <- trophic_reg %>% 
+  tidy() %>% 
+  ggplot() + 
+  geom_point(aes(term, estimate)) + 
+  geom_errorbar(data = post_interval 
+              , aes(term, ymin = `5%`,
+                                                                 ymax = `95%`)) +
+  coord_flip()
+
+reg_plot
+
+```
+
+Interesting, some evidence of effect but it's messy, and depends a lot on model specification. 
+
+## El Niño
+
+
+```{r}
+
+a = read_html('https://www.esrl.noaa.gov/psd/enso/mei/table.html') %>% 
+  html_node('body') %>% 
+  html_text()
+
+
+enso <- read_lines('https://www.esrl.noaa.gov/psd/enso/mei/table.html')
+
+enso <- enso[str_detect(enso,'\t|(YEAR)')] %>% 
+  write('enso.txt')
+
+enso <-  read.csv('enso.txt', sep = '\t', header = F)
+
+table_names <- enso$V1[1] %>% 
+  as.character() %>% 
+  str_split(boundary('word'), simplify = T) %>% 
+  as.character() %>% 
+  tolower()
+
+enso <- enso %>% 
+  slice(-1) %>% 
+  as_data_frame()
+
+colnames(enso) <-  table_names
+
+enso <- enso %>% 
+  gather('bimonth','enso',-year)
+
+enso %>% 
+  mutate(year = year %>% as.character() %>% as.numeric()) %>% 
+  group_by(year) %>% 
+  summarise(mean_enso = mean(enso)) %>% 
+  ggplot(aes(year, mean_enso)) + 
+  geom_point()
+
+ enso <- read_table("http://www.esrl.noaa.gov/psd/gcos_wgsp/Timeseries/Data/nino34.long.anom.data",
+            na = c("-99.99", "99.99",'-99'), skip = 1, n_max = lubridate::year(Sys.time()) - 1870 + 1,
+            col_names = c("year", 1:12)) %>%
+ gather(month, enso, -year) %>%
+ mutate(month = as.double(month))
+
+```
+
+## Get PDO
+
+```{r}
+
+ pdo <- read_table("https://www.esrl.noaa.gov/psd/gcos_wgsp/Timeseries/Data/pdo.long.data",
+            na = c("-99.99", "99.99",'-99'), skip = 1, n_max = lubridate::year(Sys.time()) - 1900,
+            col_names = c("year", 1:12)) %>%
+ gather(month, pdo, -year) %>%
+ mutate(month = as.double(month),
+        date = lubridate::ymd(paste(year,month,'01', sep = '-')))
+
+pdo %>% 
+  filter(year >= 2000) %>% 
+  ggplot(aes(date,pdo)) +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_point()
+
+
+```
+
+
+
+## Causal defense ideas
+
+How can you defend the causal nature of the results?
+
+Include a "lead" on the DiD term: This is turned on in the years leading up to the policy, and says that the policy is going to happen. SHould be insignificant if the model is right. Look back at mostly harmless and Olivier's note
+
+How well does out-of-sample prediction help you with causality? At it's face it gives evidence that your model is doing a good job of describing the data. But does it imply help with causality? Suppose you had a model that said predict if it's raining outside based on umbrellas. It's out of sample prediction would be great, but that doesn't mean that opening umbrellas is going to cause rain. 
+
+## Regression Exploration
+
+Goal of this section is to start really digging into the regressions.
+
+### Data Exploration
+
+Let's stick with Jen's data for now, but cognizant that you need to look into reproducing and sensitivities to transformation assumptions
+
+Pulling in Jen's density data, merging some useful temperature, site, life history, enso, and PDO data
+
+```{r load data again}
+
+density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
+  magrittr::set_colnames(.,tolower(colnames(.))) %>% 
+  gather('concat.name','value', grep('_',colnames(.)),convert = T) %>%
+  mutate(data.type = gsub('\\_.*', '', concat.name),
+         classcode = gsub('.*\\_','',concat.name)) %>%
+  mutate(value = as.numeric(value)) %>%
+  spread(data.type,value) %>%
+  rename(site_side = site.side)
+
+length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>% 
+    magrittr::set_colnames(.,tolower(colnames(.)))
+
+temperature_data <- length_data %>% 
+  group_by(site,side,year) %>% 
+  summarise(mean_temp = mean(temp, na.rm = T))
+
+life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>%
+  mutate(classcode = tolower(classcode)) %>% 
+  magrittr::set_colnames(.,tolower(colnames(.)))
+
+life_names <- c('classcode',colnames(life_history_data)[!colnames(life_history_data) %in% colnames(density_data)])
+
+life_history_data <- life_history_data[ , life_names]
+
+site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
+    magrittr::set_colnames(.,tolower(colnames(.)))
+
+site_names <- c('site','side',colnames(site_data)[!colnames(site_data) %in% colnames(density_data)])
+
+site_data <- site_data[,site_names]
+
+enso <- read_csv('../data/enso.csv') %>% 
+  group_by(year) %>% 
+  summarise(mean_enso = mean(enso, na.rm = T))
+
+pdo <- read_csv('../data/pdo.csv') %>% 
+group_by(year) %>% 
+  summarise(mean_pdo = mean(pdo, na.rm = T))
+
+comp_data <- density_data %>% 
+  left_join(temperature_data, by = c('site','side','year')) %>% 
+  left_join(life_history_data, by = 'classcode') %>% 
+  left_join(site_data, by = c('site','side')) %>% 
+  left_join(enso, by = 'year') %>% 
+  left_join(pdo, by = 'year')
+  
+```
+
+### Data Composition
+
+Let's look at the distribution of sample size over time; where are your data coming from?
+
+```{r}
+
+comp_data %>% 
+  group_by(year) %>% 
+  summarise(num_obs = length(biomass)) %>% 
+  ggplot(aes(year, num_obs)) + 
+  geom_point()
+  
+```
+
+```{r}
+comp_data %>% 
+  group_by(year,targeted) %>% 
+  summarise(num_obs = length(biomass)) %>% 
+  ggplot(aes(year, num_obs, fill = targeted)) + 
+  geom_bar(stat = 'identity')
+
+
+```
+
+Huh, so a bunch of the observations are "unknown" on targeting status. Let's look into this. Beyond that though, the targeted and non-targeted are fairly well balanced. 
+
+```{r}
+
+huh <- comp_data %>% 
+  filter(is.na(targeted))
+
+sort(unique(huh$classcode))
+
+```
+Aha, these appear to be a a bunch of misc. critters and classification for understory cover. Aslo "young of the year". Probably best to filter these guys out. 
+
+```{r}
+
+comp_data %>% 
+  filter(is.na(commonname) == F) %>% 
+   group_by(year) %>% 
+  summarise(num_obs = length(biomass)) %>% 
+  ggplot(aes(year, num_obs)) + 
+  geom_point()
+  
+```
+
+```{r}
+
+comp_data %>% 
+  filter(is.na(commonname) == F) %>% 
+  group_by(year,region) %>% 
+  summarise(num_obs = length(biomass)) %>% 
+  ggplot(aes(year, num_obs, fill = region)) + 
+  geom_bar(stat = 'identity')
+
+```
+Huh, worth noting that a few of the islands only come in after 2003. What is this doing to your effect that you're basically brining in a bunch of new islands with different effects right after implementation of MPAs in 2003?
+
+```{r}
+
+comp_data %>% 
+  filter(is.na(commonname) == F) %>% 
+  group_by(year,broadtrophic) %>% 
+  summarise(num_obs = length(biomass)) %>% 
+  ggplot(aes(year, num_obs, fill = broadtrophic)) + 
+  geom_bar(stat = 'identity')
+
+```
+
+
+
+### Effect Exploration
+
+Let's look at the change in density as a functino of a variety of variables
+
+```{r}
+
+candidates <- c('biomass','year','site','side','classcode',
+                'region','broadtrophic','reserve','campus','mpaareanm2','mean_temp','guild','trophicgroup','targeted',
+                'mean_enso','mean_pdo','vbgf.k','vbgf.linf','max_length_fishbase')
+
+reg_data <- comp_data[,candidates] %>% 
+  filter(is.na(biomass) == 0, is.na(targeted) == F) %>% 
+  mutate(log_density = log(biomass),
+         factor_year = as.factor(year),
+         targeted = as.numeric(targeted == 'Targeted'),
+         post_mlpa = as.numeric(year >= 2003),
+         reserve = as.numeric(reserve == 'IN'),
+         did = as.factor(targeted * post_mlpa * year)
+         )
+
+```
+
+```{r}
+
+reg_data %>% 
+  group_by(year,targeted) %>% 
+  summarise(mean_density = mean(biomass, na.rm = T)) %>% 
+  ggplot(aes(year,mean_density, color = factor(targeted))) + 
+  geom_line()
+
+```
+
+```{r}
+
+reg_data %>% 
+  group_by(year,targeted,region) %>% 
+  summarise(mean_density = mean(log(biomass + 1e-3), na.rm = T)) %>% 
+  ggplot(aes(year,mean_density, color = targeted)) + 
+  geom_line() + 
+  facet_wrap(~region) + 
+  ylab('log mean density')
+
+```
+
+One troubling pattern, both ANA and SCI show that steep drop in densities from 2000-2003, which might really be skewing the effect of the MPAs (that early negative effect), though on the plus side it's both targetted and non-targeted 
+
+Let's look at some other factors here
+
+```{r}
+
+reg_data %>% 
+  group_by(broadtrophic) %>% 
+  summarise(mean_density = mean(biomass, na.rm = T)) %>% 
+  ggplot(aes(broadtrophic,mean_density, fill = broadtrophic)) + 
+  geom_bar(stat = 'identity')
+
+```
+No surprises, higher density of herbivores
+
+```{r}
+
+reg_data %>% 
+  group_by(region) %>% 
+  ggplot(aes(region,biomass, fill = region)) + 
+  geom_boxplot()
+
+```
+
+```{r}
+reg_data %>% 
+  select(biomass,year,mean_temp, mean_pdo, mean_enso) %>% 
+  gather(metric,value, contains('mean')) %>% 
+  group_by(year,metric) %>% 
+  summarise(mean_biomass = log(mean(biomass, na.rm = T)), mean_value = mean(value, na.rm = T)) %>% 
+  ggplot(aes(mean_value,mean_biomass, fill = metric)) + 
+  geom_abline(aes(intercept = mean(mean_biomass, na.rm = T), slope = 0)) + 
+  geom_point(shape = 21) + 
+  facet_wrap(~metric, scales = 'free_x')
+```
+
+Interesting, definitely some noise in here, but seems to a a trend towards the "mean" of the environmental covariates. Good evidence for throwing a quadratic in here. 
+
+```{r}
+
+environmental_cor = reg_data %>% 
+  filter(is.na(mean_temp) == F) %>% 
+  select(mean_temp, mean_enso, mean_pdo, year) %>%
+  cor() 
+
+corrplot::corrplot(environmental_cor)
+
+```
+Quite a bit of correlation between some of the environmental variables, but you don't really care about estimating those precisely so not a huge deal. 
+
+But, the year thing could be a bit messy, since you have such poor contrast before and after MPA, so might need to look at mean PDO as a problem variable. 
+
+### DiD Structure
+
+Now, what should the actual difference in difference look like?
+
+The key thing you need is treatment on the treated, so that's being a fished species post 2003. 
+
+If you include species specific fixed effects, then you don't have to include the general effect of being a fished species, since those will all come out in the wash (i.e. the fished effect is internalized in the species specific fixed effects, or alternatively, you say that the species level effect is a function of covariates, including being fished)
+
+Similarly with post-mpa. If you don't include year fixed effects, then you need it. But, if you include year fixed effects, then the "post mpa" effect should be soaked up, and in fact perfectly colinear with, the year fixed effects. 
+
+So, now, the real pain in the ass is the year terms. Which I think you figured out! 
+
+The question then is how do you control for other things. 
+
+You could just include the DiD term 
+
+### Bare-bones regression
+
+Let's start with a bare bones regression, using `rstanarm`, one hierarchichal, one not. You'll then compare your results to one where you code the likelihood yourself 
+
+
+
+
+```{r}
+
+reg_vars <- c('log_density','factor_year', 'year','targeted', 'did', 'region' ,'vbgf.linf',
+              'vbgf.k',
+'mean_enso' ,'mean_enso','mean_pdo', 'mean_temp','classcode','site','post_mlpa')
+
+has_all <- function(x) any(is.na(x)) == F
+
+pos_reg_data <- reg_data %>% 
+  filter(biomass >0, year >=2000) %>% 
+  select_(.dots = as.list(reg_vars)) %>% 
+  mutate(has_all_vars = apply(.,1,has_all)) %>% 
+  filter(has_all_vars == T) %>% 
+  mutate(did_dummy = 1 * targeted,
+         did_year = paste('did',year, sep = '_')) %>% 
+  spread(did_year,did_dummy, fill = 0) %>% 
+  mutate(temp2 = mean_temp^2,
+         pdo2 = mean_pdo^2,
+         enso2 = mean_enso^2)
+
+pos_reg_data %>% 
+  group_by(factor_year,targeted) %>% 
+  summarise(mb = mean(log_density, na.rm = T)) %>% 
+  ggplot(aes(factor_year, mb, color = factor(targeted))) + 
+  geom_point()
+
+pos_reg_data %>% 
+  mutate(obs = 1:dim(.)[1],dummy = 1) %>% 
+  select(obs,year,dummy) %>% 
+  spread(year,dummy, fill = 0)
+
+did_years <- paste('did',2000:2013, sep = '_')
+
+did_year <- did_years[did_years!='did_2003']
+
+simple_reg <- as.formula(paste0('log_density ~',paste(did_year, collapse = '+'),' + factor_year + classcode + site'))
+
+# + vbgf.linf +
+# vbgf.k +
+# mean_enso + enso2 + mean_pdo + pdo2 + mean_temp  + temp2')
+
+flat_reg <- lm(simple_reg, data = pos_reg_data)
+
+flat_reg <- stan_glm(simple_reg, data = pos_reg_data,chains = 1)
+
+
+flat_reg %>% 
+  as.data.frame() %>% 
+  select(contains('did_')) %>% 
+  gather(did,effect) %>% 
+  mutate(year = str_replace(did,'did_','') %>% as.numeric()) %>% 
+  group_by(year) %>% 
+  summarise(mean_effect = mean(effect),
+            top = sort(effect)[round(.975 * length(effect))],
+            bottom = sort(effect)[round(.025 * length(effect))]) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0)) + 
+  geom_pointrange(aes(year,mean_effect, ymax = top, ymin = bottom))
+
+data_frame(var = names(flat_reg$coefficients),coef = flat_reg$coefficients) %>%
+  filter(str_detect(var,'did_')) %>% 
+  ggplot(aes(var,coef)) + 
+  geom_point()
+
+
+```
+
+
+
+
+### Apply `rstanarm` regression
+
+Now use `rstanarm` to fit a hierarchichal model, using `stan_glmer`
+
+Standard diagnostics
+
+### Apply using custom `STAN`
+
+Try and replicate the above, but using your own `stan` code
+
+Standard diagnostics
+
+
+### Expanded hierarchy
+
+Try out the double nested thing from Gelman and Hill, where you estiamte species specific fixed effects, which come from a distribution with mean defined by life history traits 
+
+Standard diagnostics
+
+This is really similar to FISH 558 Homework 4
+
+
+
+
