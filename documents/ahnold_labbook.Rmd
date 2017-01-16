@@ -197,9 +197,12 @@ length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>%
     magrittr::set_colnames(.,tolower(colnames(.)))
 
 
-temperature_data <- length_data %>% 
+conditions_data <- length_data %>% 
   group_by(site,side,year) %>% 
-  summarise(mean_temp = mean(temp, na.rm = T))
+  summarise(mean_temp = mean(temp, na.rm = T),
+            mean_kelp = mean(pctcnpy, na.rm = T),
+            mean_vis = mean(vis, na.rm = T)) 
+  
 
 life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>% 
@@ -453,7 +456,7 @@ And just a really quick regression exploration
 reg_data <- density_data %>% 
   mutate(classcode = toupper(classcode)) %>% 
     left_join(life_history_data, by = 'classcode') %>% 
-      left_join(temperature_data, by = c('site','side','year')) %>% 
+      left_join(conditions_data, by = c('site','side','year')) %>% 
   filter(is.na(targeted) == F) %>% 
   filter(biomass > 0) %>% 
   mutate(log_biomass = log(biomass),
@@ -559,7 +562,7 @@ There are a few ways you could think about testing for this.
 reg_data <- density_data %>% 
   mutate(classcode = toupper(classcode)) %>% 
     left_join(life_history_data, by = 'classcode') %>% 
-  left_join(temperature_data, by = c('site','side','year')) %>% 
+  left_join(conditions_data, by = c('site','side','year')) %>% 
   filter(is.na(targeted) == F) %>% 
   filter(biomass > 0) %>% 
   mutate(log_biomass = log(biomass),
@@ -594,7 +597,7 @@ I don't think that that's a valid comparison, since you at least assume that the
 
 Alternatively, let's think about this mechanistically. If you believe that the "targeted" classification is real, then by definition the MPA has no direct effect on the fished species. The real question then is whether there are trophic interactions that cause a problem. So, why not run a regression of unfished densities as a function of targeted abundance, controlling for other crap?
 
-```{r}
+```{r, include=F, eval=F}
 trophic_data <- density_data %>% 
   mutate(classcode = toupper(classcode)) %>% 
     left_join(life_history_data, by = 'classcode') %>% 
@@ -898,7 +901,7 @@ reg_data %>%
 reg_data %>% 
   group_by(year,targeted,region) %>% 
   summarise(mean_density = mean(log(biomass + 1e-3), na.rm = T)) %>% 
-  ggplot(aes(year,mean_density, color = targeted)) + 
+  ggplot(aes(year,mean_density, color = factor(targeted))) + 
   geom_line() + 
   facet_wrap(~region) + 
   ylab('log mean density')
@@ -977,28 +980,31 @@ You could just include the DiD term
 
 Let's start with a bare bones regression, using `rstanarm`, one hierarchichal, one not. You'll then compare your results to one where you code the likelihood yourself 
 
-
-
-
 ```{r}
 
-reg_vars <- c('log_density','factor_year', 'year','targeted', 'did', 'region' ,'vbgf.linf',
-              'vbgf.k',
-'mean_enso' ,'mean_enso','mean_pdo', 'mean_temp','classcode','site','post_mlpa')
+reg_vars <- c('log_density','factor_year', 'year','targeted', 'did', 'region' ,
+'mean_enso','mean_pdo', 'mean_temp','classcode','site','side','post_mlpa','region',
+'broadtrophic')
 
 has_all <- function(x) any(is.na(x)) == F
 
 pos_reg_data <- reg_data %>% 
+  select(-mean_temp) %>% 
+  left_join(conditions_data %>% select(site,side,year, contains('mean')), by = c('site','side','year')) %>% 
   filter(biomass >0, year >=2000) %>% 
   select_(.dots = as.list(reg_vars)) %>% 
   mutate(has_all_vars = apply(.,1,has_all)) %>% 
   filter(has_all_vars == T) %>% 
+  map2_df(colnames(.), center_scale, omit_names = c('log_density','year','mean_enso','mean_pdo')) %>%
   mutate(did_dummy = 1 * targeted,
          did_year = paste('did',year, sep = '_')) %>% 
   spread(did_year,did_dummy, fill = 0) %>% 
   mutate(temp2 = mean_temp^2,
          pdo2 = mean_pdo^2,
-         enso2 = mean_enso^2)
+         enso2 = mean_enso^2,
+         site_side = paste(site, side, sep = '_'))
+
+# pos_reg_data$did_2003[pos_reg_data$did_2003 == 1] <-  0.5
 
 pos_reg_data %>% 
   group_by(factor_year,targeted) %>% 
@@ -1006,29 +1012,50 @@ pos_reg_data %>%
   ggplot(aes(factor_year, mb, color = factor(targeted))) + 
   geom_point()
 
-pos_reg_data %>% 
-  mutate(obs = 1:dim(.)[1],dummy = 1) %>% 
-  select(obs,year,dummy) %>% 
-  spread(year,dummy, fill = 0)
 
 did_years <- paste('did',2000:2013, sep = '_')
 
-did_year <- did_years[did_years!='did_2003']
+did_year <- did_years[did_years!='did_2000']
 
-simple_reg <- as.formula(paste0('log_density ~',paste(did_year, collapse = '+'),' + factor_year + classcode + site'))
+
+simple_reg <-
+as.formula(
+paste0(
+'log_density ~',
+paste(did_year, collapse = '+'),
+' + (1|year) + (1 + mean_temp + temp2 |classcode) + mean_enso +  mean_pdo + (1 | site_side) + (1 | site) + (1 | region) + targeted + post_mlpa'
+)
+)
 
 # + vbgf.linf +
 # vbgf.k +
 # mean_enso + enso2 + mean_pdo + pdo2 + mean_temp  + temp2')
 
-flat_reg <- lm(simple_reg, data = pos_reg_data)
+freq_flat_reg <- lme4::lmer(simple_reg, data = pos_reg_data)
 
-flat_reg <- stan_glm(simple_reg, data = pos_reg_data,chains = 1)
+flat_reg <- stan_glmer(simple_reg, data = pos_reg_data,chains = 1)
 
 
-flat_reg %>% 
-  as.data.frame() %>% 
-  select(contains('did_')) %>% 
+freq_did_plot <-  freq_flat_reg %>% 
+  tidy() %>% 
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>% 
+  filter(str_detect(term,'did')) %>% 
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>% 
+  ggplot() +
+geom_hline(aes(yintercept = 0)) + 
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower)) + 
+  ylab('Estimated MLPA Effect') + 
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) + 
+  xlab('Year')
+         
+freq_did_plot
+
+did_plot <- flat_reg %>% 
+  as.data.frame() 
+  
+  did_plot <- did_plot[,str_detect(colnames(did_plot), 'did_')] %>% 
   gather(did,effect) %>% 
   mutate(year = str_replace(did,'did_','') %>% as.numeric()) %>% 
   group_by(year) %>% 
@@ -1037,40 +1064,108 @@ flat_reg %>%
             bottom = sort(effect)[round(.025 * length(effect))]) %>% 
   ggplot() + 
   geom_hline(aes(yintercept = 0)) + 
-  geom_pointrange(aes(year,mean_effect, ymax = top, ymin = bottom))
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_pointrange(aes(year,mean_effect, ymax = top, ymin = bottom)) + 
+  ylab('Estimated MLPA Effect') + 
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) + 
+  xlab('Year')
 
-data_frame(var = names(flat_reg$coefficients),coef = flat_reg$coefficients) %>%
-  filter(str_detect(var,'did_')) %>% 
-  ggplot(aes(var,coef)) + 
-  geom_point()
+did_plot
+ggsave('new_mlpa_did.pdf',did_plot)
+
+mtcars %>% 
+  map_df(center_scale)
+
+```
+
+Now let's try and replicate with a custom STAN function
+
+```{r}
+
+did_plot <- flat_reg %>% 
+  as.data.frame() %>% 
+  select(contains('classcode')) %>% 
+  gather(classcode,effect) %>% 
+  mutate(classcode = str_replace(classcode,'classcode',''))
+
+stan_reg_data <- pos_reg_data %>% 
+  mutate(year_marker = 1) %>% 
+  mutate(year = paste('year',year, sep = '_')) %>% 
+  spread(year,year_marker, fill = 0) %>% 
+  mutate(classcode = paste('classcode',classcode, sep = '_'),
+         class_marker = 1) %>% 
+  spread(classcode,class_marker, fill = 0) %>% 
+    mutate(site = paste('site',site, sep = '_'),
+         site_marker = 1) %>% 
+  spread(site,site_marker, fill = 0) %>% 
+  select(log_density, contains('year_'), contains('did_'),
+         contains('classcode_'), contains('site_')) %>% 
+  mutate(constant = 1)
+
+levels_to_drop <- c(min(pos_reg_data$year),sort(unique(pos_reg_data$classcode))[1],
+                    sort(unique(pos_reg_data$site))[1])
+
+stan_reg_data <- stan_reg_data %>% 
+  select(-year_2000, -did_2003, -site_ANACAPA_ADMIRALS, -classcode_acor)
+                    
+
+y <- as.numeric(stan_reg_data$log_density)
+
+x <- stan_reg_data %>% 
+  select(-log_density) %>% 
+  as.matrix()
+
+
+stan_fit <- stan(
+  file = '../scripts/ahnold_reg.stan',
+  data = list(
+    num_pars = dim(x)[2],
+    num_obs = length(y),
+    y = y,
+    x = x
+  ),
+  chains = 4, 
+  warmup = 1000,
+  iter = 2000,
+  cores = 4, 
+  refresh = 100
+)
+
+did_terms <- which(str_detect(colnames(x),'did'))
+
+did_plot <- stan_fit %>% 
+  as.data.frame() %>% 
+  select_(.dots = as.list(did_terms)) %>% 
+  gather(did,effect) %>% 
+  # mutate(year = str_replace(did,'did_','') %>% as.numeric()) %>% 
+  group_by(did) %>% 
+  summarise(mean_effect = mean(effect),
+            top = sort(effect)[round(.975 * length(effect))],
+            bottom = sort(effect)[round(.025 * length(effect))]) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0)) + 
+  # geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_pointrange(aes(1:length(mean_effect),mean_effect, ymax = top, ymin = bottom)) + 
+  ylab('Estimated MLPA Effect') + 
+  # ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) + 
+  xlab('Year')
 
 
 ```
 
+OK! Things work. Moving over to `run_ahnold` for formal construction of this process
 
+### Multi-level (hierarchichal) notes
 
+OK, so I think I'm finally starting to get the hang of this. The confusion, from a regression point of view, is how mechanical do you have to be about the "multilevel part". 
 
-### Apply `rstanarm` regression
+Look at Gelman 12.15 and the code there. 
 
-Now use `rstanarm` to fit a hierarchichal model, using `stan_glmer`
+Your confusion has been, say you've got observations at the transect level, and you want to include species level covariates. In a fixed effects world this wouldn't work: you can't estiamtes species level fixed effects, along with things like vbk. that don't vary within a species. You can either include species fixed effects, or component things that define species. 
 
-Standard diagnostics
+The way Gelman talks about this in multilevel modeling, is that you can instead model this in a hierarchical manner, where the coefficients of the species fixed effects are a function of things like vbk. This makes sense, but the question is the mechanics of this. My impression was that I would have to do this all manually, i.e. take the betas of the fixed effects, then write up a regression of those betas as a function of vbk etc. Makes sense but a total pain in the ass. 
 
-### Apply using custom `STAN`
+Looking at Gelman page 266 though, it becomes clearer. It seems like mechanically you can do this just by converting the fixed effects to clustered random effects, and then including vbk as just another coefficient. 
 
-Try and replicate the above, but using your own `stan` code
-
-Standard diagnostics
-
-
-### Expanded hierarchy
-
-Try out the double nested thing from Gelman and Hill, where you estiamte species specific fixed effects, which come from a distribution with mean defined by life history traits 
-
-Standard diagnostics
-
-This is really similar to FISH 558 Homework 4
-
-
-
+e.g. `lmer(y ~ x + vbk + (1 | species))`
 
