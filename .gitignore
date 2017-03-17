@@ -27,3 +27,6 @@ Figs**/*.*
 **/*.docx
 GFR_Master.R
 .Rapp.history
+.html
+*.html
+*.mp4

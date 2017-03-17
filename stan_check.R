@@ -26,7 +26,7 @@ demons::load_functions()
 # set options ------------------------------
 # Summary: set options for model run
 
-run_name <- '1.0'
+run_name <- 0.51
 
 run_dir <- paste('results', run_name, sep = '/')
 
@@ -111,22 +111,10 @@ if (file.exists('data/enso.csv')) {
 if (file.exists('data/pdo.csv')) {
   pdo <- read_csv('data/pdo.csv') %>%
     group_by(year) %>%
-    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
-    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
-           lag2_pdo = dplyr::lag(mean_pdo,2),
-           lag3_pdo = dplyr::lag(mean_pdo,3),
-           lag4_pdo = dplyr::lag(mean_pdo,4))
+    summarise(mean_pdo = mean(pdo, na.rm = T))
 
 } else {
   scrape_pdo(outdir = 'data/')
-
-  pdo <- read_csv('data/pdo.csv') %>%
-    group_by(year) %>%
-    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
-    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
-           lag2_pdo = dplyr::lag(mean_pdo,2),
-           lag3_pdo = dplyr::lag(mean_pdo,3),
-           lag4_pdo = dplyr::lag(mean_pdo,4))
 
 }
 
@@ -162,12 +150,12 @@ reg_data <- density_data %>%
   filter(is.na(targeted) == F,
          is.na(year) == F,
          is.na(biomass) == F) %>%
-# select_(.dots = as.list(reg_vars)) %>%
+  # select_(.dots = as.list(reg_vars)) %>%
   map2_df(
     colnames(.),
     center_scale,
     omit_names = c('log_density','mean_density', 'biomass', 'year', 'mean_enso', 'mean_pdo',
-                   'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
+                   'targeted','year_mpa')
   ) %>%
   by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
   filter(.out == F)
@@ -191,8 +179,7 @@ reg_data <- reg_data %>%
          is.na(commonname) == F,
          is.na(targeted) == F,
          year > min_year,
-         !str_detect(commonname %>% tolower(), 'yoy'),
-         region != 'SBI')
+         !str_detect(commonname %>% tolower(), 'yoy'))
 
 if (channel_islands_only == T){
   reg_data <- reg_data %>%
@@ -218,29 +205,19 @@ reg <-
       'log_density ~',
       paste(did_year, collapse = '+'),
       ' + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
-      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 | site) + targeted'
+      lag3_enso + lag4_enso + mean_pdo  + (1 | site) + targeted'
     )
-  )
+    )
 
-gamma_reg <-
+reg <-
   as.formula(
     paste0(
-      'biomass ~',
+      'log_density ~',
       paste(did_year, collapse = '+'),
-      ' + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
-      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 | site) + targeted'
+      ' + (1|year) + (1 + mean_temp + temp2 |classcode)+ mean_enso + lag1_enso  + lag2_enso +
+      lag3_enso + lag4_enso + mean_pdo  + (site | region) + (1 | region:classcode) + targeted'
     )
     )
-
-# reg <-
-#   as.formula(
-#     paste0(
-#       'log_density ~',
-#       paste(did_year, collapse = '+'),
-#       ' + (1|year) + (1 + mean_temp + temp2 + region |classcode)+ mean_enso + lag1_enso  + lag2_enso +
-#       lag3_enso + lag4_enso + mean_pdo + (site | region) + targeted'
-#     )
-#     )
 
 
 posreg <-
@@ -267,142 +244,4 @@ seen_model <- lme4::lmer(reg, data = seen_reg_data)
 
 stan_seen_model <- stan_glmer(reg, data = seen_reg_data)
 
-
-seen_ana_sci_model <- lme4::lmer(reg, data = seen_reg_data %>%
-                                filter(region %in% c('ANA','SCI')))
-
-seen_mpa_model <- lme4::lmer(reg, data = seen_reg_data %>%
-                                   filter(year_mpa >0))
-
-unseen_model <- lme4::glmer(any_seen ~ mean_temp + mean_kelp + mean_vis + (1 | site_side) +
-                              (1 | year) + (1 | classcode), family = binomial(link = 'logit'), data = reg_data)
-
-
-# diagnose model ------------------------------
-# Summary: run model diagnostics
-
-
-density_cor <- reg_data %>%
-  select(year, site_side,classcode,biomass) %>%
-  spread(classcode, biomass) %>%
-  select(-year,-site_side) %>%
-  cor() %>%
-  as_data_frame() %>%
-  mutate(classcode = colnames(.)) %>%
-  gather(classcode_2,correlation, -classcode) %>%
-  left_join(life_history_data %>% select(classcode, targeted), by = 'classcode')
-
-
-species_correlation_plot <- density_cor %>%
-  ggplot() +
-  geom_tile(aes(classcode, classcode_2, fill = correlation)) +
-  scale_fill_viridis()
-
-# reg_data %>%
-#   group_by(year, targeted) %>%
-#   summarise(mb = mean(biomass)) %>%
-#   spread(targeted,mb) %>%
-#   ggplot(aes(`0`, `1`)) +
-#   geom_point()
-
-
-aug_seen_model <- seen_model %>%
-  augment()
-
-resid_plot <- aug_seen_model %>%
-  ggplot(aes(.fitted, .resid)) +
-  geom_ref_line(h = 0, colour = 'red') +
-  geom_point(alpha = 0.75)
-
-aug_unseen_model <- unseen_model %>%
-  augment() %>%
-  mutate(prob_seen = 1 / (1 + exp(-.fitted)),
-         wtf = predict(unseen_model, type = 'response'))
-
-unseen_plot <- aug_unseen_model %>%
-  ggplot(aes(prob_seen, any_seen)) +
-  geom_point()
-
-unseen_plot
-
-
-# figures ------------------------------
-# Summary: make summary figures
-
-
-mpa_effect_plot <-  seen_model %>%
-  tidy() %>%
-  mutate(lower = estimate - 1.96 * std.error,
-         upper = estimate + 1.96 * std.error) %>%
-  filter(str_detect(term,'did')) %>%
-  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
-  ggplot() +
-  geom_hline(aes(yintercept = 0)) +
-  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
-  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
-  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
-  ylab('Estimated MLPA Effect') +
-  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
-  xlab('Year') +
-  coord_cartesian(ylim = c(-1.25,1.25)) +
-  labs(title = 'System-Wide Effect')
-
-mpa_effect_plot
-
-
-in_mpa_effect_plot <-  seen_mpa_model %>%
-  tidy() %>%
-  mutate(lower = estimate - 1.96 * std.error,
-         upper = estimate + 1.96 * std.error) %>%
-  filter(str_detect(term,'did')) %>%
-  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
-  ggplot() +
-  geom_hline(aes(yintercept = 0)) +
-  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
-  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower), color = 'skyblue4', size = 2) +
-  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate), color = 'skyblue4', size = 2) +
-  ylab('Estimated MLPA Effect') +
-  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
-  xlab('Year') +
-  coord_cartesian(ylim = c(-1.25,1.25)) +
-  labs(title = 'Inside MPA Effect')
-
-in_mpa_effect_plot
-
-
-mpa_anasci_effect_plot <-  seen_ana_sci_model %>%
-  tidy() %>%
-  mutate(lower = estimate - 1.96 * std.error,
-         upper = estimate + 1.96 * std.error) %>%
-  filter(str_detect(term,'did')) %>%
-  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
-  ggplot() +
-  geom_hline(aes(yintercept = 0)) +
-  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
-  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
-  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
-  ylab('Estimated MLPA Effect') +
-  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
-  xlab('Year') +
-  coord_cartesian(ylim = c(-1.25,1.25)) +
-  labs(title = 'Anacapa and Santa Cruz Only')
-
-
-mpa_anasci_effect_plot
-
-# save final results ------------------------------
-# Summary: save final things
-#
-demons::save_plots(plot_dir = run_dir)
-
-plots <- ls()[str_detect(ls(), '_plot')]
-
-plot_list <- map(plots, get) %>%
-  set_names(plots)
-
-save(file = paste0(run_dir,'/data.Rdata'), reg_data, seen_reg_data)
-
-save(file = paste0(run_dir,'/regressions.Rdata'), seen_model, seen_ana_sci_model, seen_mpa_model)
-
-save(file = paste0(run_dir,'/plots.Rdata'), plot_list)
-
+save(file = 'stan_check.Rdata', stan_seen_model, seen_reg_data)

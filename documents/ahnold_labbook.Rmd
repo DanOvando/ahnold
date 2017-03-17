@@ -1169,3 +1169,61 @@ Looking at Gelman page 266 though, it becomes clearer. It seems like mechanicall
 
 e.g. `lmer(y ~ x + vbk + (1 | species))`
 
+
+## Propensity Scores
+
+```{r}
+
+```
+
+Add in broad bioregion effect
+
+That could just be recovery inside and not spillover. Do you have to have spillover
+
+They don't count the 
+
+Look at Steve's BACI response to Ray's 
+
+What happens to the regulaions outside in addition to the reserve. A simple model that looks at what would you expect 
+
+Good data for the mainland 
+
+Look into literature for priors 
+
+I'm going to show that you can disentangle recruitment from lenghts
+
+## 2017-03-15
+
+### Expressing MLPA effect
+
+Might be a good idea to show the significance statistically, but the effect through simulation. Simulate draws from the joint posterior with and without MLPA, show mean densities. Easier to understand, allows you to combine the net effect of hurdle component
+
+## 2017-03-16
+
+### Check in with Jen
+
+* Check in with the idea of more local indicies of ENSO/PDO
+
+* No big ENSO event till 2013
+
+* Might need to explore removing painted greenling since they are bottom dwelling cryptic-ish. Tend to be counted more frequently when there wasn't much else. 
+
+* Drop santa barbara island entirely (one off sample, 4 years)
+
+* Let's think about parsing this by species. Fishing is very different across different species in here, what species are really driving the analysis? Are different species disproportionately driving the results 
+
+* We have before and after data from the overflights, so could at least use that as a prior on the scale of redistribution. SAMSAP might be able to pick up the potential "blue paradox" side of things, as
+
+* What if this is all just a recruitment signal 
+
+* We could look at the SMURF data to get an idea of the recruitment trends 
+
+* Something weird happened in 2008-2010 across all the CI data
+
+* PISCO assumes that all species have the same probability of being seen anywhere in all the islands. Might be worth looking into what happens if you zero fill by data-base wide 
+
+
+
+
+
+
