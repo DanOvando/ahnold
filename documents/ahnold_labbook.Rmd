@@ -403,7 +403,7 @@ density_comp_plot <- density_data %>%
   caption = 'Resolution is at species-year-site-side')
 
 density_comp_plot
-ggsave(density_comp_plot, file = 'density comparison plot.pdf')
+ggsave(density_comp_plot, file = 'density comparison plot.pdf',dev = cairo_pdf)
 # plotly::ggplotly(density_comp_plot)
 
 ```
@@ -598,6 +598,7 @@ I don't think that that's a valid comparison, since you at least assume that the
 Alternatively, let's think about this mechanistically. If you believe that the "targeted" classification is real, then by definition the MPA has no direct effect on the fished species. The real question then is whether there are trophic interactions that cause a problem. So, why not run a regression of unfished densities as a function of targeted abundance, controlling for other crap?
 
 ```{r, include=F, eval=F}
+
 trophic_data <- density_data %>% 
   mutate(classcode = toupper(classcode)) %>% 
     left_join(life_history_data, by = 'classcode') %>% 
@@ -980,7 +981,7 @@ You could just include the DiD term
 
 Let's start with a bare bones regression, using `rstanarm`, one hierarchichal, one not. You'll then compare your results to one where you code the likelihood yourself 
 
-```{r}
+```{r, eval = F}
 
 reg_vars <- c('log_density','factor_year', 'year','targeted', 'did', 'region' ,
 'mean_enso','mean_pdo', 'mean_temp','classcode','site','side','post_mlpa','region',
@@ -1080,7 +1081,7 @@ mtcars %>%
 
 Now let's try and replicate with a custom STAN function
 
-```{r}
+```{r, eval = F}
 
 did_plot <- flat_reg %>% 
   as.data.frame() %>% 
@@ -1222,8 +1223,88 @@ Might be a good idea to show the significance statistically, but the effect thro
 
 * PISCO assumes that all species have the same probability of being seen anywhere in all the islands. Might be worth looking into what happens if you zero fill by data-base wide 
 
+## 2017-21-03
+
+Things are looking pretty strong. Basic Model diagnostics look solid for the most part, though the LMER approach is a bit skewed to the right. But no alarm bells. The biggest issue is really low effective samples sizes for several species, as well as collinearity between a few of the model parameters (load up the STAN run and launch shinystan to dig into this a bit). 
+
+A few things you can do to try and deal with that. Re-run the model with only let's say the top 75% percentile by positive occurance species, to make sure that you're not getting too thrown by a bunch of really rare species. Can also try rerunning without painted greenling, since Jen seems to think those buggers might be a problem. I'm a little hesitant to do too much judgement based pruning of the data. Key things is does it really cause the results to break down. 
+
+Jen also raised the issue of the zero filling. You did your zero filling by site. It seems that when Jen was going from raw lengths to densities, she was zero filling by region. So, a garibalidi should be missing from every transect in San Miguel. This seems a litle extreme to me, but you can play with this once you get the ability to move from lenghts to densities. I really want to hone in on any subjective decisions that might be driving the results, and this seems like a potentially big candidate
+. 
+
+Update: removing painted greenling has no real effect on results. Phew. 
+
+Running now with only the top 50th percentile of species incorporated in the analysis, seeing what that does. 
+
+One thought on the random vs. fixed effects thing: should species really be a random effect? Maybe you should only have varying slopes but not intercepts by species, so have fixed effects by species category, and then temperature and region effects by species.
+
+Wooooo species effects don't matter either
+
+You should go through and spell out why you think some things are random and some are fixed effects, drawing from the gelman framework, where the nature of the hierarchichal prior is really the defining characteristic 
+
+## Sketching out Hypothesis Runs
+
+What are the hypothetical states of the MPA world that you want to run over? One option is to specify a handful of boutique model runs: model 1, 2, 3 etc, each designed to evaluate a very specific set of circumstances. The other is to specify a set of key levels, and then monte carlo over combinations of those levers. 
+
+Regardless, the key things seem to be
+
+  1. Strength of density dependence
+  2. Nature of density dependence
+  3. initial b and f
+  4. Larval movement
+  5. Adult movement
+  6. Age at maturity 
+  7. Fleet reaction
+  8. Species composition
+  9. Scale of MPA relative to movement
+  
+The first 6 are relatively straightforward. Seems possibly easier to monte carlo and then pull out case study scenarios that you are interested in, since speed really isn't the issue here. 
+
+You could also use that to easily create ensembles of species. 
+
+So, for a given "run" you'd specify how many species you want to generate, and then project them and aggregate. So, you could specify one species if you want ot make it clear, or an assemblage of many different species. 
+
+The risk with this approach is that you might just get a gigantic mess of results. But, you can easily pare this approach down to a concrete set if you want. I think this gets away from "cherry picking" scenarios that fit your story. You can present a giant array in trelliscope of outcomes, and then choose some to present in the paper. 
 
 
+  
+  1. Strength of density dependence
+    * this is just steepness
+  2. Nature of density dependence
+    * You can use the babcock definitions that are already in there
+  3. f
+    * One option is just to say pick a random F
+    * The other option is some kind of effort dynamics model, from open access to one way trip etc.
+    * Seems excessive, the key thing is it overfished or not, and is it getting worse or not
+    * Pick a random f, run it out
+    * Stop the thing at some random point.... problem there is you can't be in "recovery"
+  4. Larval movement
+    * harder. Will take some thought to do this one right really. Key thing is do you want to deal with larvae or with recruits really. See how you do it in GASP  
+  5. Adult movement
+    * Easy enough, what proportion of adults move from each cell
+  6. Age at maturity 
+    * simple enough
+  7. Fleet reaction
+    * Dilute
+    * Concentrate
+  8. Species composition
+  9. Scale of MPA relative to movement
+    * Make the MPAs about the pattern of CI
 
+For now, let's take the life history straight out of the data that are actually used. So, grab the species that make it through the filter and project those. So, each run will take the life history data and run with it with a random assortment of traits. 
+
+Let's focus on keeping it simple stupid. Take the species, project forward with a random F and a random stop point, a steepness drawn from the family distribution for that species, a random density denepence form... let's spell it out
+
+
+1. Draw a species from the database
+2. Fill in missing non-variale life history characteristics (e.g. linf)
+3. Randomly assign characteristics of interest (density dependence form, movement, etc.)
+4. Create completed fish object
+5. Create a fleet object
+6. Fill in the fleet object with things like F, or fleet model dynamics etc. 
+7. Pass a completed fish and fleet object to `sim_fishery`
+8. Store results
+9. Repeat runs a whole bunch of times. 
+10. Aggregate as desired
 
 

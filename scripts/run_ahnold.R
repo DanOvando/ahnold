@@ -26,14 +26,12 @@ demons::load_functions()
 # set options ------------------------------
 # Summary: set options for model run
 
-run_name <- '1.0'
+run_name <- '1.0-STAN'
 
 run_dir <- paste('results', run_name, sep = '/')
 
 run_description <-
-  'Model development and testing. Focusing on hierarchichal
-positive observations. Tackling logit part next. Trying to get the new structure up and running.
-Will move to 1.0 when fully functional delta-glm. Adding in species-region interactions'
+  'Model selection process, testing STAN selection'
 
 if (dir.exists(run_dir) == F) {
   dir.create(run_dir)
@@ -48,6 +46,8 @@ write(run_description,
 channel_islands_only <- T
 
 min_year <- 1999
+
+occurance_ranking_cutoff <- 0.5
 
 base_theme <- hrbrthemes::theme_ipsum(base_size = 18, axis_title_size = 16)
 
@@ -179,20 +179,36 @@ reg_data <- reg_data %>%
   mutate(temp2 = mean_temp ^ 2,
          pdo2 = mean_pdo ^ 2,
          enso2 = mean_enso ^ 2,
-         site_side = paste(site,side,sep = '_'))
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
 
 
 # filter data ------------------------------
 # Summary: Apply all filters to data here for clarity
 
+# Evaluate species occurances
+
+species_sample_counts = reg_data %>%
+  group_by(classcode) %>%
+  summarise(num_samples = sum(is.na(biomass) == F & biomass > 0)) %>%
+  ungroup() %>%
+  mutate(prank = percent_rank(num_samples)) %>%
+  filter(prank > occurance_ranking_cutoff) %>%
+  arrange(prank %>% desc()) %>%
+  left_join(life_history_data %>% select(classcode, targeted), by = 'classcode')
+
+fished_balance_plot <- species_sample_counts %>%
+  ggplot(aes(targeted)) +
+  geom_bar()
 
 reg_data <- reg_data %>%
-  filter(is.na(biomass) == F,
+  dplyr::filter(is.na(biomass) == F,
          is.na(commonname) == F,
          is.na(targeted) == F,
          year > min_year,
          !str_detect(commonname %>% tolower(), 'yoy'),
-         region != 'SBI')
+         region != 'SBI',
+         classcode %in% species_sample_counts$classcode)
 
 if (channel_islands_only == T){
   reg_data <- reg_data %>%
@@ -202,35 +218,146 @@ if (channel_islands_only == T){
 seen_reg_data <- reg_data %>%
   filter(any_seen == T)
 
-# prep regression ------------------------------
-# Summary: select variables, forms, etc.
-#
-
 did_years <-
   paste('did', min(seen_reg_data$year): max(seen_reg_data$year), sep = '_')
 
 did_year <- did_years[did_years != 'did_2002']
 
 
-reg <-
+# model selection ------------------------------
+# Summary: Run and compare a variety of model structures
+
+reg_fmla_1 <-
   as.formula(
     paste0(
-      'log_density ~',
-      paste(did_year, collapse = '+'),
-      ' + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
-      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 | site) + targeted'
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      " + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
+      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted"
     )
   )
 
-gamma_reg <-
+reg_fmla_2 <-
   as.formula(
     paste0(
-      'biomass ~',
-      paste(did_year, collapse = '+'),
-      ' + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
-      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 | site) + targeted'
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      " + factor_year + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
+      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted"
     )
     )
+
+
+
+
+reg_fmla_4 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + mean_pdo + (1 |region:site) + targeted"
+    )
+    )
+
+reg_fmla_5 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + (1 |region:site) + targeted"
+    )
+  )
+
+reg_fmla_6 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_pdo + (1 |region:site) + targeted"
+    )
+  )
+
+reg_fmla_7 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + region|classcode)+ mean_pdo + mean_temp + (1 |region:site) + targeted"
+    )
+  )
+
+reg_fmla_8 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
+      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted"
+    )
+    )
+
+reg_fmla_9 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
+      lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted"
+    )
+  )
+
+
+regs <- ls()[str_detect(ls(),"reg_fmla")]
+
+reg_list <- map(regs, get) %>%
+  set_names(regs)
+
+
+validate <- seen_reg_data %>%
+  crossv_mc(1, test = 0.05)
+
+test_data <- list(test_training = list(validate), reg_fmlas = reg_list)
+
+
+test_data <- cross_d(test_data) %>%
+  mutate(reg_name = regs) %>%
+  unnest(test_training, .drop = F)
+
+canditate_models <- test_data %>%
+  mutate(fitted_model = map2(reg_fmlas, train,~lme4::lmer(.x, data = .y)))
+
+
+canditate_models <- canditate_models %>%
+  mutate(root_mean_se = map2_dbl(fitted_model, train , ~modelr::rmse(.x,.y)),
+         aic = map_dbl(fitted_model, AIC),
+         bic = map_dbl(fitted_model, BIC),
+         r2 = map2_dbl(fitted_model, train, ~rsquare(.x,.y))) %>%
+  arrange(aic)
+
+# prep regression ------------------------------
+# Summary: select variables, forms, etc.
+#
+
+reg <- canditate_models$reg_fmlas[[1]]
+# reg <-
+#   as.formula(
+#     paste0(
+#       'log_density ~',
+#       paste(did_year, collapse = '+'),
+#       ' + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
+#       lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted'
+#     )
+#   )
+
+# gamma_reg <-
+#   as.formula(
+#     paste0(
+#       'biomass ~',
+#       paste(did_year, collapse = '+'),
+#       ' + (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + lag1_enso  + lag2_enso +
+#       lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted'
+#     )
+#     )
 
 # reg <-
 #   as.formula(
@@ -243,15 +370,15 @@ gamma_reg <-
 #     )
 
 
-posreg <-
-  as.formula(
-    paste0(
-      'biomass ~',
-      paste(did_year, collapse = '+'),
-      ' + (1|year) + (1 + mean_temp + temp2 |classcode)+ mean_enso + lag1_enso  + lag2_enso +
-      lag3_enso + lag4_enso + mean_pdo  + (1 | site) + region  + targeted'
-    )
-    )
+# posreg <-
+#   as.formula(
+#     paste0(
+#       "biomass ~",
+#       paste(did_year, collapse = '+'),
+#       ' + (1|year) + (1 + mean_temp + temp2 |classcode)+ mean_enso + lag1_enso  + lag2_enso +
+#       lag3_enso + lag4_enso + mean_pdo  + (1 | site) + region  + targeted'
+#     )
+#     )
 
 # ' + (1|year) + (1 + mean_temp + temp2 |classcode) + mean_enso +  mean_pdo + (1 | site_side) + (1 | site) + (1 | region) + targeted + post_mlpa'
 
@@ -264,8 +391,9 @@ seen_model <- lme4::lmer(reg, data = seen_reg_data)
 
 
 # seen_model <- lme4::glmer(posreg, data = seen_reg_data, family = Gamma(link = ''))
+print('wtf')
 
-stan_seen_model <- stan_glmer(reg, data = seen_reg_data)
+stan_seen_model <- stan_glmer(reg, data = seen_reg_data, cores = 4, chains = 4, iter = 4000)
 
 
 seen_ana_sci_model <- lme4::lmer(reg, data = seen_reg_data %>%
@@ -309,10 +437,21 @@ species_correlation_plot <- density_cor %>%
 aug_seen_model <- seen_model %>%
   augment()
 
-resid_plot <- aug_seen_model %>%
-  ggplot(aes(.fitted, .resid)) +
+resid_v_fit_plot <- aug_seen_model %>%
+  ggplot(aes(.fitted, .resid, color = site)) +
   geom_ref_line(h = 0, colour = 'red') +
-  geom_point(alpha = 0.75)
+  geom_point(alpha = 0.5, show.legend = F)
+
+resid_hist_plot <- aug_seen_model %>%
+  ggplot(aes(.resid)) +
+  geom_histogram() +
+  geom_ref_line(v = 0, colour = 'red')
+
+qq_plot <- aug_seen_model %>%
+  ggplot(aes(sample = .resid)) +
+  geom_abline(aes(slope = 1, intercept = 0), color = 'red', linetype = 2) +
+  stat_qq() +
+  labs(y = 'Deviance Residuals', title = 'Normal QQ plot')
 
 aug_unseen_model <- unseen_model %>%
   augment() %>%
@@ -323,7 +462,7 @@ unseen_plot <- aug_unseen_model %>%
   ggplot(aes(prob_seen, any_seen)) +
   geom_point()
 
-unseen_plot
+# unseen_plot
 
 
 # figures ------------------------------
@@ -347,7 +486,7 @@ mpa_effect_plot <-  seen_model %>%
   coord_cartesian(ylim = c(-1.25,1.25)) +
   labs(title = 'System-Wide Effect')
 
-mpa_effect_plot
+# mpa_effect_plot
 
 
 in_mpa_effect_plot <-  seen_mpa_model %>%
@@ -367,7 +506,7 @@ in_mpa_effect_plot <-  seen_mpa_model %>%
   coord_cartesian(ylim = c(-1.25,1.25)) +
   labs(title = 'Inside MPA Effect')
 
-in_mpa_effect_plot
+# in_mpa_effect_plot
 
 
 mpa_anasci_effect_plot <-  seen_ana_sci_model %>%
@@ -388,21 +527,21 @@ mpa_anasci_effect_plot <-  seen_ana_sci_model %>%
   labs(title = 'Anacapa and Santa Cruz Only')
 
 
-mpa_anasci_effect_plot
+# mpa_anasci_effect_plot
 
 # save final results ------------------------------
 # Summary: save final things
 #
 demons::save_plots(plot_dir = run_dir)
 
-plots <- ls()[str_detect(ls(), '_plot')]
+plots <- ls()[str_detect(ls(), "_plot")]
 
-plot_list <- map(plots, get) %>%
+plot_list <- purrr::map(plots, get) %>%
   set_names(plots)
 
-save(file = paste0(run_dir,'/data.Rdata'), reg_data, seen_reg_data)
+save(file = paste0(run_dir,"/data.Rdata"), reg_data, seen_reg_data)
 
-save(file = paste0(run_dir,'/regressions.Rdata'), seen_model, seen_ana_sci_model, seen_mpa_model)
+save(file = paste0(run_dir,"/regressions.Rdata"), seen_model, seen_ana_sci_model, seen_mpa_model, stan_seen_model)
 
-save(file = paste0(run_dir,'/plots.Rdata'), plot_list)
+save(file = paste0(run_dir,"/plots.Rdata"), plot_list)
 
