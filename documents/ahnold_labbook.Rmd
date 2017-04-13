@@ -1307,4 +1307,20 @@ Let's focus on keeping it simple stupid. Take the species, project forward with 
 9. Repeat runs a whole bunch of times. 
 10. Aggregate as desired
 
+# 4/13/17
 
+As long as the errors in your dependent variable are mean 0, then there's no problem. If they are not, or if the errors are a function of your dependent variable, then you do have  problem
+
+Look in to stratification from that book of Kyles
+
+
+
+## Check in with COdy
+
+Make mortality/growth rates a function of biomass
+
+Check on lit on this 
+
+Make plot of length on x and year on y, so you get a bunch of stacked shifts in cohorts
+
+Maybe add in a ricker function, though might need to double check on the steepness values 

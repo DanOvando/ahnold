@@ -215,7 +215,10 @@ comp_foo <- function(fish, fleet, year_mpa,mpa_size,sim_years, num_patches,
     outcomes <- no_mpa %>% 
       bind_rows(wi_mpa) %>% 
       group_by(year,experiment) %>% 
-      summarise(ssb = sum(ssb), percent_mpa = mean(mpa))
+      summarise(ssb = sum(ssb), percent_mpa = mean(mpa),
+                catch = sum(biomass_caught),
+                profits = sum(profits),
+                effort = sum(effort))
     
 
   
@@ -257,7 +260,7 @@ year_mpa <- 25
 
 sim_grid_outcomes <- sim_grid %>%
   mutate(year_mpa = year_mpa)  %>%
-  sample_n(100) %>%
+  sample_n(1) %>%
   mutate(outcomes = pmap(list(fish = fish, fleet = fleet,
                               year_mpa = year_mpa,
                               mpa_size = mpa_size),
@@ -290,6 +293,13 @@ sim_grid_plots <- sim_grid_outcomes %>%
   mutate(eq_f = map_dbl(fleet,'eq_f')) %>%
   select(-fish,-fleet,-outcomes)
 
+
+a %>% 
+  gather('metric','value',ssb,catch,profits, effort) %>% 
+  ggplot(aes(year,value)) + 
+  geom_vline(aes(xintercept = year_mpa + min(year) - 1), linetype = 2) +
+  geom_line(aes(color = experiment)) + 
+  facet_wrap(~metric, scales = "free_y")
 
 trelliscope(sim_grid_plots,name = 'arg')
 

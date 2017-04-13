@@ -3,11 +3,23 @@ library(spasm)
 library(stringr)
 library(rfishbase)
 library(modelr)
+library(Rcpp)
+library(RcppEigen)
+
+# sourceCpp("scripts/eigen_mat_mult.cpp")
 
 fish <- create_fish(adult_movement = 1e-3,
                     larval_movement = 1e-3,
                     density_dependence_form = 1,
-                    price = 10)
+                    price = 10,
+                    query_fishbase = F,
+                    linf = 100,
+                    age_mature = 2,
+                    vbk = .2,
+                    t0 = 0,
+                    max_age = 20,
+                    weight_a = 1e-3,
+                    weight_b = 3)
 
 fleet <-
   create_fleet(
@@ -21,10 +33,10 @@ fleet <-
     beta = 1.3,
     theta = 1e-1,
     q = 1e-3,
-    fleet_model = 'constant-catch',
+    fleet_model = 'constant-effort',
     effort_allocation = 'gravity',
     initial_effort = 1000,
-    target_catch = 100
+    target_catch = 1
   )
 
 # fish$price <- 10
@@ -48,7 +60,7 @@ without_mpa <-
   spasm::sim_fishery(
     fish = fish,
     fleet = fleet,
-    manager  = create_manager(mpa_size = 0, year_mpa = 100),
+    manager  = create_manager(mpa_size = 0, year_mpa = 10),
     num_patches = 100,
     burn_year = 25,
     sim_years = 200
@@ -67,12 +79,37 @@ with_mpa <-
   spasm::sim_fishery(
     fish = fish,
     fleet = fleet,
-    manager  = create_manager(mpa_size = 0.9, year_mpa = 100),
-    num_patches = 100,
+    manager  = create_manager(mpa_size = 0.5, year_mpa = 10),
+    num_patches = 10,
     burn_year = 25,
-    sim_years = 200
+    sim_years = 100
   ) %>%
   mutate(run = 'with_mpa')
+
+
+with_mpa %>%
+  filter(year == max(year)) %>%
+  ggplot(aes(age,numbers)) +
+  geom_col()
+
+with_mpa %>%
+  filter(year == max(year)) %>%
+  group_by(patch) %>%
+summarise(ssb = sum(ssb), mpa = unique(mpa)) %>%
+  ggplot(aes(patch,ssb, fill = mpa)) +
+  geom_col()
+
+
+with_mpa %>%
+  filter(year == max(year)) %>%
+  group_by(mpa,age) %>%
+  summarise(numbers = sum(numbers)) %>%
+  ggplot(aes(x = age,y =numbers, fill = mpa)) +
+  geom_col(position = 'dodge')
+
+
+
+
 
 with_mpa %>%
   group_by(year) %>%
