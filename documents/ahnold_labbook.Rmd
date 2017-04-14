@@ -1323,4 +1323,4 @@ Check on lit on this
 
 Make plot of length on x and year on y, so you get a bunch of stacked shifts in cohorts
 
-Maybe add in a ricker function, though might need to double check on the steepness values 
+Maybe add in a ricker function, though might need to double check on the steepness values. You might be moving things over the to right hand side of 

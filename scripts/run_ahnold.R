@@ -20,13 +20,14 @@ library(AER)
 library(broom)
 library(viridis)
 library(scales)
+library(trelliscopejs)
 
 demons::load_functions()
 
 # set options ------------------------------
 # Summary: set options for model run
 
-run_name <- '1.0-STAN'
+run_name <- 'Working'
 
 run_dir <- paste('results', run_name, sep = '/')
 
@@ -72,7 +73,7 @@ site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
   unique()
 
 length_data <- length_data %>%
-  left_join(life_history_data, by = 'classcode') %>%
+  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') %>%
   left_join(site_data, by = c('site', 'side'))
 
 conditions_data <- length_data %>%
@@ -166,11 +167,23 @@ reg_data <- density_data %>%
   map2_df(
     colnames(.),
     center_scale,
-    omit_names = c('log_density','mean_density', 'biomass', 'year', 'mean_enso', 'mean_pdo',
+    omit_names = c('log_density','biomass', 'year', 'mean_enso', 'mean_pdo',
                    'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
   ) %>%
+  mutate(log_density = log(biomass)) %>%
   by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
   filter(.out == F)
+
+
+# a <- reg_data %>%
+#   group_by(classcode) %>%
+#   mutate(log_density = center_scale(log_density,'log_density'))
+#
+# a %>%
+#   group_by(year)
+
+# cs_reg_data <- reg_data
+
 
 reg_data <- reg_data %>%
   mutate(did_dummy = targeted,
@@ -387,13 +400,13 @@ reg <- canditate_models$reg_fmlas[[1]]
 # Summary: fit ahnold model
 
 
+
 seen_model <- lme4::lmer(reg, data = seen_reg_data)
 
 
 # seen_model <- lme4::glmer(posreg, data = seen_reg_data, family = Gamma(link = ''))
-print('wtf')
 
-stan_seen_model <- stan_glmer(reg, data = seen_reg_data, cores = 4, chains = 4, iter = 4000)
+# stan_seen_model <- stan_glmer(reg, data = seen_reg_data, cores = 4, chains = 4, iter = 4000)
 
 
 seen_ana_sci_model <- lme4::lmer(reg, data = seen_reg_data %>%
@@ -401,6 +414,9 @@ seen_ana_sci_model <- lme4::lmer(reg, data = seen_reg_data %>%
 
 seen_mpa_model <- lme4::lmer(reg, data = seen_reg_data %>%
                                    filter(year_mpa >0))
+
+seen_nompa_model <- lme4::lmer(reg, data = seen_reg_data %>%
+                               filter(year_mpa <=0))
 
 unseen_model <- lme4::glmer(any_seen ~ mean_temp + mean_kelp + mean_vis + (1 | site_side) +
                               (1 | year) + (1 | classcode), family = binomial(link = 'logit'), data = reg_data)
@@ -465,8 +481,144 @@ unseen_plot <- aug_unseen_model %>%
 # unseen_plot
 
 
+
+# Run additional analyses -------------------------------------------------
+# Summary:
+#
+
+
+length_hists <- length_data %>%
+  group_by(year, classcode, fish_tl) %>%
+  summarise(count = sum(count),
+            comm_name = unique(commonname)) %>%
+  ungroup() %>%
+  nest(-comm_name) %>%
+  mutate(samples = map_dbl(data, ~sum(.x$count))) %>%
+  mutate(length_hist_plot = map_plot(
+    data,
+    ~ ggplot(.x, aes(fish_tl, count, color = year >= 2003)) + geom_line(show.legend = F) + facet_grid(year ~ ., as.table = F, scales = 'free_y') + theme_fivethirtyeight() +
+      theme(axis.text.y = element_blank(), axis.title = element_text(),
+            strip.text = element_text(size = 6), panel.grid.minor = element_blank())
+  )) %>%
+  select(comm_name,samples, length_hist_plot) %>%
+  filter(is.na(comm_name) == F) %>%
+  arrange(desc(samples))
+
+trelliscopejs::trelliscope(length_hists,name = 'huh',
+                           panel_col ='length_hist_plot' )
+
+fished_length_hists <- length_data %>%
+  group_by(year, targeted, fish_tl) %>%
+  summarise(count = sum(count)) %>%
+  ungroup() %>%
+  filter(is.na(targeted) == F) %>%
+  ggplot(aes(fish_tl, count, color = year >= 2003)) +
+  geom_line(show.legend = F) +
+  facet_grid(year ~ targeted, as.table = F, scales = 'free_y') +
+  theme_fivethirtyeight() +
+      theme(axis.text.y = element_blank(), axis.title = element_text(),
+            strip.text = element_text(size = 6), panel.grid.minor = element_blank())
+
+
+
+trophic_effects <- seen_reg_data %>%
+  nest(-trophicgroup) %>%
+  mutate(ahnold_model = map(data, ~lme4::lmer(reg, data = .x)))
+
+plot_did <- function(model,trophicgroup){
+
+  mpa_effect_plot <-  model %>%
+    tidy() %>%
+    mutate(lower = estimate - 1.96 * std.error,
+           upper = estimate + 1.96 * std.error) %>%
+    filter(str_detect(term,'did')) %>%
+    mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+    ggplot() +
+    geom_hline(aes(yintercept = 0)) +
+    geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+    geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+    geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+    ylab('Estimated MLPA Effect') +
+    xlab('Year') +
+    coord_cartesian(ylim = c(-1.25,1.25))
+}
+
+trophic_effects <- trophic_effects %>%
+  mutate(did_plot = map2_plot(ahnold_model, trophicgroup, ~plot_did(.x,.y)))
+#
+trophic_effects %>%
+  select(trophicgroup, did_plot) %>%
+  trelliscopejs::trelliscope(name = 'DiD Effects by Trophic Group')
+
+# huh <- life_history_data %>%
+#   filter(trophicgroup == 'benthic micro-invertivore') %>%
+#   select(commonname, targeted)
+
+
+
+
 # figures ------------------------------
 # Summary: make summary figures
+
+with_mlpa <- seen_model %>% augment()
+
+
+without_mlpa <- seen_model %>% augment()
+
+without_mlpa[, str_detect(colnames(without_mlpa),'did_')] <-  0
+
+with_mlpa <- with_mlpa %>%
+  add_predictions(model = seen_model) %>%
+  mutate(world = 'With MLPA')
+
+without_mlpa <- without_mlpa %>%
+  add_predictions(model = seen_model) %>%
+  mutate(world = 'Without MLPA')
+
+mlpa_experiment <- with_mlpa %>%
+  bind_rows(without_mlpa) %>%
+  ggplot(aes((year),pred %>% exp(), color = world, fill = world)) +
+  geom_smooth()
+
+with_mlpa_mpas <- seen_mpa_model %>% augment()
+
+
+without_mlpa_mpas <- seen_mpa_model %>% augment()
+
+without_mlpa_mpas[, str_detect(colnames(without_mlpa_mpas),'did_')] <-  0
+
+with_mlpa_mpas <- with_mlpa_mpas %>%
+  add_predictions(model = seen_mpa_model) %>%
+  mutate(world = 'With MLPA')
+
+without_mlpa_mpas <- without_mlpa_mpas %>%
+  add_predictions(model = seen_mpa_model) %>%
+  mutate(world = 'Without MLPA')
+
+mlpa_mpa_experiment <- with_mlpa_mpas %>%
+  bind_rows(without_mlpa_mpas) %>%
+  ggplot(aes((year),pred %>% exp(), color = world, fill = world)) +
+  geom_smooth()
+
+with_mlpa_no_mpas <- seen_nompa_model %>% augment()
+
+
+without_mlpa_no_mpas <- seen_nompa_model %>% augment()
+
+without_mlpa_no_mpas[, str_detect(colnames(without_mlpa_no_mpas),'did_')] <-  0
+
+with_mlpa_no_mpas <- with_mlpa_no_mpas %>%
+  add_predictions(model = seen_nompa_model) %>%
+  mutate(world = 'With MLPA')
+
+without_mlpa_no_mpas <- without_mlpa_no_mpas %>%
+  add_predictions(model = seen_nompa_model) %>%
+  mutate(world = 'Without MLPA')
+
+mlpa_no_mpa_experiment <- with_mlpa_no_mpas %>%
+  bind_rows(without_mlpa_no_mpas) %>%
+  ggplot(aes((year),pred %>% exp(), color = world, fill = world)) +
+  geom_smooth()
 
 
 mpa_effect_plot <-  seen_model %>%
@@ -541,7 +693,7 @@ plot_list <- purrr::map(plots, get) %>%
 
 save(file = paste0(run_dir,"/data.Rdata"), reg_data, seen_reg_data)
 
-save(file = paste0(run_dir,"/regressions.Rdata"), seen_model, seen_ana_sci_model, seen_mpa_model, stan_seen_model)
+save(file = paste0(run_dir,"/regressions.Rdata"), seen_model, seen_ana_sci_model, seen_mpa_model)
 
 save(file = paste0(run_dir,"/plots.Rdata"), plot_list)
 
