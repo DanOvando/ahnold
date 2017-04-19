@@ -24,19 +24,15 @@ shinyServer(function(input, output) {
 num_patches <-  50
 mpa_experiment <- reactive({
 
-fish <- create_fish(max_age = input$max_age,
-                    age_mature = input$age_mat,
+fish <- create_fish(m = input$m,
+                    lhi_type = input$lhi_type,
                     steepness = input$steepness,
                     adult_movement = input$adult_movement,
                     larval_movement = input$larval_movement,
-                    vbk = input$vbk,
                     density_dependence_form = input$density_dependence_form,
                     scientific_name = 'fakeish fishis',
                     query_fishbase = F,
-                    linf = 100,
-                    t0 = -.2,
-                    weight_a = 1e-4,
-                    weight_b = 3)
+                    linf = input$linf)
 
 fleet <- create_fleet(length_50_sel = input$length_sel[1],
                       length_95_sel = input$length_sel[2],

@@ -10,6 +10,7 @@
 rm(list = ls())
 set.seed(123)
 library(tidyverse)
+library(purrr)
 library(forcats)
 library(modelr)
 library(stringr)
@@ -22,6 +23,7 @@ library(viridis)
 library(scales)
 library(trelliscopejs)
 
+
 demons::load_functions()
 
 # set options ------------------------------
@@ -29,7 +31,7 @@ demons::load_functions()
 
 run_name <- 'Working'
 
-run_dir <- paste('results', run_name, sep = '/')
+run_dir <- file.path('results', run_name)
 
 run_description <-
   'Model selection process, testing STAN selection'
@@ -49,6 +51,10 @@ channel_islands_only <- T
 min_year <- 1999
 
 occurance_ranking_cutoff <- 0.5
+
+small_num <-  0
+
+use_mpa_site_effects <- F
 
 base_theme <- hrbrthemes::theme_ipsum(base_size = 18, axis_title_size = 16)
 
@@ -170,12 +176,12 @@ reg_data <- density_data %>%
     omit_names = c('log_density','biomass', 'year', 'mean_enso', 'mean_pdo',
                    'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
   ) %>%
-  mutate(log_density = log(biomass)) %>%
+  mutate(log_density = log(biomass + small_num)) %>%
   by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
   filter(.out == F)
 
 
-# a <- reg_data %>%
+# reg_data <- reg_data %>%
 #   group_by(classcode) %>%
 #   mutate(log_density = center_scale(log_density,'log_density'))
 #
@@ -184,6 +190,9 @@ reg_data <- density_data %>%
 
 # cs_reg_data <- reg_data
 
+
+if (use_mpa_site_effects == F)
+{
 
 reg_data <- reg_data %>%
   mutate(did_dummy = targeted,
@@ -194,6 +203,22 @@ reg_data <- reg_data %>%
          enso2 = mean_enso ^ 2,
          site_side = paste(site,side,sep = '_'),
          factor_year = as.factor(year))
+
+} else {
+reg_data <- reg_data %>%
+  mutate(did_dummy = targeted * (year_mpa >0),
+         did_year_inside = paste('did', year, 'inside',sep = '_')) %>%
+  spread(did_year_inside, did_dummy, fill = 0) %>%
+  mutate(did_dummy = targeted * (year_mpa == 0),
+         did_year_outside = paste('did', year,'outside', sep = '_')) %>%
+  spread(did_year_outside, did_dummy, fill = 0) %>%
+  mutate(temp2 = mean_temp ^ 2,
+         pdo2 = mean_pdo ^ 2,
+         enso2 = mean_enso ^ 2,
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
+
+}
 
 
 # filter data ------------------------------
@@ -231,10 +256,28 @@ if (channel_islands_only == T){
 seen_reg_data <- reg_data %>%
   filter(any_seen == T)
 
+if (use_mpa_site_effects == F){
+
 did_years <-
   paste('did', min(seen_reg_data$year): max(seen_reg_data$year), sep = '_')
 
-did_year <- did_years[did_years != 'did_2002']
+# did_year <- did_years[did_years != 'did_2002']
+
+} else {
+
+did_years <-
+  paste('did', min(seen_reg_data$year): max(seen_reg_data$year), sep = '_')
+
+did_years_inside <- paste(did_years, 'inside', sep = '_')
+
+did_years_outside <- paste(did_years, 'outside', sep = '_')
+
+did_years <- c(did_years_inside, did_years_outside)
+
+
+}
+did_year <- did_years[str_detect(did_years,'2002') == F]
+# did_year <- did_years[did_years != 'did_2002']
 
 
 # model selection ------------------------------
@@ -409,8 +452,17 @@ seen_model <- lme4::lmer(reg, data = seen_reg_data)
 # stan_seen_model <- stan_glmer(reg, data = seen_reg_data, cores = 4, chains = 4, iter = 4000)
 
 
+consistent_sites <-  seen_reg_data %>%
+  group_by(site_side) %>%
+  summarise(spans_transition = all(2001:2005 %in% unique(year))) %>%
+  filter(spans_transition == T)
+
+
+
+
 seen_ana_sci_model <- lme4::lmer(reg, data = seen_reg_data %>%
-                                filter(region %in% c('ANA','SCI')))
+                                   filter(site_side %in% consistent_sites$site_side))
+                                # filter(region %in% c('ANA','SCI')))
 
 seen_mpa_model <- lme4::lmer(reg, data = seen_reg_data %>%
                                    filter(year_mpa >0))
@@ -562,7 +614,6 @@ trophic_effects %>%
 
 with_mlpa <- seen_model %>% augment()
 
-
 without_mlpa <- seen_model %>% augment()
 
 without_mlpa[, str_detect(colnames(without_mlpa),'did_')] <-  0
@@ -581,7 +632,6 @@ mlpa_experiment <- with_mlpa %>%
   geom_smooth()
 
 with_mlpa_mpas <- seen_mpa_model %>% augment()
-
 
 without_mlpa_mpas <- seen_mpa_model %>% augment()
 
@@ -619,6 +669,26 @@ mlpa_no_mpa_experiment <- with_mlpa_no_mpas %>%
   bind_rows(without_mlpa_no_mpas) %>%
   ggplot(aes((year),pred %>% exp(), color = world, fill = world)) +
   geom_smooth()
+
+
+mpa_site_effect_plot <-  seen_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(site_type = str_split(term,"_", simplify = T)[,3]) %>%
+  mutate(year = str_split(term,"_", simplify = T)[,2] %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect') +
+  facet_wrap(~site_type)
 
 
 mpa_effect_plot <-  seen_model %>%

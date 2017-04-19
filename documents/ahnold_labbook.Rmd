@@ -1324,3 +1324,115 @@ Check on lit on this
 Make plot of length on x and year on y, so you get a bunch of stacked shifts in cohorts
 
 Maybe add in a ricker function, though might need to double check on the steepness values. You might be moving things over the to right hand side of 
+
+# Examine OST catch data
+
+
+```{r}
+
+
+
+ost_region_catch <- read_csv('../data/SouthCoastHumanActivitiesCommercialFisheriesEconomicandSpatialData1992to2012/sc_comm_fisheries_region_landings_data_1992_2012.csv') %>% 
+  set_names(colnames(.) %>% tolower())
+
+ost_region_catch %>% 
+  mutate(pounds = str_replace(pounds,',','') %>% as.numeric(),
+         revenue = str_replace_all(revenue,"\\$|,",''),
+         price = str_replace(`average price`,'\\$','')) %>% 
+  group_by(year,fishery) %>% 
+  summarise(catch_lbs = sum(pounds, na.rm = T)) %>% 
+  ggplot(aes(year,catch_lbs, color = fishery)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = 'red') +
+  geom_line()
+
+```
+
+Interesting, stablish throughout the SC region, though that's a pretty damn big area
+
+```{r}
+
+ost_port_catch <- read_csv('../data/SouthCoastHumanActivitiesCommercialFisheriesEconomicandSpatialData1992to2012/sc_comm_fisheries_port_landings_data_1992_2012.csv') %>% 
+  set_names(colnames(.) %>% tolower())
+
+ost_port_catch %>% 
+  filter(port %in% c("Port Hueneme/Oxnard", "Santa Barbara","Ventura")) %>% 
+  mutate(pounds = str_replace(pounds,',','') %>% as.numeric(),
+         revenue = str_replace_all(revenue,"\\$|,",''),
+         price = str_replace(`average price`,'\\$','')) %>% 
+  group_by(year,fishery) %>% 
+  summarise(catch_lbs = sum(pounds, na.rm = T)) %>% 
+  ggplot(aes(year,catch_lbs, color = fishery)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = 'red') +
+  geom_line(show.legend = F) + 
+  facet_wrap(~fishery, scales = 'free_y') + 
+  theme(axis.text.y =  element_blank(),
+        axis.text.x = element_blank())
+
+
+```
+
+
+# 4/14/17
+
+I'm honestly close to out of ideas. These catch dat are pretty worring to be honest. If you buy these data as being representative of the fished species out in the channel islands, then this suggests a decreasin gcatch trend in nearshore finfish catches, not stable or increasing. That really makes it hard to explain the MPA mediated "decrease" in abundance. 
+
+Possible explanations that remain. 
+
+1. Some form of density dependent mortality (or ricker like dynamics)
+  * Can model this
+
+2. Catches at the islands themselves have been stable or gone up
+  * Can try and get some more regional data to check on this
+  
+3. Ocam's razor: There was just a dramatic enough shift in sampling regimes when the MPAs went in place that pre-and-post are just not comparable in any way shape of form
+
+4. Let's write up the current results and state of the world this weekend/next week and send that to committee for comments
+
+# Scraping CDFW Data
+
+
+```{r}
+
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(tabulizer)
+library(tabulizerjars)
+
+a = tabulizer::extract_tables("../data/cdfw-data/landings00_table12.pdf")
+
+x <- a[[1]]
+
+x <- as_tibble(x)
+
+process_cdfw <- function(x){
+  
+  x <- as_tibble(x)
+  
+  x <- slice(x, -(1:2))
+
+    numfoo <- function(z){
+    
+    z <- str_replace_all(z, '\\.|\\,','')
+    
+    if (any(is.na(as.numeric(z)) == F)){
+      
+      z = as.numeric(z)
+    } else{
+      z = z
+    }
+    
+    }
+    
+    browser()
+    x <- map_df(x, ~numfoo)
+  
+}
+
+ b =  map_df()
+
+map(a, process_cdfw)
+
+```
+
+

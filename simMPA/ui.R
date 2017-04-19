@@ -17,18 +17,18 @@ shinyUI(fluidPage(
   sidebarLayout(
     sidebarPanel(
       sliderInput(
-        "max_age",
-        "Max Age:",
-        min = 1,
-        max = 50,
-        value = 10
+        "linf",
+        "Linf:",
+        min = 10,
+        max = 200,
+        value = 100
       ),
       sliderInput(
-        "age_mat",
-        "Age at Maturity:",
-        min = 1,
-        max = 50,
-        value = 5
+        "m",
+        "Natural Mortality",
+        min = 0.1,
+        max = .9,
+        value = 0.2
       ),
       sliderInput(
         "steepness",
@@ -51,12 +51,11 @@ shinyUI(fluidPage(
         max = 100,
         value = 10
       ),
-      sliderInput(
-        "vbk",
-        "Von Bert K",
-        min = 1e-3,
-        max = .9,
-        value = 0.2
+      selectInput(
+        inputId = 'lhi_type',
+        label = 'Prince LHI Type',
+        choices = c(1,2,3),
+        selected = 1
       ),
       selectInput(
         inputId = 'density_dependence_form',
