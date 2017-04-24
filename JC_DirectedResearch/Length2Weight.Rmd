@@ -1,0 +1,54 @@
+---
+title: "JC Directed Research"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+
+```{r load data}
+
+length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>% 
+  magrittr::set_colnames(.,tolower(colnames(.))) %>% 
+  mutate(id = paste(year, month,	day,	site,	side,	zone,	leve,	transect, sep = "-")) %>% 
+  complete()
+
+#You need a function that goes through trip by trip, and adds in zeros for all species seen at that site at some point but not on that trip.
+
+life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>% 
+  magrittr::set_colnames(.,tolower(colnames(.)))
+
+site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
+  magrittr::set_colnames(.,tolower(colnames(.)))
+
+
+length_data <- length_data %>% 
+  left_join(life_history_data, by = 'classcode') %>% 
+  left_join(site_data, by = c('site','side'))
+
+```
+
+
+```{r}
+df <- read_csv("../data/test_complete.csv")
+
+df2 <- df %>% 
+  group_by(year, site, side, zone, level, species) %>%
+  summarize(n = n())
+
+complete_df <- df %>% 
+  full_join(df2, by = c("site", "side", "zone", "level", "species"))
+
+complete_df <- df %>%
+  group_by(site, side, zone, level) %>%
+  nest() %>%
+  list()
+  
+map(complete_df, ~complete(.x[[1]]$data, .x[[1]]$data$species))
+
+```
+
