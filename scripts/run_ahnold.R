@@ -58,6 +58,7 @@ use_mpa_site_effects <- F
 
 base_theme <- hrbrthemes::theme_ipsum(base_size = 18, axis_title_size = 16)
 
+
 theme_set(base_theme)
 
 # load Data ------------------------------
@@ -252,6 +253,8 @@ if (channel_islands_only == T){
   reg_data <- reg_data %>%
     filter( !region %in% c('SCSR','CCSR'))
 }
+
+reg_data$targeted[reg_data$commonname == 'black surfperch'] <-  1
 
 seen_reg_data <- reg_data %>%
   filter(any_seen == T)

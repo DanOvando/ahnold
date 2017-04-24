@@ -1435,4 +1435,167 @@ map(a, process_cdfw)
 
 ```
 
+# 4/20/16
+
+So you've got the california commercial landings now. You can link them up to most of the main species in your database. So, what do you do with this. Was a lot more work than you though it was going to be, so seems like something useful should come from it. 
+
+At it's face value, catches do a few different things across the islands, and none of them really look like constant catch or constant effort. Maybe open access?
+
+If the goal is to examine realism, the best thing you could do would be to link these catches directly to the operating model. So instead of trying to estimate catch trajectories, take the data. 
+
+Now, one of the inputs would be depletion in 2000, and then subtract the catches out from there, add in the MPA in 2003, and see what happens. 
+
+Another option, pair these with the length data, and actually fit Catch-MSY/CC-SRA, etc to the species of interest. Use that to get estimates of status in 2000, as well as K, and then project forward with those catches + mpa... doesn't really work though since the MPA should in theory be in the estimation model. But might be a path to explore later. 
+
+So for now, you'd need to choose an initial depletion and an r0. Tuning an initial depletion is just an f, that's easy. But now how do you deal with the catches part. Trickier. One option would be to tune r0 such that that eq catches in 1999 are about equal to the catches in 2000. Basically says that the catches in the prior year were probably similar for a given F and depletion 
+
+```{r}
+library(spasm)
+
+
+tune_f <- function(params, target_depletion, target_catch = 100, alpha = 0.5){
+
+fish <- create_fish(linf = 100, m = .2, r0 = exp(params[1]))
+
+manager <- create_manager(year_mpa = 999)
+
+unfished <- sim_fishery(fish = fish, fleet = create_fleet(initial_effort = 0, fish = fish), manager = manager, num_patches = 10)
+
+ssb0 <- unfished %>% 
+  filter(year == max(year)) %>% 
+  summarise(ssb = sum(ssb)) %>% {
+    .$ssb
+  }
+
+fished <- sim_fishery(fish = fish, fleet = create_fleet(initial_effort = exp(params[2]), fish = fish), manager = manager, num_patches = 10)
+
+ssb <- fished %>% 
+  filter(year == max(year)) %>% 
+  summarise(ssb = sum(ssb)) %>% {
+    .$ssb
+  }
+
+fish_caught <- fished %>% 
+  filter(year == max(year)) %>% 
+    summarise(caught = sum(biomass_caught)) %>% {
+    .$caught
+    }
+
+
+depletion <- ssb/ssb0
+
+ss <- alpha * (log(depletion) - log(target_depletion))^2 + (1 - alpha) *(log(fish_caught) - log(target_catch))^2
+
+return(ss)
+}
+
+
+a = nlminb(c(log(100), log(10000)), tune_f, target_depletion = 0.2,target_catch = 200, alpha = 0.5)
+
+fish <- create_fish(linf = 100, m = .2, r0 = exp(a$par[1]))
+
+fleet <- create_fleet(initial_effort = exp(a$par[2]), fish = fish, 
+                      fleet_model = 'constant-effort')
+
+fished <- sim_fishery(fish = fish, fleet = fleet, manager = manager, num_patches = 10)
+
+catches <- fished %>% 
+  group_by(year) %>% 
+  summarise(catch = sum(biomass_caught))
+
+
+fish <- create_fish(linf = 100, m = .2, r0 = exp(a$par[1]))
+
+my_catches <- c(catches$catch, runif(10,20,100))
+
+fleet <- create_fleet(catches = my_catches, fleet_model = 'supplied-catch', fish = fish)
+
+burn_years <- 20
+manually_fished <-
+  sim_fishery(
+  fish = fish,
+  fleet = fleet,
+  manager = manager,
+  num_patches = 10,
+  sim_years = burn_years + length(my_catches),
+  burn_year = burn_years
+  )
+  
+manual_catches <- manually_fished %>% 
+  group_by(year) %>% 
+  summarise(catch = sum(biomass_caught))
+
+plot(manual_catches$catch, my_catches)
+
+mpa_fished <-
+  sim_fishery(
+  fish = fish,
+  fleet = fleet,
+  manager = create_manager(year_mpa = 12),
+  num_patches = 10,
+  sim_years = burn_years + length(my_catches),
+  burn_year = burn_years
+  )
+  
+mpa_fished %>% 
+  group_by(year) %>% 
+  summarise(mpa = mean(mpa)) %>% 
+  ggplot(aes(year,mpa)) + 
+  geom_point()
+
+manual_catches<- mpa_fished %>% 
+  group_by(year) %>% 
+  summarise(catch = sum(biomass_caught))
+
+plot(manual_catches$catch, my_catches)
+
+```
+
+Shit works!!!
+
+So, the order of operations
+
+1. Get life history for a species
+
+2. Get catches for that species from CDFW
+
+3. Pick a target depletion
+
+4. Pick and MPA size and year (mimick CI)
+
+5. Find f,r0, and catches per above
+
+6. Tack CDFW catches onto the "historic" catches 
+
+7. Project forward with MPA. 
+
+Moveing over to a dedicated script 
+
+
+# 4/23/17
+
+You need to do some early stage data exploration again. 
+
+Follow some of the steps from the zuur paper, specifically diving back into the multi-collinearity problem. 
+
+You need to figure out the sample size and balance issues
+
+Basically, what I'd like to check is that the relationship isn't just due to the massive increase in sample size at the start of the MPAs
+
+I also really want to re-run things building up the densities from scratch. But you also need to focus on getting some clear metrics and deliverables based on QAQC so you can move on and traige more quickly whether there's anything real here. 
+
+Tomorrow:
+
+1. Explore colinearity problems with the data
+
+2. Try and recompile the density data from scratch again. 
+
+
+
+
+
+
+
+
+
 

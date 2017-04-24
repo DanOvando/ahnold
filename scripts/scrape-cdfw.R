@@ -4,7 +4,13 @@ library(lubridate)
 library(stringr)
 library(tabulizer)
 library(tabulizerjars)
+library(hrbrthemes)
+library(rfishbase)
+library(scales)
+library(forcats)
+library(trelliscopejs)
 
+theme_set(theme_ipsum())
 
 file_names <- list.files('data/cdfw-data/')
 
@@ -142,10 +148,36 @@ plotfoo <- function(x){
     ggplot(aes(year,catch)) +
     geom_vline(aes(xintercept = 2003), color = 'red',
                linetype = 2) +
-    geom_line()
+    geom_line() +
+    geom_point() +
+    scale_y_continuous(labels = comma, name = 'catch (lbs)')
 
 }
 
+
+ci_catches %>%
+  group_by(year) %>%
+  summarise(catch = sum(pounds_caught)) %>%
+  ggplot(aes(year,catch)) +
+  geom_vline(aes(xintercept = 2003), color = 'red',
+             linetype = 2) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = comma, name = 'catch (lbs)')
+
+
+ci_catches %>%
+  filter(common_name != 'pacific sardine') %>%
+  group_by(common_name, year) %>%
+  summarise(catch = sum(pounds_caught))  %>%
+  group_by(common_name) %>%
+  mutate(total_catch = sum(catch)) %>%
+  ungroup() %>%
+  mutate(common_name = fct_reorder(common_name,total_catch )) %>%
+  ggplot(aes(year,catch, fill = common_name)) +
+  geom_vline(aes(xintercept = 2003), color = 'red',
+             linetype = 2) +
+  geom_area( show.legend = T,position = 'stack', alpha = .85)
 
 ci_catch_plots <- ci_catches %>%
   group_by(common_name, year) %>%
@@ -158,4 +190,11 @@ ci_catch_plots <- ci_catches %>%
 trelliscope(ci_catch_plots, name = 'Channel Islands Catches')
 
 
+a <- seen_reg_data %>%
+  group_by(commonname) %>%
+  summarise(samples = length(biomass),
+            fished = unique(targeted)) %>%
+  arrange(desc(samples))
+
+write_csv(flat_cdfw, path = file.path('data','cfdw-catches.csv'))
 

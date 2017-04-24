@@ -7,8 +7,13 @@ library(trelliscopejs)
 library(hrbrthemes)
 library(scales)
 
-comp_foo <-
-  function(fish,
+sim_years <-  50
+
+burn_years <- 25
+
+num_patches <- 10
+
+comp_foo <- function(fish,
            fleet,
            year_mpa,
            mpa_size,
@@ -17,9 +22,12 @@ comp_foo <-
            burn_years,
            run_id,
            num_runs) {
-
-    write(paste('run', run_id, 'out of',num_runs), file = 'simprog.txt',append = T,
-          ncolumns = 1)
+    write(
+      paste('run', run_id, 'out of', num_runs),
+      file = 'simprog.txt',
+      append = T,
+      ncolumns = 1
+    )
 
     no_mpa <-
       sim_fishery(
@@ -57,6 +65,15 @@ comp_foo <-
 
 
   }
+
+
+# load data ---------------------------------------------------------------
+
+run_name <- 'Working'
+
+run_dir <- file.path('results', run_name)
+
+load(file = file.path(run_dir, "/data.Rdata"))
 
 sim_grid <- expand.grid(
   max_age = 25,
@@ -165,6 +182,6 @@ plot_foo <- function(outcomes, year_mpa) {
 sim_grid_plots <- sim_grid_outcomes %>%
   mutate(sim_plot = map2_plot(outcomes, year_mpa, plot_foo)) %>%
   mutate(eq_f = map_dbl(fleet, 'eq_f')) %>%
-  select(-fish, -fleet, -outcomes)
+  select(-fish,-fleet,-outcomes)
 
 trelliscope(sim_grid_plots, name = 'arg')
