@@ -12,7 +12,7 @@ suppressPackageStartupMessages({
 
 Lets load the data
 
-```{r load data, message=F}
+```{r load life history data}
 
 life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv', col_types = cols()) %>%
   rename(classcode = pisco_classcode) %>% 
@@ -209,21 +209,52 @@ We can make sure that both functions are eually right (or wrong...) by plotting 
 
 ```{r}
 data.frame(test1 = test1$weight, test2 = test2$weight) %>% 
-  ggplot(aes(x = test1, test2)) +
+  ggplot(aes(x = test1, y = test2)) +
   geom_point() +
   theme_bw()
 ```
 
 
 
-Apparently, there are 5098 rows (points) being excluded. We can see which ones they are by doing the following:
+Apparently, there are 5098 rows (points) being excluded. Also, there are A LOT of points with a value of `r ` We can see which ones they are by doing the following:
 
 ```{r}
 
-test1$classcode[is.na(test1$weight)]
+data.frame(missing = test1$classcode[is.na(test1$weight)]) %>% 
+  group_by(missing) %>% 
+  summarize(n = n())
 
 ```
 
+Let's see if any of the species on the list match species with NA records for count, length, or missing a and b data:
 
+```{r}
+missing <- test %>% 
+  filter(is.na(count) | is.na(fish_tl) | is.na(wl_a) | is.na(wl_b)) %>% 
+  select(classcode, count, fish_tl, wl_a, wl_b)
 
+```
 
+By doing `dim(missing)[1]`, we can see that the same number of missing values have been identified (`r dim(missing)[1]`). Some of these missing values are trivial (e.g. like when no fish are identified). Some times this happens because the a and b values are not available for the species, or because length or count were not recorded. We can identify individual cases now:
+
+```{r}
+missing_a <- missing %>%
+  filter(is.na(wl_a))
+```
+
+## TO DO##
+
+  Make sure to "complete" the count dataset by adding all species that have been observed in one site for all samples. Possibly something like
+  
+```
+
+count_data %>% 
+  complete(site, species, nesting(all other stuff))
+  
+```
+
+  Obtain missing a and b values
+  
+  Compare calculated biomasses to Jen's
+  
+  Include documentation for both length2weight functions
