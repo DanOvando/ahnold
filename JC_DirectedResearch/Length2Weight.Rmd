@@ -1,54 +1,103 @@
 ---
-title: "JC Directed Research"
+title: "Fixing the life history database"
 output: html_notebook
 ---
 
-```{r}
-library(tidyverse)
+```{r setup, message=F}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(plotly)
+})
 ```
 
+Lets load the data
 
-
-```{r load data}
-
-length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>% 
-  magrittr::set_colnames(.,tolower(colnames(.))) %>% 
-  mutate(id = paste(year, month,	day,	site,	side,	zone,	leve,	transect, sep = "-")) %>% 
-  complete()
-
-#You need a function that goes through trip by trip, and adds in zeros for all species seen at that site at some point but not on that trip.
+```{r load data, message=F}
 
 life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>% 
   magrittr::set_colnames(.,tolower(colnames(.)))
 
-site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
-  magrittr::set_colnames(.,tolower(colnames(.)))
-
-
-length_data <- length_data %>% 
-  left_join(life_history_data, by = 'classcode') %>% 
-  left_join(site_data, by = c('site','side'))
-
 ```
 
+To convert length to weigth we use:
+
+$$W = a(TL)^b$$
+Where:
+  - $[W] = g$
+  - $[TL] = cm$
+  
+Lets visualize it first. I want to look at how the units are used for each species. Plotting $a$ against $b$ and using the `color` and `shape` aesthetics I can get a general view fo this. I can also slice the data by type of length meassurement (total, standard or disc) by facetting through `wl_input_length`. Of course, the graph has no theoretical meaning and it is just a way to see how the database looks.
 
 ```{r}
-df <- read_csv("../data/test_complete.csv")
 
-df2 <- df %>% 
-  group_by(year, site, side, zone, level, species) %>%
-  summarize(n = n())
+# I wil first exclude the "no fish" and "unid fish" records to get rid of obvious NAs. I could have used filter(!is.na(wl_a)), but wanted to make sure that I was only excluding the invalid species (beause unid fish and no fish are not species), but leaving any NA recorded value for a or b in there... just in case.
+plot1 <- filter(life_history_data, !taxa == "No fish") %>% 
+  filter(!taxa == "unidentified fish") %>%
+  ggplot(aes(x = wl_a, y = wl_b, color = wl_l_units, shape = wl_w_units, label = taxa)) +
+  geom_point(size = 2, alpha = 0.5) +
+  theme_bw() +
+  facet_wrap(~wl_input_length, ncol = 2) +
+  scale_color_brewer(palette = "Set1")
 
-complete_df <- df %>% 
-  full_join(df2, by = c("site", "side", "zone", "level", "species"))
+ggplotly(plot1)
+# As a note, a and b had valid values for all species (i.e. !is.na(a|b))
+```
 
-complete_df <- df %>%
-  group_by(site, side, zone, level) %>%
-  nest() %>%
-  list()
+We see that the database has many different combinations of types. Since our count data contains records of TL in cm, and we want to calculate individual weight in gr, ideally, we would want the points in these graphs to appear all red and with a circular shape. We must make sure all these parameters match. Lets go ahead and modify some things here.
   
-map(complete_df, ~complete(.x[[1]]$data, .x[[1]]$data$species))
+Whenever we find a pair of $a$ and $b$ values that state that $TL$ must be in mm (cm and mm are the only two options in the `VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv` dataset.), we can simply multiply $a$ by 10 to account for the conversion:
+
+```{r}
+life_history_data <- life_history_data %>% 
+  mutate(wl_a = ifelse(wl_l_units == "mm", wl_a*10, wl_a),
+         corrected_wl_l_units = ifelse(wl_l_units == "mm", "cm", wl_l_units))
+```
+
+```{r}
+plot2 <- filter(life_history_data, !taxa == "No fish") %>% 
+  filter(!taxa == "unidentified fish") %>%
+  ggplot(aes(x = wl_a, y = wl_b, color = corrected_wl_l_units, shape = wl_w_units, label = taxa)) +
+  geom_point(size = 2, alpha = 0.5) +
+  theme_bw() +
+  facet_wrap(~wl_input_length, ncol = 2) +
+  scale_color_brewer(palette = "Set1")
+
+ggplotly(plot2)
+```
+
+This looks way better. But there are still some triangles in there, for _Pleuronichthys coenosus_, for example. Similarly, we can account for these variations for the output ($W$), sometimes stated to be in Kg. In this case, we want to express everything in grams, so we can simply divide $a$ by 1000.
+
+```{r}
+life_history_data <- life_history_data %>% 
+  mutate(wl_a = ifelse(wl_w_units == "kg", wl_a/1000, wl_a),
+         corrected_wl_w_units = ifelse(wl_w_units == "kg", "g", wl_w_units))
+```
+
+```{r}
+plot3 <- filter(life_history_data, !taxa == "No fish") %>% 
+  filter(!taxa == "unidentified fish") %>%
+  ggplot(aes(x = wl_a, y = wl_b, color = corrected_wl_l_units, shape = corrected_wl_w_units, label = taxa)) +
+  geom_point(size = 2, alpha = 0.5) +
+  theme_bw() +
+  facet_wrap(~wl_input_length, ncol = 2) +
+  scale_color_brewer(palette = "Set1")
+
+ggplotly(plot3)
+```
+
+Now that we have all the $a$ values ready for a simple TL to W transformation, we can go ahead and merge all these points together into a single graph (i.e. remove the facet), and uce the type of length input (DW, SL, or TL) as the color aesthetic.
+
+```{r}
+
+plot4 <- filter(life_history_data, !taxa == "No fish") %>% 
+  filter(!taxa == "unidentified fish") %>%
+  ggplot(aes(x = wl_a, y = wl_b, color = wl_input_length, label = taxa)) +
+  geom_point(size = 2, alpha = 0.5) +
+  theme_bw() +
+  scale_color_brewer(palette = "Set1")
+
+ggplotly(plot4)
 
 ```
 
