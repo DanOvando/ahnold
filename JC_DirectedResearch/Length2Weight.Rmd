@@ -14,7 +14,7 @@ Lets load the data
 
 ```{r load data, message=F}
 
-life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv', col_types = cols()) %>%
   rename(classcode = pisco_classcode) %>% 
   magrittr::set_colnames(.,tolower(colnames(.)))
 
@@ -22,10 +22,12 @@ life_history_data <- read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 
 
 To convert length to weigth we use:
 
-$$W = a(TL)^b$$
+$$W = a\times TL^b$$
 Where:
-  - $[W] = g$
-  - $[TL] = cm$
+
+  $[W] = g$
+  
+  $[TL] = cm$
   
 Lets visualize it first. I want to look at how the units are used for each species. Plotting $a$ against $b$ and using the `color` and `shape` aesthetics I can get a general view fo this. I can also slice the data by type of length meassurement (total, standard or disc) by facetting through `wl_input_length`. Of course, the graph has no theoretical meaning and it is just a way to see how the database looks.
 
@@ -86,7 +88,7 @@ plot3 <- filter(life_history_data, !taxa == "No fish") %>%
 ggplotly(plot3)
 ```
 
-Now that we have all the $a$ values ready for a simple TL to W transformation, we can go ahead and merge all these points together into a single graph (i.e. remove the facet), and uce the type of length input (DW, SL, or TL) as the color aesthetic.
+Now that we have all the $a$ values ready for a simple cm to g transformation, we can go ahead and merge all these points together into a single graph (i.e. remove the facet), and use the type of length input (DW, SL, or TL) as the color aesthetic.
 
 ```{r}
 
@@ -100,4 +102,128 @@ plot4 <- filter(life_history_data, !taxa == "No fish") %>%
 ggplotly(plot4)
 
 ```
+
+We can see that most of the parameters we have now are for a TL to W transformation, but there are still some SL in there (blue dots). Also, we see a bunch of $a$ points that deviate to larger values. Most of these are for _Sebastes spp._, which tend to be a bit "fatter".
+
+In order to convert from TL (what our count database has) to SL (what the blue dots need), we can use:
+
+$$TL = b + a\times SL$$
+
+Where $a > 1$. Note that the equation is often expressed as $TL = a + b\times SL$, but I have inverted the names of the slope and intercept to match what we have in the database (i.e. lc.a._fo_wl is always greater than 1, and this is our slope term.)
+Solving for SL we obtain:
+
+$$SL = \frac{TL-b}{a}$$
+
+Now we have all our $a$ and $b$ values ready to do a cm to gr conversion. We can convert TL to W with the first equation, or also convert the TL data in our count database into SL and then to W. We can define a couple of functions to do that:
+
+```{r load count data}
+
+count_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv', col_types = cols()) %>% 
+    magrittr::set_colnames(.,tolower(colnames(.)))
+
+```
+
+Lets define some functions:
+
+
+```{r define length to weight function}
+# Include eventual documentation for functions:
+
+#'
+#' @title TL2W
+#' @description Convert Total Length (cm) to Weight (gr)
+#' 
+#' @param TL A fish's total length, in centimeters
+#' @param a,b The a, and b parameters, specificaly for converting from cm to gr!
+#'
+#' @return W a fish's weight, in grams
+#'
+#' @export
+
+TL2W <- function(TL, a, b){
+  W = a*TL^b
+  
+  return(W)
+}
+
+```
+
+```{r define TL2SL function}
+#'
+#' @title TL2SL
+#' @description Convert Total Length (cm) to Standard Length (cm)
+#' 
+#' @param TL A fish's total length, in centimeters
+#' @param a,b The a, and b parameters. See details for further specifications.
+#' 
+#' @details a must always be greater than 1, since it is the slope in a conversion with the form TL = b + a*SL. When solving for SL, we obtain SL = (TL - b)/a
+#'
+#' @return SL a fish's standard length, in cm
+#'
+#' @export
+
+TL2SL <- function(TL, aTL, bTL){
+  SL <- (TL - bTL)/aTL
+  
+  return(SL)
+}
+
+
+```
+
+```{r length to weight generalization}
+length2weight <- function(count_data, life_history_data){
+  
+  count_data <- count_data %>% 
+    left_join(life_history_data, by = "classcode") %>% 
+    mutate(weight = ifelse(wl_input_length == "SL",
+                           count * TL2W(TL2SL(fish_tl, lc.a._for_wl, lc.b._for_wl), wl_a, wl_b),
+                           count * TL2W(fish_tl, wl_a, wl_b)))
+  
+}
+```
+
+```{r}
+
+length2weight_tidy <- function(count, length, a, b, length_in, la, lb){
+  w <- ifelse(length_in == "SL",
+              count * TL2W(TL2SL(length, la, lb),a, b),
+              count * TL2W(length, a, b))
+}
+
+```
+
+Lets test both functions:
+
+```{r}
+test1 <- length2weight(count_data, life_history_data)
+
+test2 <- count_data %>% 
+  left_join(life_history_data, by = "classcode") %>% 
+  mutate(weight = length2weight_tidy(count, fish_tl, wl_a, wl_b, wl_input_length, lc.a._for_wl, lc.b._for_wl))
+
+
+```
+
+We can make sure that both functions are eually right (or wrong...) by plotting the result from one to the result of the other:
+
+```{r}
+data.frame(test1 = test1$weight, test2 = test2$weight) %>% 
+  ggplot(aes(x = test1, test2)) +
+  geom_point() +
+  theme_bw()
+```
+
+
+
+Apparently, there are 5098 rows (points) being excluded. We can see which ones they are by doing the following:
+
+```{r}
+
+test1$classcode[is.na(test1$weight)]
+
+```
+
+
+
 
