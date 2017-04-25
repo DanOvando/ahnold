@@ -1,0 +1,19 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+library(tidyverse)
+library(scales)
+library(hrbrthemes)
+library(ggthemes)
+library(forcats)
+library(modelr)
+
+
+```
+
+
+Ahnold is on life support. Time to figure out if he's worth saving. 

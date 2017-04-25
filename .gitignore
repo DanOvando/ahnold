@@ -27,3 +27,10 @@ Figs**/*.*
 **/*.docx
 GFR_Master.R
 .Rapp.history
+.html
+*.html
+*.mp4
+mydisplays/
+rosm.cache/
+data/SouthCoastHumanActivitiesCommercialFisheriesEconomicandSpatialData1992to2012
+libs/

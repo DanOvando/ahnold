@@ -11,7 +11,7 @@ scrape_enso <- function(outdir = '../data/'){
 
   library(tidyverse)
 
-  enso <- readr::read_lines('https://www.esrl.noaa.gov/psd/enso/mei/table.html')
+    enso <- readr::read_lines('https://www.esrl.noaa.gov/psd/enso/mei/table.html')
 
   enso <- enso[stringr::str_detect(enso,'\t|(YEAR)')] %>%
     write('enso.txt')
