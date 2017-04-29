@@ -48,11 +48,11 @@ ggplotly(plot1)
 
 We see that the database has many different combinations of types. Since our count data contains records of TL in cm, and we want to calculate individual weight in gr, ideally, we would want the points in these graphs to appear all red and with a circular shape. We must make sure all these parameters match. Lets go ahead and modify some things here.
   
-Whenever we find a pair of $a$ and $b$ values that state that $TL$ must be in mm (cm and mm are the only two options in the `VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv` dataset.), we can simply multiply $a$ by 10 to account for the conversion:
+Whenever we find a pair of $a$ and $b$ values that state that $TL$ must be in mm (cm and mm are the only two options in the `VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv` dataset.), we can simply multiply $a \times 10^b$ to account for the conversion:
 
 ```{r}
 life_history_data <- life_history_data %>% 
-  mutate(wl_a = ifelse(wl_l_units == "mm", wl_a*10, wl_a),
+  mutate(wl_a = ifelse(wl_l_units == "mm", wl_a*10^wl_b, wl_a),
          corrected_wl_l_units = ifelse(wl_l_units == "mm", "cm", wl_l_units))
 ```
 
@@ -105,16 +105,31 @@ ggplotly(plot4)
 
 We can see that most of the parameters we have now are for a TL to W transformation, but there are still some SL in there (blue dots). Also, we see a bunch of $a$ points that deviate to larger values. Most of these are for _Sebastes spp._, which tend to be a bit "fatter".
 
-In order to convert from TL (what our count database has) to SL (what the blue dots need), we can use:
+In order to convert from TL (what our count database has) to SL (what the blue dots need), we can use the reverse function:
 
-$$TL = b + a\times SL$$
+$$TL = a\times SL + b$$
 
 Where $a > 1$. Note that the equation is often expressed as $TL = a + b\times SL$, but I have inverted the names of the slope and intercept to match what we have in the database (i.e. lc.a._fo_wl is always greater than 1, and this is our slope term.)
 Solving for SL we obtain:
 
 $$SL = \frac{TL-b}{a}$$
 
-Now we have all our $a$ and $b$ values ready to do a cm to gr conversion. We can convert TL to W with the first equation, or also convert the TL data in our count database into SL and then to W. We can define a couple of functions to do that:
+Some times, however, people use the _Typical_ equation to convert SL and TL. This one looks like this:
+
+$$SL = a\times TL + b$$
+
+Note that it has the same form as the TL(SL) function above, but the interpretation of the coefficients here is different. $a$ will always be less than 1, because the SL is always a fraction of the TL. Luckily, the database has a column that states what type of SL ~ TL function we have, and we can use that to convert the $a$ values so that all correspond to the formula with form $TL = a\times SL + b$ where $a > 1$.
+
+```{r}
+life_history_data <- life_history_data %>% 
+  mutate(lc.a._for_wl = ifelse(lc_type_for_wl == "TYPICAL", 1/lc.a._for_wl, lc.a._for_wl))
+```
+
+
+Now the minimum value for $a$ for TL to SL conversion is `r min(life_history_data$lc.a._for_wl, na.rm = T)`.
+
+
+Now we have all our $a$ and $b$ values ready to do a cm to gr conversion. We can convert TL to W with the first equation, or also convert the TL data in our count database into SL and then to W. We can define a couple of functions to do that, but first lets load the data.
 
 ```{r load count data}
 
@@ -171,36 +186,51 @@ TL2SL <- function(TL, aTL, bTL){
 
 ```
 
+Lets first do it manually and in a non-tidy way:
+
 ```{r length to weight generalization}
-length2weight <- function(count_data, life_history_data){
-  
-  count_data <- count_data %>% 
-    left_join(life_history_data, by = "classcode") %>% 
-    mutate(weight = ifelse(wl_input_length == "SL",
-                           count * TL2W(TL2SL(fish_tl, lc.a._for_wl, lc.b._for_wl), wl_a, wl_b),
-                           count * TL2W(fish_tl, wl_a, wl_b)))
-  
-}
+
+test1 <- count_data %>% 
+  left_join(life_history_data, by = "classcode") %>% 
+  mutate(weight = ifelse(wl_input_length == "SL",
+                         count * TL2W(TL2SL(fish_tl, lc.a._for_wl, lc.b._for_wl), wl_a, wl_b),
+                         count * TL2W(fish_tl, wl_a, wl_b)))
+
+
 ```
 
-```{r}
+And now we can turn the idea into a function
 
-length2weight_tidy <- function(count, length, a, b, length_in, la, lb){
+```{r}
+#'
+#' @title length2weight
+#' @description Convert Total Length (cm) to Standard Length (cm)
+#' 
+#' @param count Fish abundance
+#' @param length Fish length, in cm
+#' @param a,b the allometric parameters
+#' @param length_in the type of length (SL or TL) for which a and b can convert
+#' @param la,lb the a and b parameters to convert TL to SL using the reverse equation where SL = (TL - lb) / la
+#' 
+#' @return w 
+
+length2weight <- function(count, length, a, b, length_in, la, lb){
   w <- ifelse(length_in == "SL",
               count * TL2W(TL2SL(length, la, lb),a, b),
               count * TL2W(length, a, b))
+  return(w)
 }
+
 
 ```
 
-Lets test both functions:
+Lets test the functions:
 
 ```{r}
-test1 <- length2weight(count_data, life_history_data)
 
 test2 <- count_data %>% 
   left_join(life_history_data, by = "classcode") %>% 
-  mutate(weight = length2weight_tidy(count, fish_tl, wl_a, wl_b, wl_input_length, lc.a._for_wl, lc.b._for_wl))
+  mutate(weight = length2weight(count, fish_tl, wl_a, wl_b, wl_input_length, lc.a._for_wl, lc.b._for_wl))
 
 
 ```
@@ -213,7 +243,6 @@ data.frame(test1 = test1$weight, test2 = test2$weight) %>%
   geom_point() +
   theme_bw()
 ```
-
 
 
 Apparently, there are 5098 rows (points) being excluded. Also, there are A LOT of points with a value of `r ` We can see which ones they are by doing the following:
@@ -229,7 +258,7 @@ data.frame(missing = test1$classcode[is.na(test1$weight)]) %>%
 Let's see if any of the species on the list match species with NA records for count, length, or missing a and b data:
 
 ```{r}
-missing <- test %>% 
+missing <- test2 %>% 
   filter(is.na(count) | is.na(fish_tl) | is.na(wl_a) | is.na(wl_b)) %>% 
   select(classcode, count, fish_tl, wl_a, wl_b)
 
@@ -241,6 +270,63 @@ By doing `dim(missing)[1]`, we can see that the same number of missing values ha
 missing_a <- missing %>%
   filter(is.na(wl_a))
 ```
+
+# Compare Biomass calculations
+
+The previous calculations, outlined in [the labbok](https://github.com/DanOvando/ahnold/blob/master/documents/ahnold_labbook.Rmd) overestimated many of the biomass measurements. This makes sense, because we were using TL for some species that needed SL.
+
+Lets compare the biomass calculations we got after cleaning the databse and standardizing to cm, gr, and TL to what has been obtained in the `ci_reserve_data_final3 txt.csv` file.
+
+
+```{r}
+#Read and tidy the data. This chunk comes directly fro the labbok
+
+density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv', col_types = cols()) %>%
+  magrittr::set_colnames(.,tolower(colnames(.))) %>% 
+  gather('concat.name','value', grep('_',colnames(.)),convert = T) %>%
+  mutate(data.type = gsub('\\_.*', '', concat.name),
+         classcode = gsub('.*\\_','',concat.name)) %>%
+  mutate(value = as.numeric(value)) %>%
+  spread(data.type,value) %>%
+  rename(site_side = site.side)
+```
+
+Now lets create a similar dataset with what we have calculated. First, calculate total biomass per transect (with sum), and then calculate mean biomass per transect.
+
+```{r}
+
+man_density_data <- test2 %>% 
+  group_by(classcode, site, side, year, transect) %>% 
+  summarise(total_biomass_g = sum(weight)) %>% 
+  group_by(classcode, site, side,year) %>% 
+  summarise(mean_biomass_g = mean(total_biomass_g, na.rm = T)) %>% 
+  mutate(biomass_g_per_m2 = mean_biomass_g / (60*4),
+         biomass_g_per_hectare = biomass_g_per_m2 * 10000,
+         biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6)
+
+compare_biomass <- density_data %>% 
+  select(classcode, site, side, year, biomass) %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+  left_join(man_density_data, by = c('classcode','site','side','year'))
+
+plot5 <- ggplot(compare_biomass, aes(biomass,biomass_ton_per_hectare, color = classcode)) + 
+  geom_abline(aes(intercept = 0, slope = 1), linetype= 2) +
+  geom_point() + 
+  scale_color_discrete(guide = F) + 
+  labs(caption = 'Resolution is at species-year-site-side') +
+  theme_bw()
+  
+plot5
+
+#ggplotly(plot5)
+
+```
+
+This looks similar to what Dan had, but with some modifications to the y-axis, likely only as a result of adjusting the transect area. The fact that for each species the overestimation is consistent makes me believe that all this is due to different $a$ and $b$ values used to estimate the individual fish weight. I will have to go over, one by one, and identify the differences.
+
+For now, we can export the`life_history_data` that at least has the correct $a$ and $b$ values to calculate grams from cm. The functions above can be exported to use them individually.
+
+
 
 ## TO DO##
 
@@ -255,6 +341,3 @@ count_data %>%
 
   Obtain missing a and b values
   
-  Compare calculated biomasses to Jen's
-  
-  Include documentation for both length2weight functions
