@@ -326,9 +326,12 @@ This looks similar to what Dan had, but with some modifications to the y-axis, l
 
 For now, we can export the`life_history_data` that at least has the correct $a$ and $b$ values to calculate grams from cm. The functions above can be exported to use them individually.
 
+```{r}
+write.csv(life_history_data, file = "./functions/life_history_fixed.csv", row.names = F)
+```
 
 
-## TO DO##
+## TO DO
 
   Make sure to "complete" the count dataset by adding all species that have been observed in one site for all samples. Possibly something like
   
