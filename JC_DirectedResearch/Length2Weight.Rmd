@@ -311,9 +311,9 @@ compare_biomass <- density_data %>%
 
 plot5 <- ggplot(compare_biomass, aes(biomass,biomass_ton_per_hectare, color = classcode)) + 
   geom_abline(aes(intercept = 0, slope = 1), linetype= 2) +
-  geom_point() + 
+  geom_point(alpha = 0.5) + 
   scale_color_discrete(guide = F) + 
-  labs(caption = 'Resolution is at species-year-site-side') +
+  labs(x = "biomass from ci_reserve_data_final3.txt") +
   theme_bw()
   
 plot5
@@ -330,10 +330,73 @@ For now, we can export the`life_history_data` that at least has the correct $a$ 
 write.csv(life_history_data, file = "./functions/life_history_fixed.csv", row.names = F)
 ```
 
+# Compare these parametres to the ones used in the [SAS file](https://github.com/DanOvando/ahnold/blob/master/scripts/Fish%20size%20biomass%20processing%20CIMPA.sas)
+
+
+I copy-pasted the values in the file into excel (too messy to apply regular expressions), and manually converted everything into $a$ and $b$ parameters to take TL in cm and output W in grams. Lets read it in and compare the values.
+
+```{r}
+ab_sas <- read_csv("SAS_allometric.csv", col_types = cols()) %>% 
+  rename(classcode = Speciescode)
+
+ab_sas
+```
+
+```{r}
+biomass_sas <- count_data %>% 
+  left_join(ab_sas, by = "classcode") %>% 
+  mutate(w = count*aTL*(fish_tl^b))
+```
+
+
+```{r, fig.height=10, fig.width=5}
+sas_density_data <- biomass_sas %>% 
+  group_by(classcode, site, side, year, transect) %>% 
+  summarise(total_biomass_g = sum(w)) %>% 
+  group_by(classcode, site, side,year) %>% 
+  summarise(mean_biomass_g = mean(total_biomass_g, na.rm = T)) %>% 
+  mutate(sas_biomass_g_per_m2 = mean_biomass_g / (60*4),
+         sas_biomass_g_per_hectare = sas_biomass_g_per_m2 * 10000,
+         sas_biomass_ton_per_hectare = sas_biomass_g_per_hectare * 1e-6)
+
+compare_biomass <- density_data %>% 
+  select(classcode, site, side, year, biomass) %>% 
+  mutate(classcode = toupper(classcode)) %>% 
+  left_join(man_density_data, by = c('classcode','site','side','year')) %>% 
+  left_join(sas_density_data, by = c('classcode','site','side','year'))
+
+plot6 <- ggplot(compare_biomass, aes(biomass,sas_biomass_ton_per_hectare, color = classcode)) + 
+  geom_abline(aes(intercept = 0, slope = 1), linetype= 2) +
+  geom_point(alpha = 0.5) + 
+  scale_color_discrete(guide = F) + 
+  labs(x = "biomass from ci_reserve_data_final3.txt") +
+  theme_bw()
+
+plot7 <- ggplot(compare_biomass, aes(sas_biomass_ton_per_hectare, biomass_ton_per_hectare, color = classcode)) + 
+  geom_abline(aes(intercept = 0, slope = 1), linetype= 2) +
+  geom_point(alpha = 0.5) + 
+  scale_color_discrete(guide = F) + 
+  theme_bw()
+
+grid.arrange(plot5, plot6, plot7)
+
+```
+
+
+This looks weird. The first plot is the comparision between my calculation (same as Dan's) and `biomass from ci_reserve_data_final3.txt`. The second graph is re-calculating biomasses using the allometric parameters from the [SAS file](https://github.com/DanOvando/ahnold/blob/master/scripts/Fish%20size%20biomass%20processing%20CIMPA.sas) against the `biomass from ci_reserve_data_final3.txt` data, and the third graph compares biomasses using SAS parameters and ahnold parameters, which give the best fit. Looks like there is something funny in the `biomass from ci_reserve_data_final3.txt` file, because the values are quite different. Perhaps this is due to the lack of 0's for unobserved -but expected to observe- species.
+
+```{r, results='asis'}
+lm1 <- lm(biomass_ton_per_hectare ~ biomass, compare_biomass)
+lm2 <- lm(sas_biomass_ton_per_hectare ~ biomass, compare_biomass)
+lm3 <- lm(biomass_ton_per_hectare ~ sas_biomass_ton_per_hectare, compare_biomass)
+
+stargazer::stargazer(lm1, lm2, lm3, type = "html", dep.var.labels = c("ahnold biomass", "sas biomass", "ahnold biomass"))
+```
+
 
 ## TO DO
 
-  Make sure to "complete" the count dataset by adding all species that have been observed in one site for all samples. Possibly something like
+  - Make sure to "complete" the count dataset by adding all species that have been observed in one site for all samples. Possibly something like
   
 ```
 
@@ -342,5 +405,5 @@ count_data %>%
   
 ```
 
-  Obtain missing a and b values
+  - Obtain missing a and b values
   
