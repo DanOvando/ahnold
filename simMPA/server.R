@@ -35,7 +35,7 @@ fish <- create_fish(m = input$m,
                     linf = input$linf)
 
 fleet <- create_fleet(length_50_sel = input$length_sel[1],
-                      length_95_sel = input$length_sel[2],
+                      delta = input$length_sel[2] - input$length_sel[1],
                       mpa_reaction = "concentrate",
                       price = input$price,
                       theta = input$theta,

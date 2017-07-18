@@ -1,19 +1,1252 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output: html_document
 ---
+```{r, include=F}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+
+```
 
 ```{r}
-knitr::opts_chunk$set(echo = F, message = F, warning = F)
+rm(list = ls())
+set.seed(123)
 library(tidyverse)
-library(scales)
-library(hrbrthemes)
-library(ggthemes)
+library(purrr)
 library(forcats)
 library(modelr)
+library(stringr)
+library(rstan)
+library(rstanarm)
+library(car)
+library(AER)
+library(broom)
+library(viridis)
+library(scales)
+# library(trelliscopejs)
+
 
 
 ```
 
 
 Ahnold is on life support. Time to figure out if he's worth saving. 
+
+The result of about a week's worth of simulation work is that it's next to impossible to reconcile the model estimates (that the MPA caused decreases in observed densities) with just about any simulation that I can produce. Constant catch seemed promising for a bit there, but that clearly isn't the case for the Channel Islands catches. You then tried taking the observed catches and simulating, under the "constant catch" assumption that those same patterns of catch would have been observed wihthout the MPAs, and that doesn't produce it. Basically, I can't come up with a "mechanistic" approach to explain the process (though I could of course just see how much catch would need to increase in MPA prep to produce the observed effect)
+
+These steps are intended to explore whether a) you can get a "new result" by either better data processing, figure out what species are driving the current result, and baring both of those, try 1-3 more simulation "bells and whistles" These things **will** be finished this week, with the goal of sending an updated draft to the committee summarising where you are by this weekend. 
+
+# Load in data
+
+```{r}
+
+demons::load_functions(func_dir = '../functions')
+
+# set options ------------------------------
+# Summary: set options for model run
+
+run_name <- 'Working'
+
+run_dir <- file.path('../results', run_name)
+
+run_description <-
+  'Model selection process, testing STAN selection'
+
+if (dir.exists(run_dir) == F) {
+  dir.create(run_dir)
+}
+
+write(run_description,
+      file = paste(run_dir, 'RUN_DESCRIPTION.txt', sep = '/'))
+
+# set run parameters ------------------------------
+# Summary: set things like filters
+
+channel_islands_only <- T
+
+min_year <- 1999
+
+occurance_ranking_cutoff <- 0.5
+
+small_num <-  0
+
+use_mpa_site_effects <- F
+
+# base_theme <- hrbrthemes::theme_ipsum(base_size = 18, axis_title_size = 16)
+
+# theme_set(base_theme)
+
+# load Data ------------------------------
+# Summary: Bring in required data for project
+
+length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+life_history_data <-
+  read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>%
+  mutate(classcode = tolower(classcode)) %>%
+  rename(description_2 = Description) %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+# deal with boccacio
+# all values females from Love et al. 1990 @Love1990
+# 
+boccacio <- life_history_data$classcode == 'spau' & is.na(life_history_data$classcode) == F
+
+life_history_data$wl_a[boccacio] <- 0.0081
+  
+life_history_data$wl_b[boccacio] <- 3.06068
+
+life_history_data$wl_l_units[boccacio] <- 'cm'
+
+life_history_data$wl_input_length[boccacio] <- 'TL'
+
+life_history_data$wl_w_units[boccacio] <- 'g'
+
+
+site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  select(site,side,mpagroup, mpa_status, reserve, region, year_mpa,mpaareanm2) %>%
+  unique()
+
+length_data <- length_data %>%
+  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') %>%
+  left_join(site_data, by = c('site', 'side'))
+
+conditions_data <- length_data %>%
+  group_by(site,side, year) %>%
+  summarise(
+    mean_temp = mean(temp, na.rm = T),
+    mean_kelp = mean(pctcnpy, na.rm = T),
+    mean_vis = mean(vis, na.rm = T)
+  )
+
+density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  gather('concat.name', 'value', grep('_', colnames(.)), convert = T) %>%
+  mutate(
+    data.type = gsub('\\_.*', '', concat.name),
+    classcode = gsub('.*\\_', '', concat.name)
+  ) %>%
+  mutate(value = as.numeric(value)) %>%
+  spread(data.type, value) %>%
+  rename(site_side = site.side)
+
+if (file.exists('../data/enso.csv')) {
+  enso <- read_csv('../data/enso.csv') %>%
+    group_by(year) %>%
+    summarise(mean_enso = mean(enso, na.rm = T)) %>%
+    mutate(lag1_enso = dplyr::lag(mean_enso,1),
+           lag2_enso = dplyr::lag(mean_enso,2),
+           lag3_enso = dplyr::lag(mean_enso,3),
+           lag4_enso = dplyr::lag(mean_enso,4))
+
+} else {
+  scrape_enso(outdir = '../data/')
+
+}
+
+if (file.exists('../data/pdo.csv')) {
+  pdo <- read_csv('../data/pdo.csv') %>%
+    group_by(year) %>%
+    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
+    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
+           lag2_pdo = dplyr::lag(mean_pdo,2),
+           lag3_pdo = dplyr::lag(mean_pdo,3),
+           lag4_pdo = dplyr::lag(mean_pdo,4))
+
+} else {
+  scrape_pdo(outdir = '../data/')
+
+  pdo <- read_csv('../data/pdo.csv') %>%
+    group_by(year) %>%
+    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
+    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
+           lag2_pdo = dplyr::lag(mean_pdo,2),
+           lag3_pdo = dplyr::lag(mean_pdo,3),
+           lag4_pdo = dplyr::lag(mean_pdo,4))
+
+}
+
+# prepare data----------------------------
+# Summary: apply transformations, calculations etc.
+
+has_all <- function(x,reg_vars)
+  any(is.na(x[reg_vars])) == F
+
+
+reg_vars <- c('log_density', 'year','targeted', 'region' ,
+              'mean_enso','mean_pdo', 'mean_temp','classcode','site','side','post_mlpa','region',
+              'trophicgroup')
+
+reg_data <- density_data %>%
+  select(biomass, site,side,site_side, year, classcode) %>%
+  # group_by(site,side, year, classcode) %>%
+  # summarise(mean_density = mean(biomass, na.rm = T)) %>%
+  ungroup() %>%
+  left_join(conditions_data, by = c('site','side', 'year')) %>%
+  left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
+                                         commonname),
+            by = 'classcode') %>%
+  left_join(enso, by = 'year') %>%
+  left_join(pdo, by = 'year') %>%
+  left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side')) %>%
+  mutate(
+    any_seen = biomass > 0,
+    log_density = log(biomass),
+    targeted = as.numeric(targeted == 'Targeted'),
+    post_mlpa = as.numeric(year >= 2003)
+  ) %>%
+  filter(is.na(targeted) == F,
+         is.na(year) == F,
+         is.na(biomass) == F) %>%
+# select_(.dots = as.list(reg_vars)) %>%
+  map2_df(
+    colnames(.),
+    center_scale,
+    omit_names = c('log_density','biomass', 'year', 'mean_enso', 'mean_pdo',
+                   'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
+  ) %>%
+  mutate(log_density = log(biomass + small_num)) %>%
+  purrrlyr::by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
+  filter(.out == F)
+
+
+# reg_data <- reg_data %>%
+#   group_by(classcode) %>%
+#   mutate(log_density = center_scale(log_density,'log_density'))
+#
+# a %>%
+#   group_by(year)
+
+# cs_reg_data <- reg_data
+
+
+if (use_mpa_site_effects == F)
+{
+
+reg_data <- reg_data %>%
+  mutate(did_dummy = targeted,
+         did_year = paste('did', year, sep = '_')) %>%
+  spread(did_year, did_dummy, fill = 0) %>%
+  mutate(temp2 = mean_temp ^ 2,
+         pdo2 = mean_pdo ^ 2,
+         enso2 = mean_enso ^ 2,
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
+
+} else {
+reg_data <- reg_data %>%
+  mutate(did_dummy = targeted * (year_mpa >0),
+         did_year_inside = paste('did', year, 'inside',sep = '_')) %>%
+  spread(did_year_inside, did_dummy, fill = 0) %>%
+  mutate(did_dummy = targeted * (year_mpa == 0),
+         did_year_outside = paste('did', year,'outside', sep = '_')) %>%
+  spread(did_year_outside, did_dummy, fill = 0) %>%
+  mutate(temp2 = mean_temp ^ 2,
+         pdo2 = mean_pdo ^ 2,
+         enso2 = mean_enso ^ 2,
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
+
+}
+
+
+```
+
+
+# Check size at first capture
+
+# Re-calculate densities from the length data
+
+```{r}
+length_to_weight <-
+  function(mean_length,
+  min_length,
+  max_length,
+  count,
+  weight_a,
+  weight_b,
+  length_units = 'cm',
+  weight_units = 'g',
+  length_for_weight_units = 'mm',
+  length_type_for_weight,
+  tl_sl_a,
+  tl_sl_b,
+  tl_sl_type,
+  tl_sl_formula) {
+  #
+  # generate_lengths <- function(count,mean_length, min_length, max_length){
+  if (is.na(count) | count == 0){
+    
+    outweight <-  0
+  }  else {
+    
+  if (is.na(min_length) |
+  is.na(max_length)) {
+  #generate distribution of lengths
+  
+  lengths <-  rep(mean_length, count)
+  
+  } else{
+  # lengths <-  pmax(min_length,pmin(max_length,rpois(count, lambda = mean_length)))
+  
+    if (max_length < min_length){
+      
+      old_max <- max_length
+      
+      max_length <- min_length
+      
+      min_length <- old_max
+      
+    }
+    
+  lengths <- runif(count, min = min_length, max = max_length)
+  }
+
+  if (length_type_for_weight == 'SL') {
+  if (tl_sl_type  == 'TYPICAL') {
+  weight_lengths <-  lengths * tl_sl_a + tl_sl_b
+  } else{
+  weight_lengths <- (lengths - tl_sl_b) / tl_sl_a
+  
+  }
+  
+  } else {
+  weight_lengths <-  lengths
+  }
+  
+  if (length_units == 'cm' & length_for_weight_units == 'mm') {
+  weight_lengths <- weight_lengths * 10
+  }
+  
+  weight <-  weight_a * weight_lengths ^ weight_b
+  
+  if (weight_units == 'kg') {
+  weight <- weight * 1000
+  }
+  outweight = sum(weight)
+  }
+    
+    return(outweight)
+  } #close function
+  
+
+length_bio_data <-   length_data %>% 
+  filter(is.na(commonname) == F)%>% 
+  mutate(biomass_g = pmap_dbl(list(mean_length = fish_tl,
+                                      min_length = min_tl,
+                                      max_length = max_tl,
+                                      count = count,
+                                      weight_a = wl_a,
+                                      weight_b = wl_b,
+                                      length_type_for_weight = wl_input_length,
+                                      length_for_weight_units = wl_l_units,
+                                      tl_sl_a = lc.a._for_wl,
+                                      tl_sl_b = lc.b._for_wl,
+                                      tl_sl_type = lc_type_for_wl,
+                                      tl_sl_formula = ll_equation_for_wl), length_to_weight)) %>% 
+    mutate(mean_weight_g = biomass_g / count,
+         mean_weight_lbs = mean_weight_g * .00220462) 
+  
+
+
+check_length_to_weight <-  length_bio_data %>% 
+  ggplot(aes(fish_tl, mean_weight_lbs, key = commonname)) + 
+  geom_point() + 
+  labs(x = 'Total Length (cm)', y = 'Mean Weight (lbs)')
+
+check_length_to_weight
+
+```
+
+OK, those are the lengths, and nothing looks too crazy in there, after correcting the boccacio. 
+
+Let's calculate density data now, based on your own methods
+
+## Converting lengths to densities
+
+Each transect is 30m x 2 m wide by 2m tall. Looking at it from the top then, they are ~ 30x2 m, meaning the area covered is 60m^2^. So, That's your denominator somewhere. The question then is the units that you want to look at this in. Mean density per area? median? Jen does mean, so let's go with that. 
+
+So, over the course of a year, the mean density per m^2^ is the sum of the biomass of a given species at a site over the year, divided by the number of transects times the area of the transects.
+
+But first, you need to add the zeros back in. For now, let's follow Jenn's convention and assume that any species can be anywhere. 
+
+
+```{r}
+
+species_sightings <- length_data %>% 
+  group_by(site) %>% 
+  summarise(species_seen = list(unique(length_data$classcode))) #quick hack to tell it to look for all species
+
+pre_density <- length_bio_data %>%  #add in zeros
+  ungroup() %>% 
+  select(site,side,year, transect) %>% 
+  unique() %>%  {
+  pmap(
+    list(
+      this_site = .$site,
+      this_side = .$side,
+      this_year = .$year,
+      this_transect = .$transect
+    ),
+    add_missing_fish,
+    observations = length_bio_data,
+    species_sightings = species_sightings
+  )
+} %>% 
+  bind_rows()
+
+transect_area <- 60
+
+density_data <- pre_density %>% 
+  mutate(sample_event = paste(campus, method,year,month,day,site,side,zone,level,transect, sep = '-')) %>% 
+  group_by(year,site,side,classcode) %>% 
+  summarise(biomass = sum(biomass_g), transects_swam = length(sample_event %>% unique()),
+            biomass_units = 'grams', density = biomass / (transects_swam * transect_area),
+            density_units = 'grams per m2') %>% 
+ left_join(conditions_data, by = c('site','side', 'year')) %>%
+  left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
+                                         commonname) %>% mutate(classcode = toupper(classcode)),
+            by = 'classcode') %>%
+  left_join(enso, by = 'year') %>%
+  left_join(pdo, by = 'year') %>%
+  left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side'))
+
+density_data %>% 
+  group_by(year, targeted) %>% 
+  filter(is.na(targeted) == F, biomass >0) %>% 
+  summarise(mean_density = mean(density, na.rm = T)) %>% 
+  ggplot(aes(year,log(mean_density), color = targeted)) + 
+  geom_line() + 
+  geom_point()
+
+```
+
+OK, those would be the manually calculated densities, in units that make sense to me. 
+
+
+Let's look at the trends in densities by species
+
+```{r}
+
+a <- density_data %>% 
+  filter(is.na(commonname) == F, is.na(targeted) == F) %>% 
+  group_by(commonname,year) %>% 
+  summarise(mean_density = mean(density, na.rm = T), fished = unique(targeted), samples = sum(density >0, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(fished = as.factor(fished)) %>% 
+  nest(-commonname) %>% 
+  mutate(total_samples = map_dbl(data,~sum(.x$samples))) %>% 
+  mutate(commonname = fct_reorder(commonname, total_samples)) %>% 
+  arrange(desc(total_samples)) %>% 
+  mutate(trend_plot = map(data, ~ggplot(.x,aes(.$year, .$mean_density, color = .$fished)) + geom_line() + geom_point()))
+  
+# trelliscopejs::trelliscope(a, name = 'blah', self_contained = T, panel = "trend_plot")
+
+```
+
+
+# Zuur based data exploration
+
+Doing some basic explorations of the data based on the recommendations of zuur, all on the raw data
+
+
+```{r}
+
+
+a <- density_data %>% 
+  filter(density >0, is.na(classcode) == F) %>% 
+  group_by(commonname) %>% 
+  nest(-commonname) %>% 
+  mutate(box = trelliscopejs::map_plot(data,~ggplot(.x,aes(.x$density)) + geom_dotplot()))  %>% 
+  select(commonname, box)
+  
+  # 
+  # trelliscopejs::trelliscope(a,name = 'wtf', panel_col = 'box',
+  #             self_contained = T)
+
+```
+
+
+## Examine species coverage over time and space
+
+
+```{r}
+
+a <- density_data %>% 
+  filter(density > 0) %>% 
+  group_by(commonname,year) %>% 
+  summarise(num_samples = length(density)) %>% 
+  nest(-commonname) %>% 
+  mutate(year_counts = trelliscopejs::map_plot(data, ~ ggplot(.x, aes(.$year,.$num_samples)) + geom_col()))
+
+# trelliscopejs::trelliscope(a, name = 'blah', self_contained = T)
+
+```
+
+Interesting, there definitely are some species that only pop up a little later. Let's try a filter
+
+```{r}
+
+consistently_observed_species <- density_data %>% 
+  filter(density > 0, year > 1999) %>% 
+  group_by(classcode) %>% 
+  summarise(nyears = length(unique(year)),
+            min_year = min(year),
+            max_year = max(year)) %>% 
+  filter(min_year == 2000 & max_year >= 2010)
+
+```
+
+
+
+## Examine colinearity problems
+
+
+
+# Try regression with custom length data
+
+
+```{r}
+
+density_data$targeted[density_data$commonname == 'black surfperch'] <-  'Targeted'
+
+
+reg_data <- density_data %>%
+  mutate(targeted = (targeted == 'Targeted' ) %>% as.numeric()) %>% 
+  filter(is.na(targeted) == F) %>% 
+  mutate(did_dummy = targeted,
+         did_year = paste('did', year, sep = '_')) %>%
+  spread(did_year, did_dummy, fill = 0) %>%
+  mutate(temp2 = mean_temp ^ 2,
+         pdo2 = mean_pdo ^ 2,
+         enso2 = mean_enso ^ 2,
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
+
+species_sample_counts = reg_data %>%
+  group_by(classcode) %>%
+  summarise(num_samples = sum(is.na(biomass) == F & biomass > 0),
+            num_years = length(unique(year))) %>%
+  ungroup() %>%
+  mutate(prank = percent_rank(num_samples)) %>%
+  filter(prank > occurance_ranking_cutoff) %>%
+  arrange(prank %>% desc()) %>%
+  left_join(life_history_data %>% select(classcode, targeted), by = 'classcode')
+
+
+reg_data <- reg_data %>%
+  dplyr::filter(is.na(biomass) == F,
+         is.na(commonname) == F,
+         is.na(targeted) == F,
+         year > min_year,
+         !str_detect(commonname %>% tolower(), 'yoy'),
+         region != 'SBI',
+         classcode %in% species_sample_counts$classcode)
+
+  reg_data <- reg_data %>%
+    filter( !region %in% c('SCSR','CCSR'))
+
+
+
+seen_reg_data <- reg_data %>%
+  filter(density > 0, is.na(mean_temp) == F) %>% 
+  mutate(log_density = log(density)) %>% 
+  filter(year_mpa != 1978) %>% 
+  ungroup() %>% 
+  mutate(mean_temp = (mean_temp - mean(mean_temp, na.rm = T)) / (2 * sd(mean_temp, na.rm = T)),
+         temp2 = mean_temp^2)
+
+
+did_years <-
+  paste('did', min(seen_reg_data$year): max(seen_reg_data$year), sep = '_')
+
+did_year <- did_years[str_detect(did_years,'2002') == F]
+
+```
+
+Check alternative regressions
+
+```{r}
+
+reg_fmla_1 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)"
+    )
+  )
+
+# wtf <- lme4::lmer(reg_fmla_12, data = seen_reg_data)
+
+
+regs <- ls()[str_detect(ls(),"reg_fmla")]
+
+reg_list <- map(regs, get) %>%
+  set_names(regs)
+
+
+validate <- seen_reg_data %>%
+  crossv_mc(1, test = 0.05)
+
+test_data <- list(test_training = list(validate), reg_fmlas = reg_list)
+
+
+test_data <- cross_d(test_data) %>%
+  mutate(reg_name = regs) %>%
+  unnest(test_training, .drop = F)
+
+canditate_models <- test_data %>%
+  mutate(fitted_model = map2(reg_fmlas, train,~lme4::lmer(.x, data = .y)))
+
+
+
+canditate_models2 <- canditate_models %>%
+  mutate(root_mean_se = map2_dbl(fitted_model, train , ~modelr::rmse(.x,.y)),
+         aic = map_dbl(fitted_model, AIC) ,
+         bic = map_dbl(fitted_model, BIC),
+         r2 = map2_dbl(fitted_model, train, ~rsquare(.x,.y))) %>%
+  arrange(aic)
+
+```
+
+
+Check model fits
+
+```{r}
+
+reg <- canditate_models2$reg_fmlas[[1]]
+
+seen_model <- lme4::lmer(reg, data = seen_reg_data)
+
+consistent_sites <-  seen_reg_data %>%
+  group_by(site_side) %>%
+  summarise(spans_transition = all(2001:2005 %in% unique(year))) %>%
+  filter(spans_transition == T)
+
+seen_ana_sci_model <- lme4::lmer(reg, data = seen_reg_data %>%
+                                   filter(site_side %in% consistent_sites$site_side))
+                                # filter(region %in% c('ANA','SCI')))
+
+
+mpa_effect_plot <-  seen_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+
+mpa_anasci_effect_plot <-  seen_ana_sci_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'Anacapa and Santa Cruz Only')
+
+
+```
+
+Try it again with only consistently sampled species.
+
+```{r}
+
+consistently_seen_reg_data <- seen_reg_data %>% 
+  filter(classcode %in% consistently_observed_species$classcode)
+
+consistently_seen_model <- lme4::lmer(reg, data = consistently_seen_reg_data)
+
+consistent_mpa_effect_plot <-  consistently_seen_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+
+consistent_mpa_effect_plot
+
+```
+
+
+Consistently sampled and inside MPA only
+
+```{r}
+
+consistently_seen_reg_data <- seen_reg_data %>% 
+  filter(classcode %in% consistently_observed_species$classcode, 
+         year_mpa == 2003)
+
+consistently_seen_model <- lme4::lmer(reg, data = consistently_seen_reg_data)
+
+consistent_mpa_effect_plot <-  consistently_seen_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+
+consistent_mpa_effect_plot
+
+```
+
+So the story here. Recalculating the densities by hand doesn't seem to do much of anything, even though the overal density patterns produced by this estimate are pretty damn different than Jenns. But, the story clearly isn't just 
+
+# Re-run regressions with species subsamples
+
+## No kelp bass!
+
+```{r}
+
+consistently_seen_no_kelp_reg_data <- seen_reg_data %>% 
+  filter(classcode %in% consistently_observed_species$classcode, 
+         commonname != 'kelp bass')
+
+consistently_seen_no_kelp_model <- lme4::lmer(reg, data = consistently_seen_no_kelp_reg_data)
+
+consistent_no_kelp_mpa_effect_plot <-  consistently_seen_no_kelp_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+
+consistent_no_kelp_mpa_effect_plot
+
+```
+
+
+
+## Species by species....
+
+
+```{r}
+
+reg <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + mean_pdo + (1 |region:site)"
+    )
+    )
+
+  species <- unique(seen_reg_data$classcode)
+    
+    species_out <- tibble(classcode = species) %>% 
+    mutate(data = map(classcode, ~ filter(seen_reg_data %>% ungroup(),classcode != .x)))
+    
+    species_out <- species_out %>% 
+      mutate(model = map(data, ~lme4::lmer(reg, .x)))
+    
+    plotfoo <- function(model){
+    model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+    }
+    
+    species_out_plots <- species_out %>% 
+      mutate(reg_plot = map(model, ~plotfoo(.x)))
+    
+    # trelliscopejs::trelliscope(species_out_plots, 'speciesout', panel_col = 'reg_plot', self_contained = T)
+    
+
+```
+
+# Data coverage
+
+Another simple possibility is that the whole problem is just the change in data structure. Let's test this. Suppose that you attempt to resample the data such that it looks like the pre-coverage
+
+```{r}
+
+length_data %>% 
+  group_by(year) %>% 
+  summarise(nsamp = length(fish_tl)) %>% 
+  ggplot(aes(year, nsamp)) + 
+  geom_line()
+
+```
+One idea then is just to sample down the mean pre-2003 numbers Let's see what species coverage looks like over that period
+
+```{r}
+
+length_data %>% 
+  group_by(site) %>% 
+  mutate(has_pre = any(year < 2003)) %>% 
+  filter(has_pre == T) %>% 
+  group_by(year, site) %>% 
+  summarise(ns = length(unique(classcode))) %>% 
+  ggplot(aes(year, ns)) + 
+  geom_vline(aes(xintercept = 2003)) +
+  geom_line() + 
+  facet_wrap(~site)
+
+```
+
+OK so the number of species at a siteis somewhat stable... what happens if you sample down to the number of samples randomly.... What would this look like?
+
+One idea is that you could simply bootstrap the data by year
+
+```{r}
+
+samps <- list()
+
+for (i in 1:3) {
+  
+temp <- length_data %>% 
+  nest(-year) %>% 
+  mutate(samp = map(data, ~sample_n(.x, 100, replace = T))) %>% 
+  select(-data) %>% 
+  unnest()
+
+temp$iteration <- i
+
+samps[[i]] <- temp
+
+}
+
+samps <- bind_rows(samps)
+
+
+```
+
+OK now you have your samples. What are these samples really telling you though?
+
+One possibility is that the regressoin is really just picking up on the massive increase in sample size, which shouldn't be a thing, but this is one way to check. 
+
+But what is this really checking.... In theory, you want the probability of detection to be constant over time. But, suppose that probability of detection of some critters changed with the MPA monitoring, and so you suddenly see a lot more of them right after the MPA. This should control for that some, since if those guys aren't in the sample, or are downsampled, then the effect should dissapear. 
+
+That's not a good way of thinking about it. Look back at those length histograms and how much they fill out in 2003. The idea here is to try and keep the length frequencies about as shoddy as they were pre 2003 for those sites, and then run the model on those, so that you're not picking up the "higher resolution" length data. 
+
+Worth a shot...
+
+```{r}
+
+samps %>% 
+  filter(commonname == 'kelp bass') %>% 
+  ggplot(aes(fish_tl)) + 
+  geom_histogram() + 
+  facet_grid(year ~iteration)
+
+```
+
+
+```{r}
+
+samps <-   samps %>%
+  filter(iteration == 1) %>% 
+  filter(is.na(commonname) == F)%>% 
+  mutate(biomass_g = pmap_dbl(list(mean_length = fish_tl,
+                                      min_length = min_tl,
+                                      max_length = max_tl,
+                                      count = count,
+                                      weight_a = wl_a,
+                                      weight_b = wl_b,
+                                      length_type_for_weight = wl_input_length,
+                                      length_for_weight_units = wl_l_units,
+                                      tl_sl_a = lc.a._for_wl,
+                                      tl_sl_b = lc.b._for_wl,
+                                      tl_sl_type = lc_type_for_wl,
+                                      tl_sl_formula = ll_equation_for_wl), length_to_weight)) %>% 
+    mutate(mean_weight_g = biomass_g / count,
+         mean_weight_lbs = mean_weight_g * .00220462) 
+  
+
+species_sightings <- samps %>% 
+  group_by(site) %>% 
+  summarise(species_seen = list(unique(samps$classcode))) #quick hack to tell it to look for all species
+
+samps_pre_density <- samps %>%  #add in zeros
+  ungroup() %>% 
+  select(site,side,year, transect) %>% 
+  unique() %>%  {
+  pmap(
+    list(
+      this_site = .$site,
+      this_side = .$side,
+      this_year = .$year,
+      this_transect = .$transect
+    ),
+    add_missing_fish,
+    observations = length_bio_data,
+    species_sightings = species_sightings
+  )
+} %>% 
+  bind_rows()
+
+transect_area <- 60
+
+samps_density_data <- samps_pre_density %>% 
+  mutate(sample_event = paste(campus, method,year,month,day,site,side,zone,level,transect, sep = '-')) %>% 
+  group_by(year,site,side,classcode) %>% 
+  summarise(biomass = sum(biomass_g), transects_swam = length(sample_event %>% unique()),
+            biomass_units = 'grams', density = biomass / (transects_swam * transect_area),
+            density_units = 'grams per m2') %>% 
+ left_join(conditions_data, by = c('site','side', 'year')) %>%
+  left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
+                                         commonname) %>% mutate(classcode = toupper(classcode)),
+            by = 'classcode') %>%
+  left_join(enso, by = 'year') %>%
+  left_join(pdo, by = 'year') %>%
+  left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side'))
+
+
+samps_density_data$targeted[samps_density_data$commonname == 'black surfperch'] <-  'Targeted'
+
+
+samps_reg_data <- samps_density_data %>%
+  mutate(targeted = (targeted == 'Targeted' ) %>% as.numeric()) %>% 
+  filter(is.na(targeted) == F) %>% 
+  mutate(did_dummy = targeted,
+         did_year = paste('did', year, sep = '_')) %>%
+  spread(did_year, did_dummy, fill = 0) %>%
+  mutate(temp2 = mean_temp ^ 2,
+         pdo2 = mean_pdo ^ 2,
+         enso2 = mean_enso ^ 2,
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
+
+samps_species_sample_counts = samps_reg_data %>%
+  group_by(classcode) %>%
+  summarise(num_samples = sum(is.na(biomass) == F & biomass > 0),
+            num_years = length(unique(year))) %>%
+  ungroup() %>%
+  mutate(prank = percent_rank(num_samples)) %>%
+  filter(prank > occurance_ranking_cutoff) %>%
+  arrange(prank %>% desc()) %>%
+  left_join(life_history_data %>% select(classcode, targeted), by = 'classcode')
+
+
+samps_reg_data <- samps_reg_data %>%
+  dplyr::filter(is.na(biomass) == F,
+         is.na(commonname) == F,
+         is.na(targeted) == F,
+         year > min_year,
+         !str_detect(commonname %>% tolower(), 'yoy'),
+         region != 'SBI',
+         classcode %in% samps_species_sample_counts$classcode)
+
+  samps_reg_data <- samps_reg_data %>%
+    filter( !region %in% c('SCSR','CCSR'))
+
+
+
+samps_seen_reg_data <- samps_reg_data %>%
+  filter(density > 0, is.na(mean_temp) == F) %>% 
+  mutate(log_density = log(density)) %>% 
+  filter(year_mpa != 1978) %>% 
+  ungroup() %>% 
+  mutate(mean_temp = (mean_temp - mean(mean_temp, na.rm = T)) / (2 * sd(mean_temp, na.rm = T)),
+         temp2 = mean_temp^2)
+
+
+did_years <-
+  paste('did', min(samps_seen_reg_data$year): max(samps_seen_reg_data$year), sep = '_')
+
+did_year <- did_years[str_detect(did_years,'2002') == F]
+
+
+```
+
+```{r}
+
+reg <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + mean_pdo + (1 |region:site)"
+    )
+    )
+
+samps_seen_model <- lme4::lmer(reg, data = samps_seen_reg_data)
+
+consistent_sites <-  samps_seen_reg_data %>%
+  group_by(site_side) %>%
+  summarise(spans_transition = all(2001:2005 %in% unique(year))) %>%
+  filter(spans_transition == T)
+
+seen_ana_sci_model <- lme4::lmer(reg, data = samps_seen_reg_data %>%
+                                   filter(site_side %in% consistent_sites$site_side))
+                                # filter(region %in% c('ANA','SCI')))
+
+
+mpa_effect_plot <-  samps_seen_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+```
+
+Welll that's not it....
+
+SOAB. 
+
+
+# Only mature fish
+
+```{r}
+
+lmat_ratio <- 0.55
+
+matdat <- rfishbase::maturity(life_history_data$taxa)
+
+matdat <- matdat %>% 
+  rename(taxa = sciname) %>% 
+  left_join(life_history_data %>% select(taxa,dplyr::contains('vbgf')), by = 'taxa')
+
+
+length_data$lmat <- length_data$vbgf.linf * lmat_ratio
+
+
+# length_data %>% 
+#   group_by(taxa) %>% 
+#   filter(lmat > max(fish_tl)) %>% 
+#   ggplot(aes(fish_tl)) + 
+#   geom_histogram() + 
+#   geom_vline(aes(xintercept = lmat), color = 'red') + 
+#   facet_wrap(~taxa, scales = 'free') + 
+#   theme(axis.text = element_blank())
+
+mature_data <- length_data %>% 
+  filter(is.na(lmat) == F & fish_tl >= lmat)
+
+
+mature_data <-   mature_data %>%
+  filter(is.na(commonname) == F)%>% 
+  mutate(biomass_g = pmap_dbl(list(mean_length = fish_tl,
+                                      min_length = min_tl,
+                                      max_length = max_tl,
+                                      count = count,
+                                      weight_a = wl_a,
+                                      weight_b = wl_b,
+                                      length_type_for_weight = wl_input_length,
+                                      length_for_weight_units = wl_l_units,
+                                      tl_sl_a = lc.a._for_wl,
+                                      tl_sl_b = lc.b._for_wl,
+                                      tl_sl_type = lc_type_for_wl,
+                                      tl_sl_formula = ll_equation_for_wl), length_to_weight)) %>% 
+    mutate(mean_weight_g = biomass_g / count,
+         mean_weight_lbs = mean_weight_g * .00220462) 
+  
+
+species_sightings <- mature_data %>% 
+  group_by(site) %>% 
+  summarise(species_seen = list(unique(mature_data$classcode))) #quick hack to tell it to look for all species
+
+mature_pre_density <- mature_data %>%  #add in zeros
+  ungroup() %>% 
+  select(site,side,year, transect) %>% 
+  unique() %>%  {
+  pmap(
+    list(
+      this_site = .$site,
+      this_side = .$side,
+      this_year = .$year,
+      this_transect = .$transect
+    ),
+    add_missing_fish,
+    observations = length_bio_data,
+    species_sightings = species_sightings
+  )
+} %>% 
+  bind_rows()
+
+transect_area <- 60
+
+mature_density_data <- mature_pre_density %>% 
+  mutate(sample_event = paste(campus, method,year,month,day,site,side,zone,level,transect, sep = '-')) %>% 
+  group_by(year,site,side,classcode) %>% 
+  summarise(biomass = sum(biomass_g), transects_swam = length(sample_event %>% unique()),
+            biomass_units = 'grams', density = biomass / (transects_swam * transect_area),
+            density_units = 'grams per m2') %>% 
+ left_join(conditions_data, by = c('site','side', 'year')) %>%
+  left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
+                                         commonname) %>% mutate(classcode = toupper(classcode)),
+            by = 'classcode') %>%
+  left_join(enso, by = 'year') %>%
+  left_join(pdo, by = 'year') %>%
+  left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side'))
+
+
+mature_density_data$targeted[mature_density_data$commonname == 'black surfperch'] <-  'Targeted'
+
+
+mature_reg_data <- mature_density_data %>%
+  mutate(targeted = (targeted == 'Targeted' ) %>% as.numeric()) %>% 
+  filter(is.na(targeted) == F) %>% 
+  mutate(did_dummy = targeted,
+         did_year = paste('did', year, sep = '_')) %>%
+  spread(did_year, did_dummy, fill = 0) %>%
+  mutate(temp2 = mean_temp ^ 2,
+         pdo2 = mean_pdo ^ 2,
+         enso2 = mean_enso ^ 2,
+         site_side = paste(site,side,sep = '_'),
+         factor_year = as.factor(year))
+
+mature_species_sample_counts = mature_reg_data %>%
+  group_by(classcode) %>%
+  summarise(num_samples = sum(is.na(biomass) == F & biomass > 0),
+            num_years = length(unique(year))) %>%
+  ungroup() %>%
+  mutate(prank = percent_rank(num_samples)) %>%
+  filter(prank > occurance_ranking_cutoff) %>%
+  arrange(prank %>% desc()) %>%
+  left_join(life_history_data %>% select(classcode, targeted), by = 'classcode')
+
+
+mature_reg_data <- mature_reg_data %>%
+  dplyr::filter(is.na(biomass) == F,
+         is.na(commonname) == F,
+         is.na(targeted) == F,
+         year > min_year,
+         !str_detect(commonname %>% tolower(), 'yoy'),
+         region != 'SBI',
+         classcode %in% mature_species_sample_counts$classcode)
+
+  mature_reg_data <- mature_reg_data %>%
+    filter( !region %in% c('SCSR','CCSR'))
+
+
+
+mature_seen_reg_data <- mature_reg_data %>%
+  filter(density > 0, is.na(mean_temp) == F) %>% 
+  mutate(log_density = log(density)) %>% 
+  filter(year_mpa != 1978) %>% 
+  ungroup() %>% 
+  mutate(mean_temp = (mean_temp - mean(mean_temp, na.rm = T)) / (2 * sd(mean_temp, na.rm = T)),
+         temp2 = mean_temp^2)
+
+
+did_years <-
+  paste('did', min(mature_reg_data$year): max(mature_reg_data$year), sep = '_')
+
+did_year <- did_years[str_detect(did_years,'2002') == F]
+
+reg <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + mean_pdo + (1 |region:site)"
+    )
+    )
+
+mature_seen_model <- lme4::lmer(reg, data = mature_seen_reg_data)
+
+consistent_sites <-  mature_seen_reg_data %>%
+  group_by(site_side) %>%
+  summarise(spans_transition = all(2001:2005 %in% unique(year))) %>%
+  filter(spans_transition == T)
+
+seen_ana_sci_model <- lme4::lmer(reg, data = samps_seen_reg_data %>%
+                                   filter(site_side %in% consistent_sites$site_side))
+                                # filter(region %in% c('ANA','SCI')))
+
+
+mpa_effect_plot <-  mature_seen_model %>%
+  tidy() %>%
+  mutate(lower = estimate - 1.96 * std.error,
+         upper = estimate + 1.96 * std.error) %>%
+  filter(str_detect(term,'did')) %>%
+  mutate(year = str_replace(term, 'did_','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  ylab('Estimated MLPA Effect') +
+  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+  xlab('Year') +
+  coord_cartesian(ylim = c(-1.25,1.25)) +
+  labs(title = 'System-Wide Effect')
+
+
+
+
+
+```
+
+
+
+# Add in ricker density dependence
+
+# Selectivity
+
+# Lag recruitment
+
+# Data augmentation

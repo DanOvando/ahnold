@@ -17,6 +17,7 @@ add_missing_fish <-
            this_transect,
            observations,
            species_sightings) {
+
     sampling_event <- observations %>%
       ungroup() %>%
       filter(site == this_site,
@@ -38,7 +39,7 @@ add_missing_fish <-
     if (length(species_missing) > 0) {
       blank <- sampling_event[rep(1, length(species_missing)),] %>%
         mutate(classcode = species_missing) %>%
-        gather('metric', 'value', contains('biomass')) %>%
+        gather('metric', 'value', dplyr::contains('biomass_g')) %>%
         mutate(value = 0) %>%
         spread(metric, value)
 

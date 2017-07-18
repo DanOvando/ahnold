@@ -8,6 +8,11 @@ output:
     toc_float: yes
 ---
 
+```{r}
+knitr::opts_chunk$set(eval = F, echo = F, message = F)
+```
+
+
 ```{r libraries, echo=F, message=F, warning=F, include=F}
 library(tidyverse)
 library(forcats)
@@ -1590,6 +1595,36 @@ Tomorrow:
 
 2. Try and recompile the density data from scratch again. 
 
+
+# Review from Kyle's Class
+
+* Idea: repeat Jenn's analysis, but compare the rate of change inside and outside for fished species across gradients of larval/adult movement. THe idea would be that the non-likely to be affected by MPAs species are a better control, and so you'd use those for the control trend pre mpa for the fished species. 
+
+So, then you use the fished species outside the reserve as the control 
+
+# 2017-06-14 - Triage update
+
+Your goal in triaging has been to understand what drives the current main results, which seem to suggest that MPA caused overal decrease but an increase inside the MPA. 
+
+The problem is that I can't really seem to explain that observation. 
+
+So, what's causing that?
+
+Simulating the shit out of it doesn't seem to do the trick. Almost any combination of stock recruitment relationships, movement rates, fleet dynamics, etc. don't produce that observed behavioral pattern. 
+
+Adding in the observed catch histories as well doesn't do it. 
+
+Isolating the data doesn't seem to do it. 
+
+Same pattern if you include only mature fish
+
+Same pattern if you degrade the post 2003 data
+
+Same pattern if you use only consistently sampled sites and species
+
+Same pattern if you recalculate the densities based on the raw length data
+
+I'm stumped at this point. The model says all else being equal, it's worse to be a fished species right after the MLPA than right before. That's a cool story, but really hard to justify that. 
 
 
 

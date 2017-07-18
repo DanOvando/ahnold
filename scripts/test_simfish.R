@@ -33,7 +33,7 @@ fleet <-
     beta = 1.3,
     theta = 1e-1,
     q = 1e-3,
-    fleet_model = 'constant-effort',
+    fleet_model = 'open-access',
     effort_allocation = 'gravity',
     initial_effort = 1000,
     target_catch = 1
@@ -61,9 +61,9 @@ without_mpa <-
     fish = fish,
     fleet = fleet,
     manager  = create_manager(mpa_size = 0, year_mpa = 10),
-    num_patches = 100,
+    num_patches = 10,
     burn_year = 25,
-    sim_years = 200
+    sim_years = 35
   ) %>%
   mutate(run = 'without_mpa')
 
@@ -71,8 +71,10 @@ without_mpa %>%
   group_by(year) %>%
   summarise(effort = sum(effort),
             profits = sum(profits),
-            f = max(f)) %>%
-  ggplot(aes(year, effort)) +
+            f = max(f),
+            catch = sum(biomass_caught),
+            total_ssb = sum(ssb)) %>%
+  ggplot(aes(year, total_ssb)) +
   geom_point()
 
 with_mpa <-

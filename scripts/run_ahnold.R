@@ -314,7 +314,7 @@ reg_fmla_4 <-
     paste0(
       "log_density ~",
       paste(did_year, collapse = "+"),
-      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + mean_pdo + (1 |region:site) + targeted"
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + mean_pdo + (1 |region:site)"
     )
     )
 
@@ -323,9 +323,22 @@ reg_fmla_5 <-
     paste0(
       "log_density ~",
       paste(did_year, collapse = "+"),
-      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + (1 |region:site) + targeted"
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_enso + (1 |region:site)"
     )
   )
+
+# reg_fmla_12 <-
+#   as.formula(
+#     paste0(
+#       "log_density ~",
+#       paste(did_year, collapse = "+"),
+#       "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)"
+#     )
+#   )
+
+
+# wtf <- lme4::lmer(reg_fmla_12, seen_reg_data)
+
 
 reg_fmla_6 <-
   as.formula(
@@ -364,6 +377,25 @@ reg_fmla_9 <-
       lag3_enso + lag4_enso + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + (1 |region:site) + targeted"
     )
   )
+
+reg_fmla_10 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_pdo + (1 |site) + targeted"
+    )
+  )
+
+reg_fmla_11 <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + (1 + mean_temp + temp2 + region|classcode)+ mean_pdo + (1 |region) + targeted"
+    )
+  )
+
 
 
 regs <- ls()[str_detect(ls(),"reg_fmla")]
@@ -674,24 +706,24 @@ mlpa_no_mpa_experiment <- with_mlpa_no_mpas %>%
   geom_smooth()
 
 
-mpa_site_effect_plot <-  seen_model %>%
-  tidy() %>%
-  mutate(lower = estimate - 1.96 * std.error,
-         upper = estimate + 1.96 * std.error) %>%
-  filter(str_detect(term,'did')) %>%
-  mutate(site_type = str_split(term,"_", simplify = T)[,3]) %>%
-  mutate(year = str_split(term,"_", simplify = T)[,2] %>% as.numeric()) %>%
-  ggplot() +
-  geom_hline(aes(yintercept = 0)) +
-  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
-  geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
-  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
-  ylab('Estimated MLPA Effect') +
-  ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
-  xlab('Year') +
-  coord_cartesian(ylim = c(-1.25,1.25)) +
-  labs(title = 'System-Wide Effect') +
-  facet_wrap(~site_type)
+# mpa_site_effect_plot <-  seen_model %>%
+#   tidy() %>%
+#   mutate(lower = estimate - 1.96 * std.error,
+#          upper = estimate + 1.96 * std.error) %>%
+#   filter(str_detect(term,'did')) %>%
+#   mutate(site_type = str_split(term,"_", simplify = T)[,3]) %>%
+#   mutate(year = str_split(term,"_", simplify = T)[,2] %>% as.numeric()) %>%
+#   ggplot() +
+#   geom_hline(aes(yintercept = 0)) +
+#   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+#   geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
+#   geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+#   ylab('Estimated MLPA Effect') +
+#   ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
+#   xlab('Year') +
+#   coord_cartesian(ylim = c(-1.25,1.25)) +
+#   labs(title = 'System-Wide Effect') +
+#   facet_wrap(~site_type)
 
 
 mpa_effect_plot <-  seen_model %>%

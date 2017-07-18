@@ -1,0 +1,41 @@
+---
+title: "mlpa-effects-update"
+author: "Dan Ovando"
+date: "4/25/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Project Summary
+
+Quick reminder of data and identification
+
+# Methods
+
+Parallel trends defense
+
+Regression structure and defense 
+
+# Results 
+
+Baseline results
+
+# Explanations
+
+What state of world explains these results?
+
+Summary of simulation scenarios run
+
+Graph showing % of runs with SSB greater no MPA
+
+Local effects/MPA effects
+
+# What now?
+
+What do we do if we can't justify the result
+
+
+
