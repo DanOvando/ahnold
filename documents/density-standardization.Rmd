@@ -1,0 +1,413 @@
+---
+title: "Density Standardization"
+output: html_notebook
+---
+
+This is a new angle on the MLPA effects. You still haven't ever addressed the zeros in the database, which after diving you're seeing is definitely an issue. It remains really unclear to me how you'd create a joint DiD estimator, without going down a tobit route, and the tobit doesn't seem to work at all in this context since the data are so heavily zero inflated. 
+
+On top of that, with all the damn coefficients in the model it's getting really hard to make sure that you're isloating what you think you're isolating. 
+
+So what if instead you make this something like a two-part model. 
+
+Part one will be a standaridization of the densitiy indicies in a standard delta-glm fashion. You can obviously fancy that up a lot but as a starting point. 
+
+You'll fit one model the the positive densities, and another to the probability of observation, by species. You'll then extract the year terms from the positive densities, and create a standardized probability of observation as the probability of observing across the years, holding other factors constant. There will be no "mpa effect" in this part of the model. 
+
+This will create a net abundance index by species over time, potentially by region as well if you want to get fancy, but let's start simple. 
+
+Once you have that in place, you now fir the DiD estimator to try and extract the MLPA effect from the overall abundance trend. This will be the part where you incorporate things like ENSO, temperature, etc, to try and tease out the MPA from environmental drivers. This also gets you out of the weighting issue, where increased observations by species might be biasing your results. 
+
+Let's see what happens. 
+
+```{r load-life}
+library(sf)
+library(scales)
+library(rstanarm)
+library(scales)
+library(viridis)
+library(ggmap)
+library(tidyverse)
+library(forcats)
+library(stringr)
+library(lubridate)
+library(purrr)
+demons::load_functions('../functions')
+```
+
+Copy and pasting from `run_ahonold.R`
+```{r load-data}
+
+# set options ------------------------------
+# Summary: set options for model run
+
+run_name <- 'Working'
+
+run_dir <- file.path('../results', run_name)
+
+run_description <-
+  'Model selection process, testing STAN selection'
+
+if (dir.exists(run_dir) == F) {
+  dir.create(run_dir)
+}
+
+write(run_description,
+      file = paste(run_dir, 'RUN_DESCRIPTION.txt', sep = '/'))
+
+# set run parameters ------------------------------
+# Summary: set things like filters
+
+channel_islands_only <- T
+
+min_year <- 1999
+
+occurance_ranking_cutoff <- 0.5
+
+small_num <-  0
+
+use_mpa_site_effects <- F
+
+base_theme <- hrbrthemes::theme_ipsum(base_size = 18, axis_title_size = 16)
+
+
+theme_set(base_theme)
+
+# load Data ------------------------------
+# Summary: Bring in required data for project
+
+length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+life_history_data <-
+  read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>%
+  mutate(classcode = tolower(classcode)) %>%
+  # rename(description_2 = Description) %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  select(site,side,mpagroup, mpa_status, reserve, region, year_mpa,mpaareanm2) %>%
+  unique()
+
+length_data <- length_data %>%
+  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') %>%
+  left_join(site_data, by = c('site', 'side'))
+
+conditions_data <- length_data %>%
+  group_by(site,side, year) %>%
+  summarise(
+    mean_temp = mean(temp, na.rm = T),
+    mean_kelp = mean(pctcnpy, na.rm = T),
+    mean_vis = mean(vis, na.rm = T)
+  )
+
+density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  gather('concat.name', 'value', grep('_', colnames(.)), convert = T) %>%
+  mutate(
+    data.type = gsub('\\_.*', '', concat.name),
+    classcode = gsub('.*\\_', '', concat.name)
+  ) %>%
+  mutate(value = as.numeric(value)) %>%
+  spread(data.type, value) %>%
+  rename(site_side = site.side)
+
+if (file.exists('../data/enso.csv')) {
+  enso <- read_csv('../data/enso.csv') %>%
+    group_by(year) %>%
+    summarise(mean_enso = mean(enso, na.rm = T)) %>%
+    mutate(lag1_enso = dplyr::lag(mean_enso,1),
+           lag2_enso = dplyr::lag(mean_enso,2),
+           lag3_enso = dplyr::lag(mean_enso,3),
+           lag4_enso = dplyr::lag(mean_enso,4))
+
+} else {
+  scrape_enso(outdir = '../data/')
+
+}
+
+if (file.exists('../data/pdo.csv')) {
+  pdo <- read_csv('../data/pdo.csv') %>%
+    group_by(year) %>%
+    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
+    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
+           lag2_pdo = dplyr::lag(mean_pdo,2),
+           lag3_pdo = dplyr::lag(mean_pdo,3),
+           lag4_pdo = dplyr::lag(mean_pdo,4))
+
+} else {
+  scrape_pdo(outdir = '../data/')
+
+  pdo <- read_csv('../data/pdo.csv') %>%
+    group_by(year) %>%
+    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
+    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
+           lag2_pdo = dplyr::lag(mean_pdo,2),
+           lag3_pdo = dplyr::lag(mean_pdo,3),
+           lag4_pdo = dplyr::lag(mean_pdo,4))
+
+}
+
+# prepare data----------------------------
+# Summary: apply transformations, calculations etc.
+
+has_all <- function(x,reg_vars)
+  any(is.na(x[reg_vars])) == F
+
+
+reg_vars <- c('log_density', 'year','targeted', 'region' ,
+              'mean_enso','mean_pdo', 'mean_temp','classcode','site','side','post_mlpa','region',
+              'trophicgroup')
+
+reg_data <- density_data %>%
+  select(biomass, site,side,site_side, year, classcode) %>%
+  # group_by(site,side, year, classcode) %>%
+  # summarise(mean_density = mean(biomass, na.rm = T)) %>%
+  ungroup() %>%
+  left_join(conditions_data, by = c('site','side', 'year')) %>%
+  left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
+                                         commonname),
+            by = 'classcode') %>%
+  left_join(enso, by = 'year') %>%
+  left_join(pdo, by = 'year') %>%
+  left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side')) %>%
+  mutate(
+    any_seen = biomass > 0,
+    log_density = log(biomass),
+    targeted = as.numeric(targeted == 'Targeted'),
+    post_mlpa = as.numeric(year >= 2003)
+  ) %>%
+  filter(is.na(targeted) == F,
+         is.na(year) == F,
+         is.na(biomass) == F) %>%
+# select_(.dots = as.list(reg_vars)) %>%
+  map2_df(
+    colnames(.),
+    center_scale,
+    omit_names = c('log_density','biomass', 'year', 'mean_enso', 'mean_pdo',
+                   'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
+  ) %>%
+  mutate(log_density = log(biomass + small_num)) %>%
+  purrrlyr::by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
+  filter(.out == F)
+
+```
+
+`density_data` then is your basic density data provided by Jen. Let's also create `length_to_density_data` as an alternative, allowing you to more explicitly account for observer effects. 
+
+Pulling from `ahnold_labbook.Rmd`
+
+```{r create-density-from-length}
+
+density_example <- density_data %>% 
+  filter(is.na(biomass) == F & biomass >0) %>% 
+  sample_n(1)
+
+
+
+length_to_weight <-
+  function(mean_length,
+  min_length,
+  max_length,
+  count,
+  weight_a,
+  weight_b,
+  length_units = 'cm',
+  weight_units = 'g',
+  length_for_weight_units = 'mm',
+  length_type_for_weight,
+  tl_sl_a,
+  tl_sl_b,
+  tl_sl_type,
+  tl_sl_formula) {
+  #
+  # generate_lengths <- function(count,mean_length, min_length, max_length){
+  
+  if (is.na(count) | count == 0){
+    
+    outweight <-  0
+  }  else {
+    
+  if (is.na(min_length) |
+  is.na(max_length)) {
+  #generate distribution of lengths
+  
+  lengths <-  rep(mean_length, count)
+  
+  } else{
+  # lengths <-  pmax(min_length,pmin(max_length,rpois(count, lambda = mean_length)))
+  lengths <- runif(count, min = min_length, max = max_length)
+  }
+
+  if (length_type_for_weight == 'SL') {
+  if (tl_sl_type  == 'TYPICAL') {
+  weight_lengths <-  lengths * tl_sl_a + tl_sl_b
+  } else{
+  weight_lengths <- (lengths - tl_sl_b) / tl_sl_a
+  
+  }
+  
+  } else {
+  weight_lengths <-  lengths
+  }
+  
+  if (length_units == 'cm' & length_for_weight_units == 'mm') {
+  weight_lengths <- weight_lengths * 10
+  }
+  
+  weight <-  weight_a * weight_lengths ^ weight_b
+  
+  if (weight_units == 'kg') {
+  weight <- weight * 1000
+  }
+  outweight = sum(weight)
+  }
+    return(outweight)
+  } #close function
+  
+length_example <- length_data %>% 
+  filter(classcode == toupper(density_example$classcode)
+, site == density_example$site, 
+         side == density_example$side, year == density_example$year) 
+
+length_example <-   length_data %>% 
+  filter(is.na(commonname) == F) %>% 
+  mutate(biomass_g = pmap_dbl(list(mean_length = fish_tl,
+                                      min_length = min_tl,
+                                      max_length = max_tl,
+                                      count = count,
+                                      weight_a = wl_a,
+                                      weight_b = wl_b,
+                                      length_type_for_weight = wl_input_length,
+                                      length_for_weight_units = wl_l_units,
+                                      tl_sl_a = lc.a._for_wl,
+                                      tl_sl_b = lc.b._for_wl,
+                                      tl_sl_type = lc_type_for_wl,
+                                      tl_sl_formula = ll_equation_for_wl), length_to_weight))
+
+length_to_density_data <- length_example %>% 
+  mutate(observer = ifelse(is.na(observer), 'unknown',observer),
+         surge = ifelse(is.na(observer), 'unknown',surge)) %>% 
+  group_by(classcode, site, side, year, transect, observer) %>% 
+  summarise(total_biomass_g = sum(biomass_g),
+            mean_temp = mean(temp, na.rm = T),
+            mean_vis = mean(vis, na.rm = T),
+            mean_depth = mean(depth, na.rm = T),
+            mean_canopy = mean(pctcnpy, na.rm = T)
+            ) 
+
+length_to_density_data %>% 
+  summarise(nobs = length(classcode))
+
+species_sightings <- length_data %>% 
+  group_by(site) %>% 
+  summarise(species_seen = list(unique(classcode)))
+
+
+length_to_density_data <- length_to_density_data %>% 
+  ungroup() %>% 
+  select(site,side,year, transect) %>% 
+  unique() %>%  {
+  pmap(
+    list(
+      this_site = .$site,
+      this_side = .$side,
+      this_year = .$year,
+      this_transect = .$transect
+    ),
+    add_missing_fish,
+    observations = length_to_density_data,
+    species_sightings = species_sightings
+  )
+} %>% 
+  bind_rows()
+
+length_to_density_data <- length_to_density_data %>% 
+  group_by(classcode, observer, site, side,year) %>% 
+  summarise(mean_biomass_g = mean(total_biomass_g, na.rm = T),
+             mean_temp = mean(mean_temp, na.rm = T),
+            mean_vis = mean(mean_vis, na.rm = T),
+            mean_depth = mean(mean_depth, na.rm = T),
+            mean_canopy = mean(mean_canopy, na.rm = T)) %>% 
+  mutate(
+            biomass_g_per_m2 = mean_biomass_g / (30*4),
+            biomass_g_per_hectare = biomass_g_per_m2 * 10000,
+            biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6
+           ) %>% 
+  ungroup()
+
+
+
+```
+
+
+
+OK, now you've got data to play with. 
+
+Let's explore fitting the regression objects for each of the data objects (manually created and supplied densities). The end goal is to be able to compare the raw and standardized abundance indicies by species over time. 
+
+```{r}
+
+raw_length_vars <- paste(c('factor_year','observer', 'site', 'side', 'mean_vis', 'mean_canopy'), collapse = '+')
+
+supplied_density_vars <- paste(c('factor_year', 'side', 'side','mean_kelp', 'mean_vis'), collapse = '+')
+
+length_to_density_data <- length_to_density_data %>% 
+  mutate(any_seen = mean_biomass_g > 0, 
+         factor_year = factor(year),
+         log_density = log(mean_biomass_g))
+
+density_data <- reg_data %>% 
+  mutate(factor_year = factor(year), 
+         log_density = log(biomass))
+
+length_to_density_models <- length_to_density_data %>% 
+  nest(-classcode) %>% 
+  mutate(ind_vars = raw_length_vars)
+
+supplied_density_models <- density_data %>% 
+  nest(-classcode) %>% 
+  mutate(ind_vars = supplied_density_vars)
+
+fit_fish <- function(data, ind_vars, dep_var, family,fit_seen = T){
+  
+  if (fit_seen == T){
+  data <- data %>% 
+    filter(any_seen == fit_seen & is.na(any_seen) == F)
+  } else{
+      data <- data %>% 
+    filter(is.na(any_seen) == F)
+  }
+  
+  reg_fmla <- paste(dep_var, ind_vars, sep = '~') %>% as.formula()
+  model <- glm(reg_fmla, data  = data, family = family)
+}
+
+safely_fit_fish <- safely(fit_fish)
+
+supplied_density_models <- supplied_density_models %>% 
+  mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
+         seeing_model =map2(data,ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
+
+supplied_density_models <- supplied_density_models %>% 
+  mutate(seeing_error = map(seeing_model, 'error'),
+         seen_error =  map(seen_model, 'error'),
+         seeing_model = map(seeing_model, 'result'),
+         seen_model =  map(seen_model, 'result'))
+
+length_to_density_models <- length_to_density_models %>% 
+  mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
+         seeing_model =map2(data,ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
+
+length_to_density_models <- length_to_density_models %>% 
+  mutate(seeing_error = map(seeing_model, 'error'),
+         seen_error =  map(seen_model, 'error'),
+         seeing_model = map(seeing_model, 'result'),
+         seen_model =  map(seen_model, 'result'))
+
+```
+
+
+
+
