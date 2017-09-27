@@ -71,7 +71,7 @@ life_history_data <-
   read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>%
   mutate(classcode = tolower(classcode)) %>%
-  rename(description_2 = Description) %>%
+  # rename(description_2 = Description) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
 site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
@@ -178,7 +178,7 @@ reg_data <- density_data %>%
                    'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
   ) %>%
   mutate(log_density = log(biomass + small_num)) %>%
-  by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
+  purrrlyr::by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
   filter(.out == F)
 
 
@@ -279,7 +279,7 @@ did_years <- c(did_years_inside, did_years_outside)
 
 
 }
-did_year <- did_years[str_detect(did_years,'2002') == F]
+did_year <- did_years[str_detect(did_years,'2003') == F]
 # did_year <- did_years[did_years != 'did_2002']
 
 
@@ -429,6 +429,26 @@ canditate_models <- canditate_models %>%
 # Summary: select variables, forms, etc.
 #
 
+# reg <-
+#   as.formula(
+#     paste0(
+#       "log_density ~",
+#       paste(did_year, collapse = "+"),
+#       "+ factor_year + mean_temp + temp2 + mean_pdo + targeted"
+#     )
+#   )
+#
+#
+reg <-
+  as.formula(
+    paste0(
+      "log_density ~",
+      paste(did_year, collapse = "+"),
+      "+ (1|year) + ( mean_temp + temp2 + region|classcode)+ mean_pdo + (1 |site) + targeted"
+    )
+  )
+
+
 reg <- canditate_models$reg_fmlas[[1]]
 # reg <-
 #   as.formula(
@@ -477,6 +497,7 @@ reg <- canditate_models$reg_fmlas[[1]]
 # run model ------------------------------
 # Summary: fit ahnold model
 
+seen_model <- lm(reg, data = seen_reg_data)
 
 
 seen_model <- lme4::lmer(reg, data = seen_reg_data)
@@ -736,7 +757,7 @@ mpa_effect_plot <-  seen_model %>%
   geom_hline(aes(yintercept = 0)) +
   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
   geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
-  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2003, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
   ylab('Estimated MLPA Effect') +
   ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
   xlab('Year') +

@@ -1,7 +1,13 @@
 ---
 title: "Density Standardization"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(warning = F, message = F)
+```
 
 This is a new angle on the MLPA effects. You still haven't ever addressed the zeros in the database, which after diving you're seeing is definitely an issue. It remains really unclear to me how you'd create a joint DiD estimator, without going down a tobit route, and the tobit doesn't seem to work at all in this context since the data are so heavily zero inflated. 
 
@@ -66,11 +72,6 @@ occurance_ranking_cutoff <- 0.5
 small_num <-  0
 
 use_mpa_site_effects <- F
-
-base_theme <- hrbrthemes::theme_ipsum(base_size = 18, axis_title_size = 16)
-
-
-theme_set(base_theme)
 
 # load Data ------------------------------
 # Summary: Bring in required data for project
@@ -349,9 +350,9 @@ Let's explore fitting the regression objects for each of the data objects (manua
 
 ```{r}
 
-raw_length_vars <- paste(c('factor_year','observer', 'site', 'side', 'mean_vis', 'mean_canopy'), collapse = '+')
+raw_length_vars <- paste(c('factor_year','observer', 'site'), collapse = '+')
 
-supplied_density_vars <- paste(c('factor_year', 'side', 'side','mean_kelp', 'mean_vis'), collapse = '+')
+supplied_density_vars <- paste(c('factor_year', 'side','mean_kelp', 'mean_vis'), collapse = '+')
 
 length_to_density_data <- length_to_density_data %>% 
   mutate(any_seen = mean_biomass_g > 0, 
@@ -386,28 +387,134 @@ fit_fish <- function(data, ind_vars, dep_var, family,fit_seen = T){
 
 safely_fit_fish <- safely(fit_fish)
 
+length_to_density_models <- length_to_density_models %>% 
+  mutate(data_source = 'length_to_density')
+
 supplied_density_models <- supplied_density_models %>% 
+  mutate(data_source = 'supplied_density')
+
+
+center_scale <- function(x){
+  
+  if(all(is.finite(x[is.na(x) == F]))){
+  
+  y <- (x - mean(x, na.rm = T)) / (2 * sd(x, na.rm = T))
+  } else {
+    y <- x
+  }
+  
+  return(y)
+  
+}
+
+abundance_models <- length_to_density_models %>% 
+  bind_rows(supplied_density_models) %>% 
+  mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale)))
+
+  
+
+abundance_models <- abundance_models %>% 
   mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
          seeing_model =map2(data,ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
 
-supplied_density_models <- supplied_density_models %>% 
+abundance_models <- abundance_models %>% 
   mutate(seeing_error = map(seeing_model, 'error'),
          seen_error =  map(seen_model, 'error'),
          seeing_model = map(seeing_model, 'result'),
          seen_model =  map(seen_model, 'result'))
 
-length_to_density_models <- length_to_density_models %>% 
-  mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
-         seeing_model =map2(data,ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
-
-length_to_density_models <- length_to_density_models %>% 
-  mutate(seeing_error = map(seeing_model, 'error'),
-         seen_error =  map(seen_model, 'error'),
-         seeing_model = map(seeing_model, 'result'),
-         seen_model =  map(seen_model, 'result'))
 
 ```
 
 
+OK that seemed to work!
 
+```{r}
+
+
+abundance_models <- abundance_models %>% 
+  mutate(no_error = map2_lgl(seeing_error, seen_error, ~is.null(.x) & is.null(.y))) %>% 
+  filter(no_error == T)
+
+
+abundance_models <- abundance_models %>% 
+  mutate(seen_coefs = map(seen_model, broom::tidy),
+         seen_aug = map(seen_model, broom::augment),
+         seeing_coefs = map(seeing_model, broom::tidy),
+         seeing_aug = map(seeing_model, broom::augment))
+
+
+```
+
+Strategy for getting out year terms in this thing. Rather than losing a year of data you need to actually consider the intercept in there. 
+
+Write a function to deal with all this, using `model$xlevels` to see the available levels and see what you're missing, just to make sure the years are relative to what you think they are. 
+
+So, what you want to do is for each regression, figure out what the intercept actually means, and include that. Then, back transform all the year terms as the intercept + sigma^2/2 + year_terms + sigma^2/2, and the put all that in an appropriate data frame. 
+
+For the year-by-year probabilities, generate a fake data frame by year holding the other things constant, and then changing year, and getting the predicted probabilities back from that  process, in the same data frame, and then just `bind_cols` and multiply to get your abundance index
+
+Still struggling with getting the omitted year out. One simple approach could be to set up your "constant" case, which is a dataframe that holds everything else constant extcept for the years, including the dropped year, and get the estimated abundance trend from that, and then back transform to normal space with a smearing estimate. 
+
+If you theory is right, then plotting the log density for that site and that observer against the model predicted trend should look like something reasonable, or at least be on the same order og magnitude
+
+As your check, look at the trend done the normal way, and comapre to the trend this way; they should more or less be identical except for the one more data point
+
+```{r}
+
+
+abundance_models <- abundance_models %>%
+  mutate(abundance_index = pmap(
+  list(
+  seen_model = seen_model,
+  seeing_model = seeing_model,
+  seeing_aug = seeing_aug,
+  seen_aug = seen_aug
+  ),
+  create_abundance_index
+  ))
+
+abundance_models <- abundance_models %>% 
+  mutate(abundance_plot = map(abundance_index, ~ ggplot(.x,aes(factor_year, abundance_index)) + geom_point()))
+
+abundance_models <- abundance_models %>% 
+  mutate(num_years = map_dbl(abundance_index, ~ nrow(.x)))
+
+common_names <- life_history_data %>% 
+  mutate(class_code = toupper())
+
+consistent_models <- abundance_models %>% 
+  filter(num_years >=13) %>% 
+  mutate(classcode = tolower(classcode)) %>% 
+  left_join(life_history_data %>% select(classcode, commonname)) %>% 
+  filter(str_detect(commonname, 'YOY') == F)
+  
+walk2(consistent_models$commonname, consistent_models$abundance_plot,
+      ~ ggsave(file = paste0(.x,'.pdf'), .y))
+
+consistent_models$abundance_plot[[3]]
+
+```
+
+
+```{r, warning=F, message=F}
+
+top_species <- density_data %>% 
+  group_by(classcode) %>% 
+  summarise(num_seen = sum(any_seen, na.rm = T)) %>% 
+  arrange(desc(num_seen)) %>% 
+  ungroup() %>% 
+  top_n(30,num_seen)
+
+density_data %>% 
+  filter(classcode %in% top_species$classcode) %>% 
+  group_by(year, classcode) %>% 
+  summarise(total_biomass = mean(biomass, na.rm = T)) %>% 
+  group_by(classcode) %>% 
+  mutate(scale_biomass = total_biomass / max(total_biomass, na.rm = T)) %>% ggplot(aes(year, scale_biomass, color = classcode)) + 
+  geom_line(show.legend = F) + 
+  facet_wrap(~classcode)
+
+
+```
 

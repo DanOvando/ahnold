@@ -85,7 +85,7 @@ life_history_data <-
   read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>%
   mutate(classcode = tolower(classcode)) %>%
-  rename(description_2 = Description) %>%
+  # rename(description_2 = Description) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
 # deal with boccacio
@@ -991,7 +991,6 @@ samps_reg_data <- samps_reg_data %>%
 
   samps_reg_data <- samps_reg_data %>%
     filter( !region %in% c('SCSR','CCSR'))
-
 
 
 samps_seen_reg_data <- samps_reg_data %>%

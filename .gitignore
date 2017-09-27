@@ -34,3 +34,5 @@ mydisplays/
 rosm.cache/
 data/SouthCoastHumanActivitiesCommercialFisheriesEconomicandSpatialData1992to2012
 libs/
+_ignore/.*
+_ignore**/*.*

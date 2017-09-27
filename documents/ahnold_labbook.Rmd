@@ -1627,8 +1627,110 @@ Same pattern if you recalculate the densities based on the raw length data
 I'm stumped at this point. The model says all else being equal, it's worse to be a fished species right after the MLPA than right before. That's a cool story, but really hard to justify that. 
 
 
+# 2017-07 Update
+
+You need to make a decision on this in the very near future. Or do you? If coaseian tuna is going to sub in here if this one doesn't get written, and Coaseian tuna is already in pretty good shape, then maybe the best thing to do is focus on skynet and scrooge, and shelve this for a bit as either a) close to being done or b) easily dropped and subbed in by Coaseian tuna. 
+
+What you do need then though is a sense of where you are. Go through here and clean up the repo a bit and try and make sense of all ths various places that things live...
+
+What you need is a cohesive report of all lf your efforts to explain the observed patterns estimated by the model. 
+
+Schedule a meeting with everyone to present your results and see what we think. 
+
+mlpa-effects-updat.Rmd seems to be the place to do that
+
+run-cdfw-mpa-sims.R and run-mpa-sims seem to be the two places where you've this this thing documented
+
+This would also be a good project to set up on the cloud, just cranking away on tons and tons of MPA simualtions to see when and where MPAs cause improvements
+
+# 2017-07-19 Check in with Steve
+
+The problem: I can't find a viable explanation for the sudden drop in predicted densities the model predicts in fished species. 
+
+In other words, the model broadly suggests that the parallel trends assumption was valid, and that the parallel trends were stable pre MLPA (interaction effects between fished species and year was zero pre-2003). 
+
+Suddenly, here comes the MLPA in 2003... and the coefficients take a nose dive, and then slowly recover. In other words, the predicted density 
+
+Suddenly in 2003, we see this sudden downtick, meaning that, being a fished species post-mlpa means that all else being equal, densities for fished species went down, relative to being an unfished species post-MLPA. 
+
+Let's make sure that you are interpreting your model right and this isn't just a case of stupid variable interpretation. 
+
+In theory, the DiD estimator should be fished, post-MLPA, and the interaction. 
+
+So, if it's a fished species post MLPA, that means that relative to being an unfished speices (0)
+plus the general effect of post MLPA (1) 
 
 
+log_density ~ did_2000 + did_2001 + did_2003 + did_2004 + did_2005 + 
+    did_2006 + did_2007 + did_2008 + did_2009 + did_2010 + did_2011 + 
+    did_2012 + did_2013 + (1 | year) + (1 + mean_temp + temp2 + 
+    region | classcode) + mean_pdo + (1 | site) + targeted
+    
+That's the regression chosen by AIC selection. 
+
+The effect is pretty damn stable to model selection. 
+
+Besides variables included then, I've tried
+
+1. Only using consistently sampled sites and species
+2. Removing species one-by-one and refitting the model
+3. Degrading the quality of the post 2003 data (same sample size as before)
+4. Recalculating the densities from the length data
+5. Only counting densities of mature fish
+
+All of those produce the same trends, which makes one think, OK, something good
+
+The problem is, I then tried to simulation test things to see what state of the world would cause that, and I can't get it to work. 
+
+Tried it with all kinds of life history and fleet dynamics, and biomass with MPA > biomass without MPA 
+
+Scraped CDFW catch data, used the actual catch histories for the species involved, and same deal. 
+
+So, what the hell explains this downtick, unless I'm just observing something else. 
+
+Is the problem maybe just a lack of a damn parallel trends assumption?
+
+Under parallel trends, the difference in the means should be more or less constant: different intercepts, same slope. 
+
+So, in theory, if you took take the mean difference in employment in miami and atlanta, subtracted them, you'd get say more employment in atlanta, but following the same southern trend. You then look at miami post intervention, and that trend has broken, and the amount by which it has broken is the causal effect.
+
+So in your case, there's an overall year effect, and an overall targeted effect, and the regression coefficient is then being targeted post MLPA. 
+
+And of course you're overthinking these. For all the fanciness, what the model seems to be picking up is that from 2003 to 2003, densities of fished species droped wayyyy more than densities of unfished species, and then started to climb up a bit. 
+
+The parallel trends in your model come in in the year effect. So, if you already control for being a fished species, and the year being 2004, and then ask the additional effect of being a fished species in 2004, that's essentialyl saying how much different than the unfished species in 2004 is the fished species in 2004. If there's no difference, the effect should be zero, since it should just be the density of the unfished species, plus the intercept of the fished species. 
+
+The fundamental problem then is the massive drop in densities of fished species from 2002 to 2003, which drops a lot quicker than the densities of unfished specise
+
+
+** Need to add section to chaper discussing current regulations in the evaluated MPAs and where they fit in the "no take" literature**
+
+
+# 2017-09-16 HOLY SHIT THIS MIGHT BE THE SOLUTION
+
+YOU'VE BEEN STRUGGLING LIKE CRAZY WITH HOW TO DEAL WITH THE ZEROS IN THE DID
+
+Also, it's been really unclear what's causing the dip, and you keep attributing it to this "other" things. Well instead of measuring densities, try and measure abundance as standardized densities, and then fit the DiD model to that, now controlling for all the things that affect abundance soaked up in year (el nino, and of course, MPAs!)
+
+One option would be to actually standardize each species CPUE, and then fit the DiD model to the standardized index of abundance, instead of to the raw densities??? Because what you really want to do is measure the effect of the MLPA on abundance, not just observed densities. and right now you control for a bunch of other stuff but it’s a bit confusing. 
+
+So what if you said get the standardized index of abundance in the above manner. Then, estimate the DiD on those terms, controlling for things that were omitted from the abundance index, e.g. el nino, water temperature, etc. that’s pretty fucking good. 
+
+You'll see if this works and makes a broad difference deterministically, and if it does, then you'll move to STAN for a full accounting of the uncertainty.  
+
+# Check in with Ray
+
+Catch was more or less reduced in proportion to the area constant effort and then that scorched earth outside
+
+System wide effect you wouldn't expect much inside and and more of an effect outside
+
+Would expect 
+
+Arlinghouse's lab 
+
+How much of the total catch is represented 
+
+You should also look into weighting by area of the sites/region, instead of weighting every observation equally 
 
 
 

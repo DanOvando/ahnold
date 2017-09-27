@@ -117,7 +117,7 @@ life_history_data <-
   read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>%
   mutate(classcode = tolower(classcode)) %>%
-  rename(description_2 = Description) %>%
+  # rename(description_2 = Description) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
 seen_species <- seen_reg_data %>%
@@ -415,6 +415,13 @@ plot_foo <- function(outcomes, year_mpa) {
 sim_grid_plots <- slice_grid %>%
   mutate(sim_plot = map_plot(mpa_experiment, ~plot_foo(.x, year_mpa = year_mpa))) %>%
   select(-fish,-fleet,-mpa_experiment)
+
+a <- slice_grid %>%
+  mutate(run = 1:nrow(.)) %>%
+  select(run,mpa_experiment) %>%
+  unnest() %>%
+  group_by(run,year) %>%
+  mutate(post_mpa = any(percent_mpa > 0))
 
 trelliscope(sim_grid_plots, name = 'a')
 
