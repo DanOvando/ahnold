@@ -350,18 +350,43 @@ Let's explore fitting the regression objects for each of the data objects (manua
 
 ```{r}
 
-raw_length_vars <- paste(c('factor_year','observer', 'site'), collapse = '+')
+raw_length_vars <- paste(c('factor_year','observer', 'site','mean_vis','mean_canopy'), collapse = '+')
 
-supplied_density_vars <- paste(c('factor_year', 'side','mean_kelp', 'mean_vis'), collapse = '+')
+supplied_density_vars <- paste(c('factor_year', 'site','mean_kelp', 'mean_vis'), collapse = '+')
 
 length_to_density_data <- length_to_density_data %>% 
   mutate(any_seen = mean_biomass_g > 0, 
          factor_year = factor(year),
-         log_density = log(mean_biomass_g))
+         log_density = log(mean_biomass_g)) %>% 
+  group_by(site, side,year) %>% 
+  mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_canopy = ifelse(is.na(mean_canopy), mean(mean_canopy, na.rm = T), mean_canopy)) %>% 
+  group_by(site,year) %>% 
+    mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_canopy = ifelse(is.na(mean_canopy), mean(mean_canopy, na.rm = T), mean_canopy)) %>% 
+  group_by(year) %>% 
+    mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_canopy = ifelse(is.na(mean_canopy), mean(mean_canopy, na.rm = T), mean_canopy)) %>% 
+  ungroup() %>% 
+    mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_canopy = ifelse(is.na(mean_canopy), mean(mean_canopy, na.rm = T), mean_canopy))
+  
 
 density_data <- reg_data %>% 
   mutate(factor_year = factor(year), 
-         log_density = log(biomass))
+         log_density = log(biomass)) %>% 
+   group_by(site, side,year) %>% 
+  mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)) %>% 
+  group_by(site,year) %>% 
+    mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)) %>% 
+  group_by(year) %>% 
+    mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)) %>% 
+  ungroup() %>% 
+    mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+         mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp))
 
 length_to_density_models <- length_to_density_data %>% 
   nest(-classcode) %>% 
@@ -380,7 +405,6 @@ fit_fish <- function(data, ind_vars, dep_var, family,fit_seen = T){
       data <- data %>% 
     filter(is.na(any_seen) == F)
   }
-  
   reg_fmla <- paste(dep_var, ind_vars, sep = '~') %>% as.formula()
   model <- glm(reg_fmla, data  = data, family = family)
 }
@@ -395,8 +419,7 @@ supplied_density_models <- supplied_density_models %>%
 
 
 center_scale <- function(x){
-  
-  if(all(is.finite(x[is.na(x) == F]))){
+  if(all(is.finite(x[is.na(x) == F])) & min(x, na.rm = T) != 0){
   
   y <- (x - mean(x, na.rm = T)) / (2 * sd(x, na.rm = T))
   } else {
@@ -409,6 +432,7 @@ center_scale <- function(x){
 
 abundance_models <- length_to_density_models %>% 
   bind_rows(supplied_density_models) %>% 
+    mutate(data = map(data, ~ filter(.x, year > 1999))) %>% 
   mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale)))
 
   
@@ -460,6 +484,8 @@ If you theory is right, then plotting the log density for that site and that obs
 
 As your check, look at the trend done the normal way, and comapre to the trend this way; they should more or less be identical except for the one more data point
 
+
+
 ```{r}
 
 
@@ -480,11 +506,9 @@ abundance_models <- abundance_models %>%
 abundance_models <- abundance_models %>% 
   mutate(num_years = map_dbl(abundance_index, ~ nrow(.x)))
 
-common_names <- life_history_data %>% 
-  mutate(class_code = toupper())
 
 consistent_models <- abundance_models %>% 
-  filter(num_years >=13) %>% 
+  filter(num_years >=10) %>% 
   mutate(classcode = tolower(classcode)) %>% 
   left_join(life_history_data %>% select(classcode, commonname)) %>% 
   filter(str_detect(commonname, 'YOY') == F)
@@ -496,25 +520,68 @@ consistent_models$abundance_plot[[3]]
 
 ```
 
+So here's the plot you want. By species, what you want is the normalized abundance defined as 1) mean from the supplied data 2) mean from the length derived data 3) mean from model from length 4) mean from model from suppled 
 
-```{r, warning=F, message=F}
+```{r}
 
-top_species <- density_data %>% 
-  group_by(classcode) %>% 
-  summarise(num_seen = sum(any_seen, na.rm = T)) %>% 
-  arrange(desc(num_seen)) %>% 
-  ungroup() %>% 
-  top_n(30,num_seen)
+calc_raw_abundance <- function(data) {
 
-density_data %>% 
-  filter(classcode %in% top_species$classcode) %>% 
-  group_by(year, classcode) %>% 
-  summarise(total_biomass = mean(biomass, na.rm = T)) %>% 
-  group_by(classcode) %>% 
-  mutate(scale_biomass = total_biomass / max(total_biomass, na.rm = T)) %>% ggplot(aes(year, scale_biomass, color = classcode)) + 
-  geom_line(show.legend = F) + 
-  facet_wrap(~classcode)
+  if (any(colnames(data) == 'biomass')){
+    
+    data$mean_biomass_g <- data$biomass
+    
+  }
+  
+  raw_trend <- data %>% 
+    group_by(factor_year) %>% 
+    summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>% 
+    ungroup() %>% 
+    mutate(abundance_index = abundance_index / max(abundance_index)) %>% 
+    mutate(year = factor_year %>% as.character() %>% as.numeric())
+  
+}
 
+model_plots <- consistent_models %>% 
+  mutate(standardized_abundance_trend = map(abundance_index, ~select(.,factor_year,abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric()))) %>% 
+  mutate(raw_abundance_trend = map(data,calc_raw_abundance )) %>% 
+  select(classcode,data_source,standardized_abundance_trend,raw_abundance_trend)
+
+
+raw_model_plots <- model_plots %>% 
+  select(classcode, data_source, raw_abundance_trend) %>% 
+  unnest() %>% 
+  mutate(abundance_source = 'raw')
+
+standardized_model_plots <- model_plots %>% 
+  select(classcode, data_source, standardized_abundance_trend) %>% 
+  unnest() %>% 
+  mutate(abundance_source = 'standardized')
+
+model_comparison_plots <- raw_model_plots %>% 
+  bind_rows(standardized_model_plots) %>% 
+  nest(-classcode)
+
+comp_plot_foo <- function(data){
+  data %>% 
+    ggplot(aes(year, abundance_index, color = abundance_source)) + 
+    geom_line() + 
+    geom_point() + 
+  facet_grid(data_source ~.)
+  
+  
+}
+
+model_comparison_plots <- model_comparison_plots %>% 
+  mutate(comp_plot = map(data, comp_plot_foo)) %>% 
+    mutate(classcode = tolower(classcode)) %>% 
+  left_join(life_history_data %>% select(classcode, commonname)) %>% 
+  filter(str_detect(commonname, 'YOY') == F)
+
+
+  
+walk2(model_comparison_plots$commonname, model_comparison_plots$comp_plot,
+      ~ ggsave(file = paste0(.x,'-modelcomp.pdf'), .y))
 
 ```
+
 

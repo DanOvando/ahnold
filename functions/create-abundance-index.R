@@ -1,6 +1,5 @@
 create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_aug){
   # find seen omitted terms
-
   omitted_levels <- data_frame(factor_terms = names(seen_model$xlevels),
                                omitted_term = NA)
 
@@ -100,7 +99,6 @@ prob_seen <- predict(seeing_model,newdata = seen_series, type = 'response') # ca
   # seen_series %>%
   #   ggplot(aes(factor_year, abundance_index)) +
   #   geom_point()
-
     return(seen_series)
 
   # predict observation probabilities for reference frame
