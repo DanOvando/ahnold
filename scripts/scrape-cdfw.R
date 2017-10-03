@@ -127,7 +127,7 @@ life_history_data <-
   read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>%
   mutate(classcode = tolower(classcode)) %>%
-  rename(description_2 = Description) %>%
+  # rename(description_2 = Description) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
 seen_species <- seen_reg_data %>%
@@ -195,6 +195,9 @@ a <- seen_reg_data %>%
   summarise(samples = length(biomass),
             fished = unique(targeted)) %>%
   arrange(desc(samples))
+
+write_csv(ci_catches, path = file.path('data','cfdw-channel-islands-catches.csv'))
+
 
 write_csv(flat_cdfw, path = file.path('data','cfdw-catches.csv'))
 

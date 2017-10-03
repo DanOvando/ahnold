@@ -11,7 +11,8 @@
 #' @export
 #'
 add_missing_fish <-
-  function(this_site,
+  function(this_region,
+          this_site,
            this_side,
            this_year,
            this_transect,
@@ -28,7 +29,7 @@ add_missing_fish <-
     species_seen <- unique(sampling_event$classcode)
 
     species_possible <- species_sightings %>%
-      filter(site == this_site) %>%
+      filter(region == this_region) %>%
       select(species_seen) %>%
       unlist() %>%
       as.character()

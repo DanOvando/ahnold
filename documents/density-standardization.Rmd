@@ -1,8 +1,7 @@
 ---
 title: "Density Standardization"
 output:
-  html_document:
-    df_print: paged
+  html_document: default
 ---
 
 ```{r setup, include=F}
@@ -63,6 +62,8 @@ write(run_description,
 # set run parameters ------------------------------
 # Summary: set things like filters
 
+aggregate_transects  <- F
+
 channel_islands_only <- T
 
 min_year <- 1999
@@ -92,8 +93,8 @@ site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
   unique()
 
 length_data <- length_data %>%
-  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') %>%
-  left_join(site_data, by = c('site', 'side'))
+  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') #%>%
+  # left_join(site_data, by = c('site', 'side'))
 
 conditions_data <- length_data %>%
   group_by(site,side, year) %>%
@@ -102,6 +103,7 @@ conditions_data <- length_data %>%
     mean_kelp = mean(pctcnpy, na.rm = T),
     mean_vis = mean(vis, na.rm = T)
   )
+
 
 density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
@@ -113,6 +115,16 @@ density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
   mutate(value = as.numeric(value)) %>%
   spread(data.type, value) %>%
   rename(site_side = site.side)
+
+
+
+site_coords <- density_data %>% 
+  group_by(site, side) %>% 
+  summarise(latitude = mean(lon.wgs84, na.rm = T),
+            longitude = mean(lat.wgs84, na.rm = T))
+
+# ggmap::qmplot(longitude,latitude, color = side, data = site_coords)
+
 
 if (file.exists('../data/enso.csv')) {
   enso <- read_csv('../data/enso.csv') %>%
@@ -157,8 +169,8 @@ has_all <- function(x,reg_vars)
   any(is.na(x[reg_vars])) == F
 
 
-reg_vars <- c('log_density', 'year','targeted', 'region' ,
-              'mean_enso','mean_pdo', 'mean_temp','classcode','site','side','post_mlpa','region',
+reg_vars <- c('log_density', 'year','targeted',
+              'mean_enso','mean_pdo', 'mean_temp','classcode','site','side','post_mlpa',
               'trophicgroup')
 
 reg_data <- density_data %>%
@@ -172,16 +184,13 @@ reg_data <- density_data %>%
             by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
   left_join(pdo, by = 'year') %>%
-  left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side')) %>%
+  # left_join(site_data %>% select(site,side,region,year_mpa), by = c('site','side')) %>%
   mutate(
     any_seen = biomass > 0,
     log_density = log(biomass),
     targeted = as.numeric(targeted == 'Targeted'),
     post_mlpa = as.numeric(year >= 2003)
   ) %>%
-  filter(is.na(targeted) == F,
-         is.na(year) == F,
-         is.na(biomass) == F) %>%
 # select_(.dots = as.list(reg_vars)) %>%
   map2_df(
     colnames(.),
@@ -189,10 +198,8 @@ reg_data <- density_data %>%
     omit_names = c('log_density','biomass', 'year', 'mean_enso', 'mean_pdo',
                    'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
   ) %>%
-  mutate(log_density = log(biomass + small_num)) %>%
-  purrrlyr::by_row(function(x,y) any(is.na(x[,y])), y = reg_vars) %>%
-  filter(.out == F)
-
+  mutate(log_density = log(biomass + small_num)) #%>%
+ 
 ```
 
 `density_data` then is your basic density data provided by Jen. Let's also create `length_to_density_data` as an alternative, allowing you to more explicitly account for observer effects. 
@@ -302,16 +309,20 @@ length_to_density_data %>%
   summarise(nobs = length(classcode))
 
 species_sightings <- length_data %>% 
-  group_by(site) %>% 
+  left_join(site_data, by = 'site') %>% 
+  group_by(region) %>% 
   summarise(species_seen = list(unique(classcode)))
+
 
 
 length_to_density_data <- length_to_density_data %>% 
   ungroup() %>% 
-  select(site,side,year, transect) %>% 
+  left_join(site_data %>% select(site, region), by = 'site') %>% 
+  select(region,site,side,year, transect) %>% 
   unique() %>%  {
   pmap(
     list(
+      this_region = .$region,
       this_site = .$site,
       this_side = .$side,
       this_year = .$year,
@@ -324,6 +335,8 @@ length_to_density_data <- length_to_density_data %>%
 } %>% 
   bind_rows()
 
+
+if (aggregate_transects == T){
 length_to_density_data <- length_to_density_data %>% 
   group_by(classcode, observer, site, side,year) %>% 
   summarise(mean_biomass_g = mean(total_biomass_g, na.rm = T),
@@ -337,7 +350,21 @@ length_to_density_data <- length_to_density_data %>%
             biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6
            ) %>% 
   ungroup()
+} else {
+  
+  length_to_density_data <- length_to_density_data %>% 
+  rename(mean_biomass_g = total_biomass_g) %>% 
+  mutate(
+            biomass_g_per_m2 = mean_biomass_g / (30*4),
+            biomass_g_per_hectare = biomass_g_per_m2 * 10000,
+            biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6
+           ) %>% 
+  ungroup()
 
+  
+}
+
+save(file = paste0(run_dir, '/length_to_density_data.Rdata'), length_to_density_data)
 
 
 ```
@@ -348,11 +375,11 @@ OK, now you've got data to play with.
 
 Let's explore fitting the regression objects for each of the data objects (manually created and supplied densities). The end goal is to be able to compare the raw and standardized abundance indicies by species over time. 
 
-```{r}
+```{r aggregate data}
 
-raw_length_vars <- paste(c('factor_year','observer', 'site','mean_vis','mean_canopy'), collapse = '+')
+raw_length_vars <- paste(c('factor_year:region','observer', 'site','mean_vis','mean_canopy'), collapse = '+')
 
-supplied_density_vars <- paste(c('factor_year', 'site','mean_kelp', 'mean_vis'), collapse = '+')
+supplied_density_vars <- paste(c('factor_year:region', 'site','mean_kelp', 'mean_vis'), collapse = '+')
 
 length_to_density_data <- length_to_density_data %>% 
   mutate(any_seen = mean_biomass_g > 0, 
@@ -388,6 +415,8 @@ density_data <- reg_data %>%
     mutate(mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
          mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp))
 
+
+
 length_to_density_models <- length_to_density_data %>% 
   nest(-classcode) %>% 
   mutate(ind_vars = raw_length_vars)
@@ -395,6 +424,7 @@ length_to_density_models <- length_to_density_data %>%
 supplied_density_models <- density_data %>% 
   nest(-classcode) %>% 
   mutate(ind_vars = supplied_density_vars)
+
 
 fit_fish <- function(data, ind_vars, dep_var, family,fit_seen = T){
   
@@ -429,14 +459,147 @@ center_scale <- function(x){
   return(y)
   
 }
+```
+# Run filers
+```{r filter-and-process-data}
+
+
+filterfoo <- function(x, min_seen_years = 8, mpa_start_year = 2003){ # only years above 1999 at the main channel islands
+  
+  x <- x %>% 
+    filter(is.na(log_density) == F) %>% 
+  filter(year > 1999 & region %in% c('ANA','SCI','SMI','SRI')) %>% 
+    group_by(region) %>% 
+    mutate(num_years_observed = length(unique(year[any_seen == T])),
+           min_year = min(year[any_seen == T], na.rm = T),
+           max_year = max(year[any_seen == T], na.rm = T)) %>% 
+    ungroup() %>% 
+    filter(num_years_observed >= min_seen_years,
+           min_year <= mpa_start_year,
+           max_year >= mpa_start_year) # actually observed for at least 10 years
+}
 
 abundance_models <- length_to_density_models %>% 
   bind_rows(supplied_density_models) %>% 
-    mutate(data = map(data, ~ filter(.x, year > 1999))) %>% 
-  mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale)))
+  mutate(data = map(data, ~left_join(.x, site_data, by = c('site','side')))) %>% 
+  mutate(data = map(data, (filterfoo))) %>% # filter out things
+  mutate(dim_data = map_dbl(data, nrow)) %>% 
+  filter(dim_data > 0) %>%  # remove fisheries that didn't pass filterfoo
+  mutate(classcode = tolower(classcode)) %>% 
+  left_join(life_history_data %>% select(classcode, commonname, targeted), by = 'classcode') %>% 
+  filter(str_detect(commonname, 'YOY') == F, is.na(targeted) == F) %>% # get rid of young of the year and unknown if targeted species
+  mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale))) # center and scale continuos data
+
+abundance_models %>% 
+  ggplot(aes(commonname, dim_data, fill = data_source)) + 
+  geom_col(position = 'dodge') + 
+  coord_flip()
+
+abundance_models %>% 
+  ggplot(aes(commonname, dim_data, fill = targeted)) + 
+  geom_col(position = 'dodge') + 
+  coord_flip() + 
+  facet_wrap(~data_source)
+
+```
+
+
+
+
+# fit VAST abundance index
+
+Another possibility (likely) is that you're just doing a bad job with the abundance standardization, and maybe VAST would do a better job doing multi-species interactions. Let's see what happens. 
+
+```{r run-vast}
+
+vast_prep <- function(data, classcode,site_coords,conditions_data){
+  
+  data <- data %>%
+    left_join(site_coords, by = c('site', 'side')) %>%
+    mutate(
+    year = factor_year %>% as.character() %>% as.numeric(),
+    areaswept_km2 = (30 * 4) * .001,
+    spp = classcode
+    )
+  
+  if (is.null(data$observer)){
+    data$observer = 'unknown'
+  }
+    if (is.null(data$mean_biomass_g)){
+    data$mean_biomass_g = data$biomass
+  }
+
+ data <- data %>% 
+    select(year, latitude, longitude, observer,areaswept_km2, mean_biomass_g, spp, mean_vis) %>% 
+    rename(lat = latitude, lon = longitude, vessel = observer, catch_kg = mean_biomass_g) %>% 
+    filter(is.na(catch_kg) == F)
+  
+  data <- data %>% 
+    group_by(spp,year) %>% 
+    mutate(min_catch = min(catch_kg, na.rm = T),
+           npos = sum(catch_kg > 0)) %>% 
+    ungroup() %>% 
+    mutate(catch_kg = ifelse(catch_kg == min_catch, 0, catch_kg)) %>% 
+    filter(npos > 0)
+}
+
+vast_abundance <- abundance_models %>% 
+    select(classcode, data_source, data) %>% 
+  mutate(survey_region = 'california_current',
+         n_x = 200) %>% 
+  mutate(vast_data = map2(data,classcode, vast_prep, site_coords = site_coords, conditions_data = conditions_data))
+
+
+wtf <- vast_abundance$vast_data[[1]] %>% 
+  group_by(year) %>% 
+  summarise(nobs = sum(catch_kg > 0),
+            nzero = sum(catch_kg == 0))
+
+arg <- safely(vasterize_pisco_data)
+
+vast_abundance <- vast_abundance %>% 
+      mutate(
+      vast_results = purrr::pmap(
+        list(
+          region = survey_region,
+          raw_data = vast_data,
+          n_x = n_x
+        ),
+        arg,
+        run_dir = run_dir,
+        nstart = 100,
+        obs_model = c(2, 0)
+      )
+    )
+
+vast_abundance <- vast_abundance %>% 
+  mutate(vast_error = map(vast_results, 'error'))
+
+save(file = paste0(run_dir,'/vast_abundance.Rdata'), vast_abundance)
+
+vast_abundance <- vast_abundance %>% 
+  mutate(vast_index = map(vast_results,'result'))
+
+a <- vast_abundance$vast_index[[19]]$spatial_densities 
+  ggmap::qmplot(approx_long, approx_lat, data = a, color = density) + 
+    facet_wrap(~year) + 
+    scale_color_viridis()
+
+
+
+vast_abundance$vast_index[[1]]$time_index %>% View()
+a
+```
+
+
+# vit manual delta glm
+
+OK that seemed to work!
+
+```{r fit-models}
+
 
   
-
 abundance_models <- abundance_models %>% 
   mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
          seeing_model =map2(data,ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
@@ -450,8 +613,6 @@ abundance_models <- abundance_models %>%
 
 ```
 
-
-OK that seemed to work!
 
 ```{r}
 
@@ -497,24 +658,24 @@ abundance_models <- abundance_models %>%
   seeing_aug = seeing_aug,
   seen_aug = seen_aug
   ),
-  create_abundance_index
+  create_abundance_index,
+  model_resolution = 'regional'
   ))
 
 abundance_models <- abundance_models %>% 
-  mutate(abundance_plot = map(abundance_index, ~ ggplot(.x,aes(factor_year, abundance_index)) + geom_point()))
+  mutate(abundance_plot = map(abundance_index, ~ ggplot(.x,aes(factor_year %>% as.character() %>% as.numeric(), abundance_index, color = region)) + geom_line()))
 
 abundance_models <- abundance_models %>% 
   mutate(num_years = map_dbl(abundance_index, ~ nrow(.x)))
 
 
 consistent_models <- abundance_models %>% 
-  filter(num_years >=10) %>% 
+  # filter(num_years >=10) %>% 
   mutate(classcode = tolower(classcode)) %>% 
-  left_join(life_history_data %>% select(classcode, commonname)) %>% 
-  filter(str_detect(commonname, 'YOY') == F)
-  
+  left_join(life_history_data %>% select(classcode, commonname)) 
+
 walk2(consistent_models$commonname, consistent_models$abundance_plot,
-      ~ ggsave(file = paste0(.x,'.pdf'), .y))
+      ~ ggsave(file = paste0(run_dir,'/',.x,'.pdf'), .y), run_dir = run_dir)
 
 consistent_models$abundance_plot[[3]]
 
@@ -533,16 +694,17 @@ calc_raw_abundance <- function(data) {
   }
   
   raw_trend <- data %>% 
-    group_by(factor_year) %>% 
+    group_by(region,factor_year) %>% 
     summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>% 
     ungroup() %>% 
-    mutate(abundance_index = abundance_index / max(abundance_index)) %>% 
-    mutate(year = factor_year %>% as.character() %>% as.numeric())
+    mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>% 
+    mutate(year = factor_year %>% as.character() %>% as.numeric()) %>% 
+    ungroup()
   
 }
 
 model_plots <- consistent_models %>% 
-  mutate(standardized_abundance_trend = map(abundance_index, ~select(.,factor_year,abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric()))) %>% 
+  mutate(standardized_abundance_trend = map(abundance_index, ~select(.,factor_year,region,abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric()))) %>% 
   mutate(raw_abundance_trend = map(data,calc_raw_abundance )) %>% 
   select(classcode,data_source,standardized_abundance_trend,raw_abundance_trend)
 
@@ -557,8 +719,26 @@ standardized_model_plots <- model_plots %>%
   unnest() %>% 
   mutate(abundance_source = 'standardized')
 
+
+vast_model_plots <- vast_abundance %>% 
+  mutate(time_index = map(vast_index, 'time_index')) %>% 
+  select(classcode, data_source,time_index) %>% 
+  unnest() %>% 
+  mutate(factor_year = as.factor(Year),
+         region = 'SCI') %>% 
+  rename(year = Year) %>% 
+  select(classcode, data_source,factor_year, region, abundance,year) %>% 
+    rename(abundance_index = abundance) %>% 
+  set_names(tolower) %>% 
+    mutate(abundance_source = 'vast') %>% 
+  group_by(classcode, data_source) %>% 
+         mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>% 
+  ungroup()
+
+
 model_comparison_plots <- raw_model_plots %>% 
   bind_rows(standardized_model_plots) %>% 
+  bind_rows(vast_model_plots) %>% 
   nest(-classcode)
 
 comp_plot_foo <- function(data){
@@ -566,7 +746,7 @@ comp_plot_foo <- function(data){
     ggplot(aes(year, abundance_index, color = abundance_source)) + 
     geom_line() + 
     geom_point() + 
-  facet_grid(data_source ~.)
+  facet_grid(data_source ~ region)
   
   
 }
@@ -574,14 +754,158 @@ comp_plot_foo <- function(data){
 model_comparison_plots <- model_comparison_plots %>% 
   mutate(comp_plot = map(data, comp_plot_foo)) %>% 
     mutate(classcode = tolower(classcode)) %>% 
-  left_join(life_history_data %>% select(classcode, commonname)) %>% 
-  filter(str_detect(commonname, 'YOY') == F)
-
+  left_join(life_history_data %>% select(classcode, commonname))
 
   
 walk2(model_comparison_plots$commonname, model_comparison_plots$comp_plot,
-      ~ ggsave(file = paste0(.x,'-modelcomp.pdf'), .y))
+      ~ ggsave(file = paste0(run_dir,'/',.x,'-modelcomp.pdf'), .y), run_dir = run_dir)
 
 ```
 
+OK! You've got standardized time series now. And it only took a weekend and a few days and nights... Now the key question is, does it actually make a damn difference. 
+
+The goal now is to control for environment and other factors beside the MPA, but now avoiding the need for the super confusing generic year terms and other stuff, though you could in theory control for that too, but your degrees of freedom are going to start mattering really quickly here. YOur new unit of observation is species by year. So, you obviously can't estimate species and year effects, unless you want to go hierarchical, but let's go that route after seeing if the signal itself is any cleaer or different. 
+
+# Fit DiD estimators
+So for now in this regression, let's do DiD, plus el nino etc, plus temperature and try a temperature species interaction 
+
+
+```{r}
+
+annual_conditions <- conditions_data %>% 
+  left_join(site_data %>% select(site, region), by = 'site') %>% 
+  group_by(region,year) %>% 
+  summarise(mean_annual_temp = mean(mean_temp, na.rm = T),
+            mean_annual_kelp = mean(mean_kelp, na.rm  = T)) %>% 
+  gather(variable, value,-year,-region) %>% 
+  group_by(variable) %>% 
+  mutate(value = zoo::na.approx(value),
+         value = center_scale(value)) %>% 
+  spread(variable, value)
+
+
+
+did_data <- model_comparison_plots %>% 
+  select(classcode, data) %>% 
+  unnest() %>% 
+  left_join(life_history_data, by = 'classcode') %>% 
+  left_join(enso, by = 'year') %>% 
+  left_join(pdo, by = 'year') %>% 
+  left_join(annual_conditions, by = c('year','region'))
+  
+```
+
+OK, now add in DiD estimator... which is the interaction of targeted and being pre or post MLPA. So for that, you're going to do what. You need a volumn that is a 1 if it's a fished species in that year and 0 if it's a fished species not in that year, along with fished species, and post 2003. 
+
+```{r}
+
+did_terms <- did_data %>% 
+  select(year, targeted) %>% 
+  mutate(index = 1:nrow(.),
+         targeted = as.numeric(targeted == 'Targeted')) %>% 
+  spread(year, targeted, fill = 0) %>% 
+  select(-index) %>% 
+  set_names(., paste0('did_',colnames(.))) %>% 
+  select(-did_2002)
+
+did_data <- did_data %>% 
+    mutate(targeted = as.numeric(targeted == 'Targeted'),
+           post_mpa = as.numeric(year >= 2003)) %>% 
+  bind_cols(did_terms) 
+
+# did_reg <- paste0('abundance_index ~',paste(c('targeted','post_mpa','mean_enso','mean_pdo','mean_annual_kelp','mean_annual_temp',colnames(did_terms)), collapse = '+'))
+
+did_reg <- paste0('abundance_index ~',paste(c('targeted','post_mpa','mean_enso','mean_pdo','(mean_annual_temp|classcode)','mean_annual_kelp',colnames(did_terms)), collapse = '+'))
+
+
+did_models <- did_data %>% 
+  nest(-data_source,-abundance_source) %>% 
+  mutate(did_reg = did_reg) %>% 
+  mutate(did_model = map2(data, did_reg, ~lme4::glmer(.y, data = .x)))
+
+
+
+did_plot_foo <- function(x) {
+ x %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, 'did')) %>% 
+  mutate(year = str_replace(term,'did_','') %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96 *std.error, ymax = estimate + 1.96 * std.error)) + 
+   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) + 
+   geom_hline(aes(yintercept = 0))
+}
+
+did_models <- did_models %>% 
+  mutate(did_plot = map(did_model, did_plot_foo))
+
+did_plot_foo <- function(data_source, abundance_source,did_plot, run_dir){
+  
+   ggsave(file = paste0(run_dir, '/',data_source,'-',abundance_source,'-did.pdf'), did_plot)
+}
+
+pwalk(list(data_source = did_models$data_source,
+           abundance_source =  did_models$abundance_source,
+           did_plot = did_models$did_plot),did_plot_foo, run_dir = run_dir)
+
+```
+
+OK, we're working top to bottom. Next things to do.... center and scale instead of scale by max. CI only. run by region. cross fingers.
+
+# What next?
+
+OK, well that was a solid body of work for relatively little payoff. What have you learned?
+
+  - Standardizing densities doesn't make a huge difference in most cases, but does in some
+  - Same story for regional effects
+  - DiD estimator fit to those new data aren't really any better, and certainly noisier, than the others. You can certainly squint at them and see a result of some kind, but there's nothing really defensible in there. 
+  - So, it's time to make a call here, what are your options?
+  
+## Do the best job you have with the standardized analysis
+
+GO through and do a more careful job of model fitting, maybe go full bayesian to get the error structure right, etc. But the gist of this one is simple: There is not a detectable causal effect of the MLPA on densities of fished species. 
+
+Now to do this, you'll have to defend 1) the analysis itself 2) defend the "control" 3) something. 
+
+## Go with the old results
+
+After all this, go back and clean up the old methods, under the argument that it's better to control for everything at once. You had "cleaner" results there, and can somewhat go with that "decreasing" story at the beginning, but you'll need to carefully defend that with a plausible story, which it turns out is pretty damn hard to do given the observed history of the fishery. 
+
+## Abandon ship
+
+The worst case one (I think). There's simply not enough clear signal in the data, and there is no suitable control (saying now that fished/unfished doesn't work), to say anything causal. Raw trends and things have been published, so the story here is that MPAs may or may not work, and without a good spatial BACI/DID design you'll simply never know if it "worked"
+
+## Look for alternative controls
+
+lightly vs. heavily fished species? 
+
+Get central coast data?
+
+KFM data?
+
+propensity scores?
+
+Let's step away for a moment or two and then compile a summary document for *one day*
+
+
+```{r}
+did_data %>% 
+  group_by(data_source,abundance_source, year,targeted) %>% 
+  summarise(mean_abundance = mean(abundance_index, na.rm = T)) %>% 
+  filter(abundance_source == 'standardized') %>% 
+  ggplot(aes(year, mean_abundance, color = factor(targeted))) + 
+  geom_line() + 
+  facet_grid(data_source ~ abundance_source, scales = 'free_y')
+```
+
+# Save some things
+
+```{r}
+
+save(file = paste0(run_dir,'/did-models.Rdata'), did_models)
+
+save(file = paste0(run_dir,'/abundance-model-data.Rdata'), abundance_models)
+
+
+```
 

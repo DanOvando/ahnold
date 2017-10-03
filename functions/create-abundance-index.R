@@ -1,4 +1,5 @@
-create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_aug){
+create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_aug,
+                                   model_resolution = 'ci-wide'){
   # find seen omitted terms
   omitted_levels <- data_frame(factor_terms = names(seen_model$xlevels),
                                omitted_term = NA)
@@ -27,60 +28,41 @@ create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_au
   intercept_term <- paste(omitted_levels$omitted_name, collapse = '-') # a whole ton of work to double check what the intercept is
 
 # extract and convert intercept and year terms the old fashioned way
-
-  abundance_index <- seen_coefs %>%
-    filter(term == "(Intercept)" | str_detect(term, 'factor_year')) %>%
-    mutate(term = str_replace(term, 'factor_year',''),
-           abundance_index = exp(estimate + std.error ^ 2 / 2)) %>%
-    select(term, abundance_index) %>%
-    filter(term != '(Intercept)') %>%
-    ungroup() %>%
-    mutate(abundance_index = abundance_index / max(abundance_index))
+  # abundance_index <- seen_coefs %>%
+  #   filter(term == "(Intercept)" | str_detect(term, 'factor_year')) %>%
+  #   mutate(term = str_replace(term, 'factor_year',''),
+  #          abundance_index = exp(estimate + std.error ^ 2 / 2)) %>%
+  #   select(term, abundance_index) %>%
+  #   filter(term != '(Intercept)') %>%
+  #   ungroup() #%>%
+    #mutate(abundance_index = center_scale(abundance_index))
 
   # in order to not drop a year use model to predict abundance over time for the most frequent factor levels held constant
 
   # seen_aug <-   seen_model %>%
   #   broom::augment()
+  if (model_resolution == 'ci-wide'){
 
-  seen_factors <- colnames(seen_aug)[map_lgl(seen_aug, ~class(.x) == 'factor' |class(.x) == 'character')]
+    seen_series <-  create_reference_case(seen_aug = seen_aug, seen_model = seen_model)
 
-top_factors <- seen_aug %>%
-    group_by_at(vars(one_of(seen_factors[seen_factors != 'factor_year']))) %>%
-    count() %>%
-    arrange(desc(n)) %>%
-  ungroup() %>%
-  slice(1) %>%
-  select(-n)
+  } else {
 
-seen_series <- seen_aug %>%
-  purrrlyr::dmap_if(is.character, as.factor)
+    seen_series <- seen_aug %>%
+      nest(-region) %>%
+      mutate(seen_series = map(data, create_reference_case, seen_model = seen_model)) %>%
+      select(-data) %>%
+      unnest()
 
-factor_names <- colnames(top_factors)
 
-for (i in factor_names){ # filter down to the most common thing
+  }
 
-  where_seen <- (seen_series[,i] == (top_factors[,i][[1]]))
+  smearing_term <- mean(exp(seen_aug $.resid))
 
-  seen_series <- seen_series[where_seen,]
-
-}
-
-seen_series <- seen_series %>%
-  slice(1)
-
-num_original_years <- seen_model$xlevels$factor_year
-
-seen_series <- seen_series[rep(1, length(num_original_years)),] #replicate the number of years
-
-seen_series$factor_year <- seen_model$xlevels$factor_year %>% as.factor()
-
-smearing_term <- mean(exp(seen_aug $.resid))
-
-seen_series <- seen_series %>%
-  modelr::add_predictions(seen_model) %>%
-  mutate(linear_predictions = exp(pred) * smearing_term) %>%
-  ungroup() %>%
-  mutate(linear_predictions = linear_predictions / max(linear_predictions))
+  seen_series <- seen_series %>%
+    modelr::add_predictions(seen_model) %>%
+    mutate(linear_predictions = exp(pred) * smearing_term) %>%
+    ungroup() #%>%
+  # mutate(linear_predictions = linear_predictions / max(linear_predictions))
 
 # ggplot() +
 #   geom_point(data = abundance_index, aes(term, abundance_index)) +
@@ -94,7 +76,7 @@ prob_seen <- predict(seeing_model,newdata = seen_series, type = 'response') # ca
   seen_series <- seen_series %>%
     mutate(prob_seen = prob_seen) %>%
     mutate(abundance_index = linear_predictions * prob_seen,
-           abundance_index = abundance_index / max(abundance_index))
+           abundance_index = center_scale(abundance_index))
 
   # seen_series %>%
   #   ggplot(aes(factor_year, abundance_index)) +
