@@ -183,7 +183,7 @@ dat %>%
   scale_y_log10()
 
 ```
-Almost all the observations have no real range to them. Looking at a histogram of the range of the sizes reported (max - min), where 0 corresponds to no range reported, almost all are within a few centimeters, which really isn't going to play our in the biomass all that much. only `r 100*mean(dat$size_range > 10)`% of samples have size ranges above 10 centimeters. So, to be really really precise, you could simulate length frequences for those, but really hardly seems worth the effort. 
+Almost all the observations have no real range to them. Looking at a histogram of the range of the sizes reported (max - min), where 0 corresponds to no range reported, almost all are within a few centimeters, which really isn't going to play our in the biomass all that much. only % of samples have size ranges above 10 centimeters. So, to be really really precise, you could simulate length frequences for those, but really hardly seems worth the effort. 
 
 The bigger question then is if you want to try and model bias in the observations; e.g. counts of certain species really should be higher/lower under different conditions. Something like a "standardized" survey index. i.e. maybe counts should be higher, taking into account poor vis or the like. Basically, it will be important if it introduces bias, or there is substantially more error around particular kinds of species. But beyond that, not like your analysis is fundamentally flawed or anything, and it's unclear how much benefit you get from controlling for those factors at the ground level, vs. controlling for them in the regression itself (i.e. all else being equal visibility drives down/up counts). 
 
@@ -1751,6 +1751,18 @@ load in the raw data, aggregate and join, etc.
 
 For each set of input data (e.g. consistent only, no sebastes, etc, mpa only), for each set of treatment effects (2002, 2003, sliding, age at maturity binned), run the model, where "the model" means estimate fit the "only on the positive", then the double-delta method. But I don't really want to put a whole shit ton of work into automating the world if you're not going to use the world. So what are the key questions that you want to answer, and is it worth going bayesian on it. 
 
+You have to break this into two very annoying steps. One is to build up the abundance indicies and the raw data on different data subsets. Once you have the different abundance models, you then have to pass that to the DiD estimator. 
+
+### data subsets (for both jen and calculated)
+
+  - All sites
+
+  - consistently observed only
+
+  - mpa only
+
+
+### population structure
 
 1. The simple model (no zeros). That one is pretty cut and dry
 
@@ -1760,7 +1772,23 @@ For each set of input data (e.g. consistent only, no sebastes, etc, mpa only), f
 
 4. mpa and non-mpa populations
 
-5. 
+god damn it. This all has to be done in the 
+
+### treatment effects
+
+- 2002
+
+- 2003
+
+- sliding
+
+- growth scaled 
+
+### Variables
+
+- kitchen sink
+
+- pared down
 
 ```{r}
 sample_frame <- tribble(~dep_var,

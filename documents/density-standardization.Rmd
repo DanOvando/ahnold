@@ -480,11 +480,6 @@ vast_abundance <- abundance_models %>%
   mutate(vast_data = map2(data,classcode, vast_prep, site_coords = site_coords, conditions_data = conditions_data))
 
 
-wtf <- vast_abundance$vast_data[[1]] %>% 
-  group_by(year) %>% 
-  summarise(nobs = sum(catch_kg > 0),
-            nzero = sum(catch_kg == 0))
-
 
 if (run_vast == T){
 arg <- safely(vasterize_pisco_data)
@@ -538,7 +533,6 @@ OK that seemed to work!
 ```{r fit-models}
 
 
-  
 abundance_models <- abundance_models %>% 
   mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
          seeing_model =map2(data,prob_ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
@@ -672,7 +666,6 @@ vast_model_plots <- vast_abundance %>%
   group_by(classcode, data_source) %>% 
          mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>% 
   ungroup()
-
 
 model_comparison_plots <- raw_model_plots %>% 
   bind_rows(standardized_model_plots) %>% 

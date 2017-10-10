@@ -371,9 +371,27 @@ density_data <- reg_data %>%
 
 # prepare data for model fitting ------------------------------------------
 
-raw_length_vars <-
+consistent_sites <- length_to_density_data %>%
+  group_by(site) %>%
+  summarise(num_years = length(unique(year)),
+            min_year = min(year),
+            max_year = max(year)) %>%
+  arrange(desc(num_years)) %>%
+  filter(min_year <= 2000,
+         num_years > 10)
+
+consistent_regions <- length_to_density_data %>%
+  left_join(site_data, by = 'site') %>%
+  group_by(region) %>%
+  summarise(num_years = length(unique(year)),
+            min_year = min(year),
+            max_year = max(year)) %>%
+  arrange(desc(num_years)) %>%
+  filter(min_year <= 2000,
+         num_years > 10)
+
+raw_length_covars <-
   paste(c(
-    'factor_year:region',
     'observer',
     'site',
     'mean_vis',
@@ -381,27 +399,28 @@ raw_length_vars <-
   ),
   collapse = '+')
 
-supplied_density_vars <-
-  paste(c('factor_year:region', 'site', 'mean_kelp', 'mean_vis'),
+
+prob_raw_length_covars <-
+  paste(c('observer', 'site', 'mean_vis', 'mean_canopy'),
         collapse = '+')
 
-prob_raw_length_vars <-
-  paste(c('factor_year', 'observer', 'site', 'mean_vis', 'mean_canopy'),
+supplied_density_covars <-
+  paste(c('site', 'mean_kelp', 'mean_vis'),
         collapse = '+')
 
-prob_supplied_density_vars <-
-  paste(c('factor_year', 'region', 'site', 'mean_kelp', 'mean_vis'),
+prob_supplied_density_covars <-
+  paste(c('site', 'mean_kelp', 'mean_vis'),
         collapse = '+')
 
 length_to_density_models <- length_to_density_data %>%
   nest(-classcode) %>%
-  mutate(ind_vars = raw_length_vars,
-         prob_ind_vars = prob_raw_length_vars)
+  mutate(ind_covars = raw_length_covars,
+         prob_ind_covars = prob_raw_length_covars)
 
 supplied_density_models <- density_data %>%
   nest(-classcode) %>%
-  mutate(ind_vars = supplied_density_vars,
-         prob_ind_vars = prob_supplied_density_vars)
+  mutate(ind_covars = supplied_density_covars,
+         prob_ind_covars = prob_supplied_density_covars)
 
 length_to_density_models <- length_to_density_models %>%
   mutate(data_source = 'length_to_density')
@@ -414,13 +433,16 @@ supplied_density_models <- supplied_density_models %>%
 filterfoo <-
   function(x,
            min_seen_years = 8,
-           mpa_start_year = 2003) {
+           mpa_start_year = 2003,
+           min_year,
+           filter_level) {
     # only years above 1999 at the main channel islands
 
     x <- x %>%
       filter(is.na(log_density) == F) %>%
-      filter(year > 1999 & region %in% c('ANA', 'SCI', 'SMI', 'SRI')) %>%
-      group_by(region) %>%
+      filter(year > min_year &
+               region %in% c('ANA', 'SCI', 'SMI', 'SRI')) %>%
+      group_by(!!filter_level) %>%
       mutate(
         num_years_observed = length(unique(year[any_seen == T])),
         min_year = min(year[any_seen == T], na.rm = T),
@@ -435,15 +457,20 @@ filterfoo <-
   }
 
 
+length_to_density_models$data[[1]] %>%
+  group_by(site) %>%
+  summarise(nyears = length(unique(year)))
+
 abundance_models <- length_to_density_models %>%
   bind_rows(supplied_density_models) %>%
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
-  mutate(data = map(data, (filterfoo))) %>% # filter out things
+  mutate(data = map(data, filterfoo, min_year = min_year,
+                    filter_level = quo(region))) %>% # filter out things
   mutate(dim_data = map_dbl(data, nrow)) %>%
   filter(dim_data > 0)
 
 
-# aggregate, augment, center-scale data ----------------------------------------------
+# prepare data for abundance estimates aggregate, augment, center-scale data ----------------------------------------------
 
 abundance_models <- abundance_models %>%
   mutate(classcode = tolower(classcode)) %>%
@@ -461,45 +488,59 @@ abundance_models <- abundance_models %>%
   mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale))) # center and scale continuos data
 
 
-vast_abundance <- abundance_models %>%
-  select(classcode, data_source, data) %>%
-  mutate(survey_region = 'california_current',
-         n_x = 200) %>%
-  mutate(vast_data = map2(data,classcode, vast_prep, site_coords = site_coords, conditions_data = conditions_data))
+population_structure <- c('one-pop', 'regional-pops', 'mpa-pops')
 
-if (run_vast == T){
-  arg <- safely(vasterize_pisco_data)
+population_filtering <- c('all', 'mpa-only', 'consistent-sites')
 
-  vast_abundance <- vast_abundance %>%
-    mutate(
-      vast_results = purrr::pmap(
-        list(
-          region = survey_region,
-          raw_data = vast_data,
-          n_x = n_x
-        ),
-        arg,
-        run_dir = run_dir,
-        nstart = 100,
-        obs_model = c(2, 0)
-      )
-    )
-
-  vast_abundance <- vast_abundance %>%
-    mutate(vast_error = map(vast_results, 'error'))
-
-  save(file = paste0(run_dir,'/vast_abundance.Rdata'), vast_abundance)
-} else {
-
-  load(file = paste0(run_dir,'/vast_abundance.Rdata'))
+abundance_models <- cross_df(list(data = list(abundance_models),
+         population_structure = population_structure,
+         population_filtering = population_filtering)) %>%
+  unnest()
 
 
-}
-
-
-vast_abundance <- vast_abundance %>%
-  mutate(vast_index = map(vast_results,'result'))
-
+# vast_abundance <- abundance_models %>%
+#   select(classcode, data_source, data) %>%
+#   mutate(survey_region = 'california_current',
+#          n_x = 200) %>%
+#   mutate(
+#     vast_data = map2(
+#       data,
+#       classcode,
+#       vast_prep,
+#       site_coords = site_coords,
+#       conditions_data = conditions_data
+#     )
+#   )
+#
+# if (run_vast == T) {
+#   arg <- safely(vasterize_pisco_data)
+#
+#   vast_abundance <- vast_abundance %>%
+#     mutate(vast_results = purrr::pmap(
+#       list(
+#         region = survey_region,
+#         raw_data = vast_data,
+#         n_x = n_x
+#       ),
+#       arg,
+#       run_dir = run_dir,
+#       nstart = 100,
+#       obs_model = c(2, 0)
+#     ))
+#
+#   vast_abundance <- vast_abundance %>%
+#     mutate(vast_error = map(vast_results, 'error'))
+#
+#   save(file = paste0(run_dir, '/vast_abundance.Rdata'), vast_abundance)
+# } else {
+#   load(file = paste0(run_dir, '/vast_abundance.Rdata'))
+#
+#
+# }
+#
+#
+# vast_abundance <- vast_abundance %>%
+#   mutate(vast_index = map(vast_results, 'result'))
 
 species_comp_by_dbase_plot <- abundance_models %>%
   ggplot(aes(commonname, dim_data, fill = data_source)) +
@@ -510,33 +551,60 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
   ggplot(aes(commonname, dim_data, fill = targeted)) +
   geom_col(position = 'dodge') +
   coord_flip() +
-  facet_wrap( ~ data_source)
-
+  facet_wrap(~ data_source)
 
 # estimate abundance through delta-glm ------------------------------------
 
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
-  mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
-         seeing_model =map2(data,prob_ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
+  mutate(
+    seen_model = pmap(
+      list(data = data,
+           ind_covars = ind_covars,
+           pop_structure = population_structure,
+           pop_filter = population_filtering),
+      safely_fit_fish,
+      dep_var = 'log_density',
+      fit_seen = T,
+      family = 'gaussian',
+      consistent_sites = consistent_sites
+    ),
+    seeing_model = pmap(
+      list(data = data,
+           ind_covars = prob_ind_covars,
+           pop_structure = population_structure,
+           pop_filter = population_filtering),
+      safely_fit_fish,
+      dep_var = 'any_seen',
+      fit_seen = F,
+      family = 'binomial',
+      consistent_sites = consistent_sites
+    )
+  )
 
 abundance_models <- abundance_models %>%
-  mutate(seeing_error = map(seeing_model, 'error'),
-         seen_error =  map(seen_model, 'error'),
-         seeing_model = map(seeing_model, 'result'),
-         seen_model =  map(seen_model, 'result'))
+  mutate(
+    seeing_error = map(seeing_model, 'error'),
+    seen_error =  map(seen_model, 'error'),
+    seeing_model = map(seeing_model, 'result'),
+    seen_model =  map(seen_model, 'result')
+  )
+
 
 abundance_models <- abundance_models %>%
-  mutate(no_error = map2_lgl(seeing_error, seen_error, ~is.null(.x) & is.null(.y))) %>%
+  mutate(no_error = map2_lgl(seeing_error, seen_error, ~ is.null(.x) &
+                               is.null(.y))) %>%
   filter(no_error == T) #filter out models that didn't converge for some reason
 
 
 abundance_models <- abundance_models %>%
-  mutate(seen_coefs = map(seen_model, broom::tidy),
-         seen_aug = map(seen_model, broom::augment),
-         seeing_coefs = map(seeing_model, broom::tidy),
-         seeing_aug = map(seeing_model, broom::augment))
+  mutate(
+    seen_coefs = map(seen_model, broom::tidy),
+    seen_aug = map(seen_model, broom::augment),
+    seeing_coefs = map(seeing_model, broom::tidy),
+    seeing_aug = map(seeing_model, broom::augment)
+  )
 
 abundance_models <- abundance_models %>%
   mutate(abundance_index = pmap(
@@ -544,14 +612,56 @@ abundance_models <- abundance_models %>%
       seen_model = seen_model,
       seeing_model = seeing_model,
       seeing_aug = seeing_aug,
-      seen_aug = seen_aug
+      seen_aug = seen_aug,
+      pop_structure = population_structure
     ),
-    create_abundance_index,
-    model_resolution = 'regional'
-  ))
+    create_abundance_index))
+
+abundance_plot_foo <- function(data,pop_structure){
+
+  if (pop_structure == 'one-pop'){
+  outplot <- ggplot(
+    data,
+    aes(
+      factor_year %>% as.character() %>% as.numeric(),
+      abundance_index
+    )
+  ) + geom_line() +
+    geom_point()
+  }
+  if (pop_structure == 'regional-pops'){
+
+    outplot <- ggplot(
+      data,
+      aes(
+        factor_year %>% as.character() %>% as.numeric(),
+        abundance_index,
+        color = region
+      )
+    ) +
+      geom_line() +
+      geom_point()
+  }
+  if (pop_structure == 'mpa-pops'){
+
+    outplot <- ggplot(
+      data,
+      aes(
+        factor_year %>% as.character() %>% as.numeric(),
+        abundance_index,
+        color = eventual_mpa
+      )
+    ) +
+      geom_line() +
+      geom_point()
+  }
+  return(outplot)
+
+}
+
 
 abundance_models <- abundance_models %>%
-  mutate(abundance_plot = map(abundance_index, ~ ggplot(.x,aes(factor_year %>% as.character() %>% as.numeric(), abundance_index, color = region)) + geom_line()))
+  mutate(abundance_plot = map2(abundance_index, population_structure, abundance_plot_foo))
 
 abundance_models <- abundance_models %>%
   mutate(num_years = map_dbl(abundance_index, ~ nrow(.x)))
@@ -559,22 +669,51 @@ abundance_models <- abundance_models %>%
 abundance_models <- abundance_models %>%
   mutate(classcode = tolower(classcode))
 
-walk2(abundance_models$commonname, abundance_models$abundance_plot,
-      ~ ggsave(file = paste0(run_dir,'/',.x,'.pdf'), .y), run_dir = run_dir)
+save_foo <-
+  function(species,
+           pop_structure,
+           pop_filtering,
+           data_source,
+           abundance_plot,
+           run_dir) {
+    ggsave(
+      file = paste0(
+        run_dir,
+        '/',
+        species,
+        '-',
+        pop_structure,
+        '-',
+        pop_filtering,
+        '-',
+        data_source,
+        '.pdf'
+      ),
+      abundance_plot
+    )
+  }
+
+pwalk(
+  list(species = abundance_models$commonname,
+       pop_structure = abundance_models$population_structure,
+       pop_filtering = abundance_models$population_filtering,
+       data_source = abundance_models$data_source,
+       abundance_plot = abundance_models$abundance_plot),
+       save_foo,
+  run_dir = run_dir
+)
 
 
 # prepare abundance indicies assess standardization --------------------------------------------------
 
 calc_raw_abundance <- function(data) {
-
-  if (any(colnames(data) == 'biomass')){
-
+  if (any(colnames(data) == 'biomass')) {
     data$mean_biomass_g <- data$biomass
 
   }
 
   raw_trend <- data %>%
-    group_by(region,factor_year) %>%
+    group_by(region, factor_year) %>%
     summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
     ungroup() %>%
     mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
@@ -584,9 +723,15 @@ calc_raw_abundance <- function(data) {
 }
 
 abundance_indices <- abundance_models %>%
-  mutate(standardized_abundance_trend = map(abundance_index, ~select(.,factor_year,region,abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric()))) %>%
-  mutate(raw_abundance_trend = map(data,calc_raw_abundance )) %>%
-  select(classcode,data_source,standardized_abundance_trend,raw_abundance_trend)
+  mutate(standardized_abundance_trend = map(
+    abundance_index,
+    ~ select(., factor_year, region, abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric())
+  )) %>%
+  mutate(raw_abundance_trend = map(data, calc_raw_abundance)) %>%
+  select(classcode,
+         data_source,
+         standardized_abundance_trend,
+         raw_abundance_trend)
 
 
 raw_model_indices <- abundance_indices %>%
@@ -601,12 +746,12 @@ standardized_model_indices <- abundance_indices %>%
 
 vast_model_indices <- vast_abundance %>%
   mutate(time_index = map(vast_index, 'time_index')) %>%
-  select(classcode, data_source,time_index) %>%
+  select(classcode, data_source, time_index) %>%
   unnest() %>%
   mutate(factor_year = as.factor(Year),
          region = 'SCI') %>%
   rename(year = Year) %>%
-  select(classcode, data_source,factor_year, region, abundance,year) %>%
+  select(classcode, data_source, factor_year, region, abundance, year) %>%
   rename(abundance_index = abundance) %>%
   set_names(tolower) %>%
   mutate(abundance_source = 'vast') %>%
@@ -619,7 +764,7 @@ abundance_indices <- raw_model_indices %>%
   bind_rows(vast_model_indices) %>%
   nest(-classcode)
 
-comp_plot_foo <- function(data){
+comp_plot_foo <- function(data) {
   data %>%
     ggplot(aes(year, abundance_index, color = abundance_source)) +
     geom_line() +
@@ -635,21 +780,30 @@ abundance_indices <- abundance_indices %>%
   left_join(life_history_data %>% select(classcode, commonname))
 
 
-save(file = paste0(run_dir,'/abundance_indices.Rdata'), abundance_indices)
+save(file = paste0(run_dir, '/abundance_indices.Rdata'),
+     abundance_indices)
 
 
-walk2(abundance_indices$commonname, abundance_indices$comp_plot,
-      ~ ggsave(file = paste0(run_dir,'/',.x,'-modelcomp.pdf'), .y), run_dir = run_dir)
+walk2(
+  abundance_indices$commonname,
+  abundance_indices$comp_plot,
+  ~ ggsave(file = paste0(run_dir, '/', .x, '-modelcomp.pdf'), .y),
+  run_dir = run_dir
+)
 
 
-# fit DiD estimator on abundance indicies ---------------------------------
+
+# prepare candidate did runs ----------------------------------------------
+
 
 annual_conditions <- conditions_data %>%
   left_join(site_data %>% select(site, region), by = 'site') %>%
-  group_by(region,year) %>%
-  summarise(mean_annual_temp = mean(mean_temp, na.rm = T),
-            mean_annual_kelp = mean(mean_kelp, na.rm  = T)) %>%
-  gather(variable, value,-year,-region) %>%
+  group_by(region, year) %>%
+  summarise(
+    mean_annual_temp = mean(mean_temp, na.rm = T),
+    mean_annual_kelp = mean(mean_kelp, na.rm  = T)
+  ) %>%
+  gather(variable, value, -year, -region) %>%
   group_by(variable) %>%
   mutate(value = zoo::na.approx(value),
          value = center_scale(value)) %>%
@@ -661,9 +815,13 @@ did_data <- abundance_indices %>%
   left_join(life_history_data, by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
   left_join(pdo, by = 'year') %>%
-  left_join(annual_conditions, by = c('year','region')) %>%
-  left_join(ci_catches, by = c('classcode','year')) %>%
-  mutate(catch = ifelse(is.na(catch), 0, catch))
+  left_join(annual_conditions, by = c('year', 'region')) %>%
+  left_join(ci_catches, by = c('classcode', 'year')) %>%
+  mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
+  mutate(targeted = as.numeric(targeted == 'Targeted'),
+         post_mpa = as.numeric(year >= 2003))
+
+
 
 did_terms <- did_data %>%
   select(year, targeted) %>%
@@ -671,44 +829,74 @@ did_terms <- did_data %>%
          targeted = as.numeric(targeted == 'Targeted')) %>%
   spread(year, targeted, fill = 0) %>%
   select(-index) %>%
-  set_names(., paste0('did_',colnames(.))) %>%
+  set_names(., paste0('did_', colnames(.))) %>%
   select(-did_2002)
 
-did_data <- did_data %>%
-  mutate(targeted = as.numeric(targeted == 'Targeted'),
-         post_mpa = as.numeric(year >= 2003)) %>%
-  bind_cols(did_terms)
+# fit DiD estimator on abundance indicies ---------------------------------
+# so this is where you need to do a bunch of work in setting up the model runs
 
 
-did_reg <- paste0('abundance_index ~',paste(c('targeted','post_mpa','mean_enso','mean_pdo','(mean_annual_temp|classcode)','mean_annual_kelp',colnames(did_terms)), collapse = '+'))
 
+
+
+
+
+did_reg <-
+  paste0('abundance_index ~', paste(
+    c(
+      'targeted',
+      'post_mpa',
+      'mean_enso',
+      'mean_pdo',
+      '(mean_annual_temp|classcode)',
+      'mean_annual_kelp',
+      colnames(did_terms)
+    ),
+    collapse = '+'
+  ))
 
 did_models <- did_data %>%
-  nest(-data_source,-abundance_source) %>%
+  nest(-data_source, -abundance_source) %>%
   mutate(did_reg = did_reg) %>%
-  mutate(did_model = map2(data, did_reg, ~lme4::glmer(.y, data = .x)))
+  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
 
 
 did_plot_foo <- function(x) {
   x %>%
     broom::tidy() %>%
     filter(str_detect(term, 'did')) %>%
-    mutate(year = str_replace(term,'did_','') %>% as.numeric()) %>%
+    mutate(year = str_replace(term, 'did_', '') %>% as.numeric()) %>%
     ggplot() +
-    geom_pointrange(aes(year, estimate, ymin = estimate - 1.96 *std.error, ymax = estimate + 1.96 * std.error)) +
-    geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+    geom_pointrange(aes(
+      year,
+      estimate,
+      ymin = estimate - 1.96 * std.error,
+      ymax = estimate + 1.96 * std.error
+    )) +
+    geom_vline(aes(xintercept = 2003),
+               color = 'red',
+               linetype = 2) +
     geom_hline(aes(yintercept = 0))
 }
 
 did_models <- did_models %>%
   mutate(did_plot = map(did_model, did_plot_foo))
 
-did_plot_foo <- function(data_source, abundance_source,did_plot, run_dir){
+did_plot_foo <-
+  function(data_source,
+           abundance_source,
+           did_plot,
+           run_dir) {
+    ggsave(file = paste0(run_dir, '/', data_source, '-', abundance_source, '-did.pdf'),
+           did_plot)
+  }
 
-  ggsave(file = paste0(run_dir, '/',data_source,'-',abundance_source,'-did.pdf'), did_plot)
-}
-
-pwalk(list(data_source = did_models$data_source,
-           abundance_source =  did_models$abundance_source,
-           did_plot = did_models$did_plot),did_plot_foo, run_dir = run_dir)
-
+pwalk(
+  list(
+    data_source = did_models$data_source,
+    abundance_source =  did_models$abundance_source,
+    did_plot = did_models$did_plot
+  ),
+  did_plot_foo,
+  run_dir = run_dir
+)
