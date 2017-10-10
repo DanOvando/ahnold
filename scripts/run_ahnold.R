@@ -22,6 +22,7 @@ library(broom)
 library(viridis)
 library(scales)
 library(trelliscopejs)
+library(ggthemes)
 
 
 demons::load_functions()
@@ -279,8 +280,8 @@ did_years <- c(did_years_inside, did_years_outside)
 
 
 }
-did_year <- did_years[str_detect(did_years,'2003') == F]
-# did_year <- did_years[did_years != 'did_2002']
+# did_year <- did_years[str_detect(did_years,'2003') == F]
+did_year <- did_years[did_years != 'did_2002']
 
 
 # model selection ------------------------------
@@ -439,14 +440,14 @@ canditate_models <- canditate_models %>%
 #   )
 #
 #
-reg <-
-  as.formula(
-    paste0(
-      "log_density ~",
-      paste(did_year, collapse = "+"),
-      "+ (1|year) + ( mean_temp + temp2 + region|classcode)+ mean_pdo + (1 |site) + targeted"
-    )
-  )
+# reg <-
+#   as.formula(
+#     paste0(
+#       "log_density ~",
+#       paste(did_year, collapse = "+"),
+#       "+ (1|year) + ( mean_temp + temp2 + region|classcode)+ mean_pdo + (1 |site) + targeted"
+#     )
+#   )
 
 
 reg <- canditate_models$reg_fmlas[[1]]
@@ -497,7 +498,7 @@ reg <- canditate_models$reg_fmlas[[1]]
 # run model ------------------------------
 # Summary: fit ahnold model
 
-seen_model <- lm(reg, data = seen_reg_data)
+# seen_model <- lm(reg, data = seen_reg_data)
 
 
 seen_model <- lme4::lmer(reg, data = seen_reg_data)
@@ -604,7 +605,7 @@ length_hists <- length_data %>%
   mutate(samples = map_dbl(data, ~sum(.x$count))) %>%
   mutate(length_hist_plot = map_plot(
     data,
-    ~ ggplot(.x, aes(fish_tl, count, color = year >= 2003)) + geom_line(show.legend = F) + facet_grid(year ~ ., as.table = F, scales = 'free_y') + theme_fivethirtyeight() +
+    ~ ggplot(.x, aes(fish_tl, count, color = year >= 2003)) + geom_line(show.legend = F) + facet_grid(year ~ ., as.table = F, scales = 'free_y') + ggthemes::theme_fivethirtyeight() +
       theme(axis.text.y = element_blank(), axis.title = element_text(),
             strip.text = element_text(size = 6), panel.grid.minor = element_blank())
   )) %>%
@@ -612,8 +613,8 @@ length_hists <- length_data %>%
   filter(is.na(comm_name) == F) %>%
   arrange(desc(samples))
 
-trelliscopejs::trelliscope(length_hists,name = 'huh',
-                           panel_col ='length_hist_plot' )
+# trelliscopejs::trelliscope(length_hists,name = 'huh',
+#                            panel_col ='length_hist_plot' )
 
 fished_length_hists <- length_data %>%
   group_by(year, targeted, fish_tl) %>%
@@ -623,7 +624,7 @@ fished_length_hists <- length_data %>%
   ggplot(aes(fish_tl, count, color = year >= 2003)) +
   geom_line(show.legend = F) +
   facet_grid(year ~ targeted, as.table = F, scales = 'free_y') +
-  theme_fivethirtyeight() +
+  ggthemes::theme_fivethirtyeight() +
       theme(axis.text.y = element_blank(), axis.title = element_text(),
             strip.text = element_text(size = 6), panel.grid.minor = element_blank())
 
@@ -654,9 +655,9 @@ plot_did <- function(model,trophicgroup){
 trophic_effects <- trophic_effects %>%
   mutate(did_plot = map2_plot(ahnold_model, trophicgroup, ~plot_did(.x,.y)))
 #
-trophic_effects %>%
-  select(trophicgroup, did_plot) %>%
-  trelliscopejs::trelliscope(name = 'DiD Effects by Trophic Group')
+# trophic_effects %>%
+#   select(trophicgroup, did_plot) %>%
+#   trelliscopejs::trelliscope(name = 'DiD Effects by Trophic Group')
 
 # huh <- life_history_data %>%
 #   filter(trophicgroup == 'benthic micro-invertivore') %>%
@@ -757,7 +758,7 @@ mpa_effect_plot <-  seen_model %>%
   geom_hline(aes(yintercept = 0)) +
   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
   geom_pointrange(aes(year,estimate, ymax = upper, ymin = lower),color = 'skyblue4', size = 2) +
-  geom_pointrange(data = data_frame(year = 2003, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
+  geom_pointrange(data = data_frame(year = 2002, estimate = 0), aes(year, estimate,ymin = estimate, ymax = estimate),color = 'skyblue4', size = 2) +
   ylab('Estimated MLPA Effect') +
   ggrepel::geom_text_repel(data = data_frame(x = 2003, y = 1), aes(x,y, label = 'MLPA Enacted'),nudge_x = 2) +
   xlab('Year') +

@@ -45,7 +45,9 @@ create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_au
 
     seen_series <-  create_reference_case(seen_aug = seen_aug, seen_model = seen_model)
 
-  } else {
+  }
+  if (model_resolution == 'regional')
+   {
 
     seen_series <- seen_aug %>%
       nest(-region) %>%
@@ -54,6 +56,14 @@ create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_au
       unnest()
 
 
+  }
+  if (model_resolution == 'mpa'){
+
+    seen_series <- seen_aug %>%
+      nest(-eventual_mpa) %>%
+      mutate(seen_series = map(data, create_reference_case, seen_model = seen_model)) %>%
+      select(-data) %>%
+      unnest()
   }
 
   smearing_term <- mean(exp(seen_aug $.resid))
@@ -73,10 +83,37 @@ create_abundance_index <- function(seen_model, seeing_model, seeing_aug, seen_au
 
 prob_seen <- predict(seeing_model,newdata = seen_series, type = 'response') # calculate probabilty of seeing
 
+
+if (model_resolution == 'ci-wide'){
+
   seen_series <- seen_series %>%
     mutate(prob_seen = prob_seen) %>%
     mutate(abundance_index = linear_predictions * prob_seen,
            abundance_index = center_scale(abundance_index))
+
+}
+if (model_resolution == 'regional')
+{
+
+  seen_series <- seen_series %>%
+    mutate(prob_seen = prob_seen) %>%
+    group_by(region) %>%
+    mutate(abundance_index = linear_predictions * prob_seen,
+           abundance_index = center_scale(abundance_index))
+
+
+}
+if (model_resolution == 'mpa'){
+
+  seen_series <- seen_series %>%
+    mutate(prob_seen = prob_seen) %>%
+    group_by(eventual_mpa) %>%
+    mutate(abundance_index = linear_predictions * prob_seen,
+           abundance_index = center_scale(abundance_index))
+
+}
+
+
 
   # seen_series %>%
   #   ggplot(aes(factor_year, abundance_index)) +

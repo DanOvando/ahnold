@@ -1733,6 +1733,59 @@ How much of the total catch is represented
 You should also look into weighting by area of the sites/region, instead of weighting every observation equally 
 
 
+# Rebuild of run-ahnold
 
+There are so many damn things that you're trying to do at this point that it's getting confusing as all hell to keep track of what you've tried, if you've tried it with the same data, and what the results are. Let's lay out a strategy to create one cohesive run. 
+
+## Load run
+
+The usual stuff here, but focus on running lots of options at onces, rather than setting run-specific options. 
+
+## load and process data
+
+load in the raw data, aggregate and join, etc. 
+
+## filter the raw data 
+
+## prepare model runs
+
+For each set of input data (e.g. consistent only, no sebastes, etc, mpa only), for each set of treatment effects (2002, 2003, sliding, age at maturity binned), run the model, where "the model" means estimate fit the "only on the positive", then the double-delta method. But I don't really want to put a whole shit ton of work into automating the world if you're not going to use the world. So what are the key questions that you want to answer, and is it worth going bayesian on it. 
+
+
+1. The simple model (no zeros). That one is pretty cut and dry
+
+2. one population
+
+3. regional populations
+
+4. mpa and non-mpa populations
+
+5. 
+
+```{r}
+sample_frame <- tribble(~dep_var,
+                        ~ind_vars,
+                        ~ treatment,
+                        ~data,
+                        ~pop_structure,
+                        ~model_type)
+```
+
+
+# Hypothesis testing
+
+The end result of the above process then will be a model of MPA effects for a wide range of data subsets and treatments. 
+
+From there, the question is what is the effect. 
+
+The simplest thing to do is what you already have done: comparing the null effect as zero. 
+
+However, as Chris pointed out, is that really the right null? What you almost want here is a structural approach, where you accept or reject more detailed hypotheses. E.g., can you reject a 640% increase in system wide biomass. While you might not be able to reject 0, you can probably reject that. 
+
+So, you can generate your huge list of scenarios, and one by one accept or reject them, based on the estiamted trend in abundance with and without MPAs, relative to the year 2000 or something. 
+
+That can then be refied to pull in specific MLPA things. 
+
+I really really like that. Let's get to work. 
 
 

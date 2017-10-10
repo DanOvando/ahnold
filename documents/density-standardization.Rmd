@@ -62,6 +62,8 @@ write(run_description,
 # set run parameters ------------------------------
 # Summary: set things like filters
 
+run_vast <- F
+
 aggregate_transects  <- F
 
 channel_islands_only <- T
@@ -95,6 +97,12 @@ site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
 length_data <- length_data %>%
   left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') #%>%
   # left_join(site_data, by = c('site', 'side'))
+
+ci_catches <- read_csv(file = file.path('../data','cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>% 
+  summarise(catch = sum(pounds_caught, na.rm = T))
+
+fished_species <- data_frame(classcode = unique(ci_catches$classcode), fished = 1)
+
 
 conditions_data <- length_data %>%
   group_by(site,side, year) %>%
@@ -213,67 +221,6 @@ density_example <- density_data %>%
   sample_n(1)
 
 
-
-length_to_weight <-
-  function(mean_length,
-  min_length,
-  max_length,
-  count,
-  weight_a,
-  weight_b,
-  length_units = 'cm',
-  weight_units = 'g',
-  length_for_weight_units = 'mm',
-  length_type_for_weight,
-  tl_sl_a,
-  tl_sl_b,
-  tl_sl_type,
-  tl_sl_formula) {
-  #
-  # generate_lengths <- function(count,mean_length, min_length, max_length){
-  
-  if (is.na(count) | count == 0){
-    
-    outweight <-  0
-  }  else {
-    
-  if (is.na(min_length) |
-  is.na(max_length)) {
-  #generate distribution of lengths
-  
-  lengths <-  rep(mean_length, count)
-  
-  } else{
-  # lengths <-  pmax(min_length,pmin(max_length,rpois(count, lambda = mean_length)))
-  lengths <- runif(count, min = min_length, max = max_length)
-  }
-
-  if (length_type_for_weight == 'SL') {
-  if (tl_sl_type  == 'TYPICAL') {
-  weight_lengths <-  lengths * tl_sl_a + tl_sl_b
-  } else{
-  weight_lengths <- (lengths - tl_sl_b) / tl_sl_a
-  
-  }
-  
-  } else {
-  weight_lengths <-  lengths
-  }
-  
-  if (length_units == 'cm' & length_for_weight_units == 'mm') {
-  weight_lengths <- weight_lengths * 10
-  }
-  
-  weight <-  weight_a * weight_lengths ^ weight_b
-  
-  if (weight_units == 'kg') {
-  weight <- weight * 1000
-  }
-  outweight = sum(weight)
-  }
-    return(outweight)
-  } #close function
-  
 length_example <- length_data %>% 
   filter(classcode == toupper(density_example$classcode)
 , site == density_example$site, 
@@ -381,6 +328,11 @@ raw_length_vars <- paste(c('factor_year:region','observer', 'site','mean_vis','m
 
 supplied_density_vars <- paste(c('factor_year:region', 'site','mean_kelp', 'mean_vis'), collapse = '+')
 
+prob_raw_length_vars <- paste(c('factor_year','observer', 'site','mean_vis','mean_canopy'), collapse = '+')
+
+prob_supplied_density_vars <- paste(c('factor_year','region', 'site','mean_kelp', 'mean_vis'), collapse = '+')
+
+
 length_to_density_data <- length_to_density_data %>% 
   mutate(any_seen = mean_biomass_g > 0, 
          factor_year = factor(year),
@@ -416,30 +368,15 @@ density_data <- reg_data %>%
          mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp))
 
 
-
 length_to_density_models <- length_to_density_data %>% 
   nest(-classcode) %>% 
-  mutate(ind_vars = raw_length_vars)
+  mutate(ind_vars = raw_length_vars,
+         prob_ind_vars = prob_raw_length_vars)
 
 supplied_density_models <- density_data %>% 
   nest(-classcode) %>% 
-  mutate(ind_vars = supplied_density_vars)
-
-
-fit_fish <- function(data, ind_vars, dep_var, family,fit_seen = T){
-  
-  if (fit_seen == T){
-  data <- data %>% 
-    filter(any_seen == fit_seen & is.na(any_seen) == F)
-  } else{
-      data <- data %>% 
-    filter(is.na(any_seen) == F)
-  }
-  reg_fmla <- paste(dep_var, ind_vars, sep = '~') %>% as.formula()
-  model <- glm(reg_fmla, data  = data, family = family)
-}
-
-safely_fit_fish <- safely(fit_fish)
+  mutate(ind_vars = supplied_density_vars,
+         prob_ind_vars = prob_supplied_density_vars)
 
 length_to_density_models <- length_to_density_models %>% 
   mutate(data_source = 'length_to_density')
@@ -448,17 +385,6 @@ supplied_density_models <- supplied_density_models %>%
   mutate(data_source = 'supplied_density')
 
 
-center_scale <- function(x){
-  if(all(is.finite(x[is.na(x) == F])) & min(x, na.rm = T) != 0){
-  
-  y <- (x - mean(x, na.rm = T)) / (2 * sd(x, na.rm = T))
-  } else {
-    y <- x
-  }
-  
-  return(y)
-  
-}
 ```
 # Run filers
 ```{r filter-and-process-data}
@@ -479,6 +405,10 @@ filterfoo <- function(x, min_seen_years = 8, mpa_start_year = 2003){ # only year
            max_year >= mpa_start_year) # actually observed for at least 10 years
 }
 
+
+site_data <- site_data %>% 
+  mutate(eventual_mpa = (year_mpa >0))
+
 abundance_models <- length_to_density_models %>% 
   bind_rows(supplied_density_models) %>% 
   mutate(data = map(data, ~left_join(.x, site_data, by = c('site','side')))) %>% 
@@ -487,7 +417,9 @@ abundance_models <- length_to_density_models %>%
   filter(dim_data > 0) %>%  # remove fisheries that didn't pass filterfoo
   mutate(classcode = tolower(classcode)) %>% 
   left_join(life_history_data %>% select(classcode, commonname, targeted), by = 'classcode') %>% 
-  filter(str_detect(commonname, 'YOY') == F, is.na(targeted) == F) %>% # get rid of young of the year and unknown if targeted species
+  left_join(fished_species, by = 'classcode') %>% 
+  mutate(targeted = ifelse(fished == 1 & is.na(fished) == F & targeted == "Non-targeted", 'Targeted', targeted)) %>% 
+  filter(str_detect(commonname, 'YOY') == F, is.na(targeted) == F) %>% 
   mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale))) # center and scale continuos data
 
 abundance_models %>% 
@@ -502,8 +434,6 @@ abundance_models %>%
   facet_wrap(~data_source)
 
 ```
-
-
 
 
 # fit VAST abundance index
@@ -555,6 +485,8 @@ wtf <- vast_abundance$vast_data[[1]] %>%
   summarise(nobs = sum(catch_kg > 0),
             nzero = sum(catch_kg == 0))
 
+
+if (run_vast == T){
 arg <- safely(vasterize_pisco_data)
 
 vast_abundance <- vast_abundance %>% 
@@ -576,6 +508,12 @@ vast_abundance <- vast_abundance %>%
   mutate(vast_error = map(vast_results, 'error'))
 
 save(file = paste0(run_dir,'/vast_abundance.Rdata'), vast_abundance)
+} else {
+  
+  load(file = paste0(run_dir,'/vast_abundance.Rdata'))
+
+  
+}
 
 vast_abundance <- vast_abundance %>% 
   mutate(vast_index = map(vast_results,'result'))
@@ -583,6 +521,7 @@ vast_abundance <- vast_abundance %>%
 a <- vast_abundance$vast_index[[19]]$spatial_densities 
   ggmap::qmplot(approx_long, approx_lat, data = a, color = density) + 
     facet_wrap(~year) + 
+    theme_minimal() +
     scale_color_viridis()
 
 
@@ -602,7 +541,7 @@ OK that seemed to work!
   
 abundance_models <- abundance_models %>% 
   mutate(seen_model = map2(data,ind_vars, safely_fit_fish, dep_var = 'log_density', fit_seen = T, family = 'gaussian'),
-         seeing_model =map2(data,ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
+         seeing_model =map2(data,prob_ind_vars, safely_fit_fish, dep_var = 'any_seen', fit_seen = F, family = 'binomial') )
 
 abundance_models <- abundance_models %>% 
   mutate(seeing_error = map(seeing_model, 'error'),
@@ -671,8 +610,7 @@ abundance_models <- abundance_models %>%
 
 consistent_models <- abundance_models %>% 
   # filter(num_years >=10) %>% 
-  mutate(classcode = tolower(classcode)) %>% 
-  left_join(life_history_data %>% select(classcode, commonname)) 
+  mutate(classcode = tolower(classcode))
 
 walk2(consistent_models$commonname, consistent_models$abundance_plot,
       ~ ggsave(file = paste0(run_dir,'/',.x,'.pdf'), .y), run_dir = run_dir)
@@ -756,6 +694,9 @@ model_comparison_plots <- model_comparison_plots %>%
     mutate(classcode = tolower(classcode)) %>% 
   left_join(life_history_data %>% select(classcode, commonname))
 
+
+save(file = paste0(run_dir,'/model_comparisons.Rdata'), model_comparison_plots)
+
   
 walk2(model_comparison_plots$commonname, model_comparison_plots$comp_plot,
       ~ ggsave(file = paste0(run_dir,'/',.x,'-modelcomp.pdf'), .y), run_dir = run_dir)
@@ -784,15 +725,19 @@ annual_conditions <- conditions_data %>%
   spread(variable, value)
 
 
-
 did_data <- model_comparison_plots %>% 
   select(classcode, data) %>% 
   unnest() %>% 
   left_join(life_history_data, by = 'classcode') %>% 
   left_join(enso, by = 'year') %>% 
   left_join(pdo, by = 'year') %>% 
-  left_join(annual_conditions, by = c('year','region'))
+  left_join(annual_conditions, by = c('year','region')) %>% 
+  left_join(ci_catches, by = c('classcode','year')) %>% 
+  mutate(catch = ifelse(is.na(catch), 0, catch))
   
+  
+interesting <- did_data %>% 
+  filter(catch > 0, targeted == 'Non-targeted')
 ```
 
 OK, now add in DiD estimator... which is the interaction of targeted and being pre or post MLPA. So for that, you're going to do what. You need a volumn that is a 1 if it's a fished species in that year and 0 if it's a fished species not in that year, along with fished species, and post 2003. 
