@@ -4,35 +4,37 @@ create_abundance_index <-
            seeing_aug,
            seen_aug,
            pop_structure) {
+
+
     # find seen omitted terms
-    omitted_levels <-
-      data_frame(factor_terms = names(seen_model$xlevels),
-                 omitted_term = NA)
-
-    seen_coefs <- broom::tidy(seen_model)
-    for (i in seq_along(1:nrow(omitted_levels))) {
-      possible_levels <- seen_model$xlevels[[i]]
-
-      estimated_levels <- seen_coefs %>%
-        filter(str_detect(term, omitted_levels$factor_terms[i])) %>% {
-          .$term
-        }
-
-      estimated_levels <-
-        str_replace(estimated_levels, omitted_levels$factor_terms[i], '')
-
-      omitted_level <-
-        possible_levels[!possible_levels %in% estimated_levels]
-
-      omitted_levels$omitted_term[i] <- omitted_level
-
-    }
-
-    omitted_levels <- omitted_levels %>%
-      mutate(omitted_name = map2_chr(factor_terms, omitted_term, ~ paste(.x, .y, sep = '_')))
-
-    intercept_term <-
-      paste(omitted_levels$omitted_name, collapse = '-') # a whole ton of work to double check what the intercept is
+    # omitted_levels <-
+    #   data_frame(factor_terms = names(seen_model$xlevels),
+    #              omitted_term = NA)
+    #
+    # seen_coefs <- broom::tidy(seen_model)
+    # for (i in seq_along(1:nrow(omitted_levels))) {
+    #   possible_levels <- seen_model$xlevels[[i]]
+    #
+    #   estimated_levels <- seen_coefs %>%
+    #     filter(str_detect(term, omitted_levels$factor_terms[i])) %>% {
+    #       .$term
+    #     }
+    #
+    #   estimated_levels <-
+    #     str_replace(estimated_levels, omitted_levels$factor_terms[i], '')
+    #
+    #   omitted_level <-
+    #     possible_levels[!possible_levels %in% estimated_levels]
+    #
+    #   omitted_levels$omitted_term[i] <- omitted_level
+    #
+    # }
+    #
+    # omitted_levels <- omitted_levels %>%
+    #   mutate(omitted_name = map2_chr(factor_terms, omitted_term, ~ paste(.x, .y, sep = '_')))
+    #
+    # intercept_term <-
+    #   paste(omitted_levels$omitted_name, collapse = '-') # a whole ton of work to double check what the intercept is
 
     # extract and convert intercept and year terms the old fashioned way
     # abundance_index <- seen_coefs %>%
@@ -48,6 +50,7 @@ create_abundance_index <-
 
     # seen_aug <-   seen_model %>%
     #   broom::augment()
+
     if (pop_structure == 'one-pop') {
       seen_series <-
         create_reference_case(seen_aug = seen_aug, seen_model = seen_model) %>%

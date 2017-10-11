@@ -26,11 +26,21 @@ for (i in factor_names){ # filter down to the most common thing
 seen_series <- seen_series %>%
   slice(1)
 
+class(seen_model)
+if (class(seen_model) == 'lmerMod'){
+
+  num_original_years <- seen_model@flist$factor_year %>% unique()
+
+  seen_series <- seen_series[rep(1, length(num_original_years)),] #replicate the number of years
+
+  seen_series$factor_year <- levels(num_original_years) %>% as.factor()
+
+} else {
 num_original_years <- seen_model$xlevels$factor_year
 
 seen_series <- seen_series[rep(1, length(num_original_years)),] #replicate the number of years
 
 seen_series$factor_year <- seen_model$xlevels$factor_year %>% as.factor()
-
+}
 return(seen_series)
 }

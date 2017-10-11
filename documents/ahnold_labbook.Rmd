@@ -1816,4 +1816,28 @@ That can then be refied to pull in specific MLPA things.
 
 I really really like that. Let's get to work. 
 
+# 2017-10-10 - lessons learned from alternative abundance trends
+
+So what have you learned here? The exercise was to run a bunch of different ways to generate an index of abundance for each of the species in the database. 
+
+This included data filtering (all data, inside MPA only, consistent sites only), as well as population structure (one population vs island meta populations vs MPA and non MPA), and of course your own data vs jenns processed data
+
+The good news is broad trends are very insensitive to basically any of these choices for many species. Given how poorly fit the model is in many instances, seems to make more sense then to try and reliable estimates for the whole population rather than diluting the sample size
+
+One interesting feature, looking at the MPA data only seems to remove that huge downtick that the models realllllly seem to like to do in the early years from the standardized data. Probably worth checking to make sure that you're not butchering the standardization, though that would seem inlikely. 
+
+While the choice of what data and what pop don't matter all that much. However, to standardize or not to standardize makes a pretty damn huge difference. copper rockfish is a pretty great example of this. where you've got either a steady increase predicted by the raw data or a stead decrease from the standardized index. 
+
+the standardization really seems to like extreme spikey behavior, which I'm suspecting has something to do with the hurdle part of the model. gopher rockfish would be a good diagnostic case for looking into that. Brown rockfish is another pretty good example. 
+
+Really spiky as well, would be good to look into hierarchichal or GAM approaches here to see if that helps. 
+
+Pile perch is another good one, with very spikey abundance estimates. Should just browser in on a few of these and test out a few different approaches, brown rocksih is a really good one though. Rubberlip as well
+
+brown rockfish
+gopher rockfish
+rubberlip seaperch
+pile perch
+white seaperch (crazy spikey both in raw data and in standardized)
+
 

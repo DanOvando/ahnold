@@ -393,7 +393,6 @@ consistent_regions <- length_to_density_data %>%
 raw_length_covars <-
   paste(c(
     'observer',
-    'site',
     'mean_vis',
     'mean_canopy'
   ),
@@ -401,15 +400,15 @@ raw_length_covars <-
 
 
 prob_raw_length_covars <-
-  paste(c('observer', 'site', 'mean_vis', 'mean_canopy'),
+  paste(c('observer', 'mean_vis', 'mean_canopy'),
         collapse = '+')
 
 supplied_density_covars <-
-  paste(c('site', 'mean_kelp', 'mean_vis'),
+  paste(c('mean_kelp', 'mean_vis'),
         collapse = '+')
 
 prob_supplied_density_covars <-
-  paste(c('site', 'mean_kelp', 'mean_vis'),
+  paste(c('mean_kelp', 'mean_vis'),
         collapse = '+')
 
 length_to_density_models <- length_to_density_data %>%
@@ -558,6 +557,8 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
+  # filter(commonname %in% c('brown rockfish')) %>%
+  # slice(1:4) %>%
   mutate(
     seen_model = pmap(
       list(data = data,
@@ -568,6 +569,7 @@ abundance_models <- abundance_models %>%
       dep_var = 'log_density',
       fit_seen = T,
       family = 'gaussian',
+      model_type = 'glm',
       consistent_sites = consistent_sites
     ),
     seeing_model = pmap(
@@ -579,6 +581,7 @@ abundance_models <- abundance_models %>%
       dep_var = 'any_seen',
       fit_seen = F,
       family = 'binomial',
+      model_type = 'glm',
       consistent_sites = consistent_sites
     )
   )
@@ -605,6 +608,19 @@ abundance_models <- abundance_models %>%
     seeing_coefs = map(seeing_model, broom::tidy),
     seeing_aug = map(seeing_model, broom::augment)
   )
+
+add_covars_foo <- function(data){
+
+  if(is.null(data$region)){data$region <- 'somewhere'}
+
+  if(is.null(data$eventual_mpa)){data$eventual_mpa <- 'maybe'}
+
+return(data)
+}
+
+abundance_models <- abundance_models %>%
+  mutate(seen_aug = map(seen_aug, add_covars_foo),
+         seeing_aug = map(seeing_aug, add_covars_foo))
 
 abundance_models <- abundance_models %>%
   mutate(abundance_index = pmap(
@@ -706,79 +722,96 @@ pwalk(
 
 # prepare abundance indicies assess standardization --------------------------------------------------
 
-calc_raw_abundance <- function(data) {
+
+
+calc_raw_abundance <- function(data, population_structure) {
   if (any(colnames(data) == 'biomass')) {
     data$mean_biomass_g <- data$biomass
 
   }
 
+  if (population_structure == 'one-pop'){
+
   raw_trend <- data %>%
-    group_by(region, factor_year) %>%
+    group_by(factor_year) %>%
     summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
     ungroup() %>%
     mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
     mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
     ungroup()
+  }
+  if (population_structure == 'regional-pops'){
+
+    raw_trend <- data %>%
+      group_by(region,factor_year) %>%
+      summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
+      ungroup() %>%
+      mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
+      mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
+      ungroup()
+  }
+  if (population_structure == 'mpa-pops'){
+
+    raw_trend <- data %>%
+      group_by(eventual_mpa,factor_year) %>%
+      summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
+      ungroup() %>%
+      mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
+      mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
+      ungroup()
+  }
+
+  return(raw_trend)
 
 }
+
 
 abundance_indices <- abundance_models %>%
-  mutate(standardized_abundance_trend = map(
-    abundance_index,
-    ~ select(., factor_year, region, abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric())
-  )) %>%
-  mutate(raw_abundance_trend = map(data, calc_raw_abundance)) %>%
-  select(classcode,
-         data_source,
-         standardized_abundance_trend,
-         raw_abundance_trend)
+  # mutate(standardized_abundance_trend = map(
+  #   abundance_index,
+  #   ~ select(., factor_year, region, abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric())
+  # )) %>%
+  mutate(raw_abundance_trend = map2(data,population_structure, calc_raw_abundance))
 
 
-raw_model_indices <- abundance_indices %>%
-  select(classcode, data_source, raw_abundance_trend) %>%
-  unnest() %>%
-  mutate(abundance_source = 'raw')
+compare_trends <- abundance_indices %>%
+  nest(-classcode,-commonname)
 
-standardized_model_indices <- abundance_indices %>%
-  select(classcode, data_source, standardized_abundance_trend) %>%
-  unnest() %>%
-  mutate(abundance_source = 'standardized')
 
-vast_model_indices <- vast_abundance %>%
-  mutate(time_index = map(vast_index, 'time_index')) %>%
-  select(classcode, data_source, time_index) %>%
-  unnest() %>%
-  mutate(factor_year = as.factor(Year),
-         region = 'SCI') %>%
-  rename(year = Year) %>%
-  select(classcode, data_source, factor_year, region, abundance, year) %>%
-  rename(abundance_index = abundance) %>%
-  set_names(tolower) %>%
-  mutate(abundance_source = 'vast') %>%
-  group_by(classcode, data_source) %>%
-  mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
-  ungroup()
+simplify_trend <- function(dat, population_structure){
 
-abundance_indices <- raw_model_indices %>%
-  bind_rows(standardized_model_indices) %>%
-  bind_rows(vast_model_indices) %>%
-  nest(-classcode)
+  nobs <- nrow(dat)
 
-comp_plot_foo <- function(data) {
-  data %>%
-    ggplot(aes(year, abundance_index, color = abundance_source)) +
-    geom_line() +
-    geom_point() +
-    facet_grid(data_source ~ region)
+  out_frame <- data_frame(year = rep(NA,nobs), abundance_index = rep(NA,nobs), population_level = rep(NA,nobs))
 
+  out_frame$year <- dat$factor_year %>% as.character() %>% as.numeric()
+
+  out_frame$abundance_index <- dat$abundance_index
+
+  if (population_structure == 'one-pop'){
+
+    out_frame$population_level <- 'channel-islands'
+
+  }
+  if (population_structure == 'regional-pops'){
+    out_frame$population_level <- dat$region
+  }
+  if (population_structure == 'mpa-pops'){
+
+    out_frame$population_level <- dat$eventual_mpa %>% as.character()
+
+  }
+
+  return(out_frame)
 
 }
 
-abundance_indices <- abundance_indices %>%
-  mutate(comp_plot = map(data, comp_plot_foo)) %>%
-  mutate(classcode = tolower(classcode)) %>%
-  left_join(life_history_data %>% select(classcode, commonname))
+compare_trend_foo(compare_trends$commonname[[1]],compare_trends$data[[1]], run_dir = run_dir )
 
+walk2(compare_trends$commonname,
+      compare_trends$data,
+      safely(compare_trend_foo),
+      run_dir = run_dir)
 
 save(file = paste0(run_dir, '/abundance_indices.Rdata'),
      abundance_indices)
@@ -791,8 +824,6 @@ walk2(
   run_dir = run_dir
 )
 
-
-
 # prepare candidate did runs ----------------------------------------------
 
 
@@ -803,7 +834,7 @@ annual_conditions <- conditions_data %>%
     mean_annual_temp = mean(mean_temp, na.rm = T),
     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
   ) %>%
-  gather(variable, value, -year, -region) %>%
+  gather(variable, value,-year,-region) %>%
   group_by(variable) %>%
   mutate(value = zoo::na.approx(value),
          value = center_scale(value)) %>%
