@@ -58,7 +58,8 @@ use_mpa_site_effects <- F # no idea
 # load data ---------------------------------------------------------------
 
 length_data <- read_csv('data/UCSB_FISH raw thru 2013.csv') %>%
-  magrittr::set_colnames(., tolower(colnames(.)))
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  mutate(classcode = tolower(classcode))
 
 life_history_data <-
   read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
@@ -81,7 +82,7 @@ site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
   mutate(eventual_mpa = (year_mpa > 0))
 
 length_data <- length_data %>%
-  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') #%>%
+  left_join(life_history_data, by = 'classcode') #%>%
 # left_join(site_data, by = c('site', 'side'))
 
 ci_catches <-
@@ -203,7 +204,7 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
 
   length_example <- length_data %>%
     filter(
-      classcode == toupper(density_example$classcode)
+      classcode == (density_example$classcode)
       ,
       site == density_example$site,
       side == density_example$side,
@@ -274,7 +275,7 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
     } %>%
     bind_rows()
 
-  save(file = paste0('data/length_to_density_data.Rdata'),
+  save(file = paste0('data/length-to-density-data.Rdata'),
        length_to_density_data)
 
 } else {
@@ -429,6 +430,18 @@ supplied_density_models <- supplied_density_models %>%
 
 # filter data -------------------------------------------------------------
 
+well_observed_species <- length_to_density_data %>%
+  filter(year > 1999) %>%
+  left_join(life_history_data %>% select(classcode,commonname, targeted), by = c('classcode')) %>%
+  group_by(year, classcode,commonname, targeted) %>%
+  summarise(nseen = sum(any_seen, na.rm = T)) %>%
+  group_by(commonname,classcode, targeted) %>%
+  summarise(min_seen = min(nseen, na.rm = T)) %>%
+  arrange(desc(min_seen)) %>%
+  ungroup() %>%
+  filter(min_seen > 0) %>%
+  mutate(classcode = (classcode))
+
 filterfoo <-
   function(x,
            min_seen_years = 8,
@@ -456,12 +469,10 @@ filterfoo <-
   }
 
 
-length_to_density_models$data[[1]] %>%
-  group_by(site) %>%
-  summarise(nyears = length(unique(year)))
-
 abundance_models <- length_to_density_models %>%
   bind_rows(supplied_density_models) %>%
+  filter(classcode %in% well_observed_species$classcode) %>%
+
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
   mutate(data = map(data, filterfoo, min_year = min_year,
                     filter_level = quo(region))) %>% # filter out things
@@ -557,8 +568,6 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
-  # filter(commonname %in% c('brown rockfish')) %>%
-  # slice(1:4) %>%
   mutate(
     seen_model = pmap(
       list(data = data,
@@ -600,6 +609,10 @@ abundance_models <- abundance_models %>%
                                is.null(.y))) %>%
   filter(no_error == T) #filter out models that didn't converge for some reason
 
+
+# abundance_models %>%
+#   group_by(targeted) %>%
+#   summarise(nobs = length(no_error))
 
 abundance_models <- abundance_models %>%
   mutate(
@@ -817,12 +830,6 @@ save(file = paste0(run_dir, '/abundance_indices.Rdata'),
      abundance_indices)
 
 
-walk2(
-  abundance_indices$commonname,
-  abundance_indices$comp_plot,
-  ~ ggsave(file = paste0(run_dir, '/', .x, '-modelcomp.pdf'), .y),
-  run_dir = run_dir
-)
 
 # prepare candidate did runs ----------------------------------------------
 

@@ -83,6 +83,7 @@ fit_fish <-
     ind_vars <- paste(c(pop_term, ind_covars), collapse = '+')
 
     reg_fmla <- paste(dep_var, ind_vars, sep = '~') %>% as.formula()
+
     if (model_type == 'gam') {
 
     }
