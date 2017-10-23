@@ -59,6 +59,7 @@ fit_fish <-
       }
 
     }
+
     if (pop_structure == 'mpa-pops') {
 
       num_levels <- length(unique(data$eventual_mpa))

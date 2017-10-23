@@ -1840,4 +1840,42 @@ rubberlip seaperch
 pile perch
 white seaperch (crazy spikey both in raw data and in standardized)
 
+# 2017-10-12 fine tuning abundance indices
+
+OK, so part of the problem before was that some species were poorly observed over time, i.e. not observed at all in a given year. So, the observation model was failing in those years, producing a 0% probability of detection, seriously throwing off the model. 
+
+So, as part of the filtering you're now estimating the model only on species that have been observed every year, the idea being you don't want to skew the analysis with species that are so rare that they are not observed at all in pre-or-post years. 
+
+That obviously skews away from say san miguel species, but seems like the cleanest form of analysis that you can: for species that you observed before and after, what happened? 
+
+Looking at the results, still seeing some annoying spikes in effects . Copper rockfish seems like an interesitng one to take a look at and see what's causing the huge spike in abundances in the earler years (in the standardized data). Brown rockfish as well, and rock wrasse. 
+
+Let's take a look at those species and see how the probability estimations are going. 
+
+If that looks good, then revisit a GLMER/GAM approach to this to see if that helps smooth out the spikes in the year terms. 
+
+Looking then at a species with that percipitous deline in the early years, we see something like brown rockfish. Now before that sharp ass decline was often a thing with the probability of detection. In that speices, not the case, and in fact the prob seen if inflating abundance in the future. Pretty crazy though that it goes from over 300 to nearly zero in the linear prediction though. 
+
+part of that does seem like it could be the site thing, since you don't see that drop when it's consistent sites only. 
+
+# 2017-10-19
+
+OK you're getting somewhere. There are definitely some problems with trying to do fine-scale population dynamics in terms of model fitting: lots of rank deficient fits, even if you drop out the observer effects. 
+
+One potential thing to try. What if you fit all the species at the same time? i.e have year:species interactions, and then all the other terms that you need. The idea there being detection/observer bias is consistent across species, and the only difference in trends over time then is population. Let's mess around with that and see if you get better estimation of parameters. 
+
+If that doesn't work... Then I think you need to do a run filtering down to only non-rank deficient fits and see that that leaves you with in terms of sample size. 
+
+Once you test those two things, you're on to fitting the DiD estimator. 
+
+This should be back in familiar territory. It doesn't really make any sense to change the implementation year itself, since in theory that should just be picked up as a "zero" effect for that year. 
+
+But, you could think about treatment as something like "generation time protected", or "growth years" protected. This gets a bit tricky to think about how to do in a defensible way, but definitely worth exploring. 
+
+So through your filtering it seems that you're losing years again. Need to go back and make sure that you have a filter for only species that have been seen every year 2000-2013, just as your base case of the most reliable results possible tnc
+
+
+
+
+
 

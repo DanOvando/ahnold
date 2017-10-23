@@ -18,6 +18,8 @@ library(forcats)
 library(stringr)
 library(lubridate)
 library(purrr)
+library(lme4)
+library(TMB)
 library(tidyverse)
 demons::load_functions('functions')
 
@@ -40,7 +42,9 @@ write(run_description,
 
 run_length_to_density <-  F
 
-run_vast <- F # run VAST, best to leave off for now
+run_vast <- T # run VAST, best to leave off for now
+
+num_knots <-  10
 
 aggregate_transects  <-
   F # should transects be aggregated up (mean across observer) or left as raw
@@ -372,6 +376,25 @@ density_data <- reg_data %>%
 
 # prepare data for model fitting ------------------------------------------
 
+
+observer_experience <- length_to_density_data %>%
+  group_by(year,observer) %>%
+  summarise(n_obs = length(log_density)) %>%
+  arrange(observer, year) %>%
+  group_by(observer) %>%
+  mutate(cumulative_n_obs = cumsum(n_obs))
+
+# a <- length_to_density_data %>%
+#   left_join(observer_experience, by = c('observer','year')) %>%
+#   ungroup() %>%
+#   left_join(life_history_data %>% select(classcode,vbgf.linf), by = 'classcode')
+#
+# b <- a %>%
+#   group_by(classcode,year) %>%
+#   summarise(nobs = sum(any_seen, na.rm = T))
+#
+# b <- glm(any_seen ~ vbgf.linf, data = a, family = 'binomial')
+
 consistent_sites <- length_to_density_data %>%
   group_by(site) %>%
   summarise(num_years = length(unique(year)),
@@ -393,7 +416,7 @@ consistent_regions <- length_to_density_data %>%
 
 raw_length_covars <-
   paste(c(
-    'observer',
+    'region',
     'mean_vis',
     'mean_canopy'
   ),
@@ -401,15 +424,15 @@ raw_length_covars <-
 
 
 prob_raw_length_covars <-
-  paste(c('observer', 'mean_vis', 'mean_canopy'),
+  paste(c('region','mean_vis', 'mean_canopy'),
         collapse = '+')
 
 supplied_density_covars <-
-  paste(c('mean_kelp', 'mean_vis'),
+  paste(c('region','mean_kelp', 'mean_vis'),
         collapse = '+')
 
 prob_supplied_density_covars <-
-  paste(c('mean_kelp', 'mean_vis'),
+  paste(c('region','mean_kelp', 'mean_vis'),
         collapse = '+')
 
 length_to_density_models <- length_to_density_data %>%
@@ -430,6 +453,13 @@ supplied_density_models <- supplied_density_models %>%
 
 # filter data -------------------------------------------------------------
 
+nobs_quantiles <- length_to_density_data %>%
+  filter(any_seen == T) %>%
+  group_by(year, classcode) %>%
+  summarise(nobs = sum(any_seen)) %>%
+  ungroup() %>%
+  {quantile(.$nobs)}
+
 well_observed_species <- length_to_density_data %>%
   filter(year > 1999) %>%
   left_join(life_history_data %>% select(classcode,commonname, targeted), by = c('classcode')) %>%
@@ -439,18 +469,19 @@ well_observed_species <- length_to_density_data %>%
   summarise(min_seen = min(nseen, na.rm = T)) %>%
   arrange(desc(min_seen)) %>%
   ungroup() %>%
-  filter(min_seen > 0) %>%
+  filter(min_seen > nobs_quantiles[2]) %>%
   mutate(classcode = (classcode))
 
 filterfoo <-
   function(x,
-           min_seen_years = 8,
+           y,
+           min_seen_years = 14,
            mpa_start_year = 2003,
            min_year,
            filter_level) {
     # only years above 1999 at the main channel islands
-
     x <- x %>%
+      mutate(classcode = y) %>%
       filter(is.na(log_density) == F) %>%
       filter(year > min_year &
                region %in% c('ANA', 'SCI', 'SMI', 'SRI')) %>%
@@ -465,17 +496,17 @@ filterfoo <-
         num_years_observed >= min_seen_years,
         min_year <= mpa_start_year,
         max_year >= mpa_start_year
-      ) # actually observed for at least 10 years
+      ) %>%
+      select(-classcode)# actually observed for at least 10 years
   }
 
 
 abundance_models <- length_to_density_models %>%
   bind_rows(supplied_density_models) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
-
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
-  mutate(data = map(data, filterfoo, min_year = min_year,
-                    filter_level = quo(region))) %>% # filter out things
+  mutate(data = map2(data,classcode, filterfoo, min_year = min_year,
+                    filter_level = quo(classcode))) %>% # filter out things
   mutate(dim_data = map_dbl(data, nrow)) %>%
   filter(dim_data > 0)
 
@@ -494,8 +525,8 @@ abundance_models <- abundance_models %>%
     'Targeted',
     targeted
   )) %>%
-  filter(str_detect(commonname, 'YOY') == F, is.na(targeted) == F) %>%
-  mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale))) # center and scale continuos data
+  filter(str_detect(commonname, 'YOY') == F, is.na(targeted) == F) #%>%
+  # mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale))) # center and scale continuos data
 
 
 population_structure <- c('one-pop', 'regional-pops', 'mpa-pops')
@@ -508,49 +539,55 @@ abundance_models <- cross_df(list(data = list(abundance_models),
   unnest()
 
 
-# vast_abundance <- abundance_models %>%
-#   select(classcode, data_source, data) %>%
-#   mutate(survey_region = 'california_current',
-#          n_x = 200) %>%
-#   mutate(
-#     vast_data = map2(
-#       data,
-#       classcode,
-#       vast_prep,
-#       site_coords = site_coords,
-#       conditions_data = conditions_data
-#     )
-#   )
-#
-# if (run_vast == T) {
-#   arg <- safely(vasterize_pisco_data)
-#
-#   vast_abundance <- vast_abundance %>%
-#     mutate(vast_results = purrr::pmap(
-#       list(
-#         region = survey_region,
-#         raw_data = vast_data,
-#         n_x = n_x
-#       ),
-#       arg,
-#       run_dir = run_dir,
-#       nstart = 100,
-#       obs_model = c(2, 0)
-#     ))
-#
-#   vast_abundance <- vast_abundance %>%
-#     mutate(vast_error = map(vast_results, 'error'))
-#
-#   save(file = paste0(run_dir, '/vast_abundance.Rdata'), vast_abundance)
-# } else {
-#   load(file = paste0(run_dir, '/vast_abundance.Rdata'))
-#
-#
-# }
-#
-#
-# vast_abundance <- vast_abundance %>%
-#   mutate(vast_index = map(vast_results, 'result'))
+
+# run vast ----------------------------------------------------------------
+
+
+
+vast_abundance <- abundance_models %>%
+  # select(classcode, data_source, data, ) %>%
+  mutate(survey_region = 'california_current',
+         n_x = num_knots) %>%
+  mutate(
+    vast_data = map2(
+      data,
+      classcode,
+      vast_prep,
+      site_coords = site_coords,
+      conditions_data = conditions_data
+    )
+  )
+
+if (run_vast == T) {
+  arg <- safely(vasterize_pisco_data)
+
+
+
+  vast_abundance <- vast_abundance %>%
+    mutate(vast_results = purrr::pmap(
+      list(
+        region = survey_region,
+        raw_data = vast_data,
+        n_x = n_x
+      ),
+      arg,
+      run_dir = run_dir,
+      nstart = 100,
+      obs_model = c(2, 0)
+    ))
+
+  vast_abundance <- vast_abundance %>%
+    mutate(vast_error = map(vast_results, 'error'))
+
+  save(file = paste0(run_dir, '/vast_abundance.Rdata'), vast_abundance)
+} else {
+  load(file = paste0(run_dir, '/vast_abundance.Rdata'))
+}
+
+
+vast_abundance <- vast_abundance %>%
+  mutate(vast_index = map(vast_results, 'result'))
+
 
 species_comp_by_dbase_plot <- abundance_models %>%
   ggplot(aes(commonname, dim_data, fill = data_source)) +
@@ -563,12 +600,34 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
   coord_flip() +
   facet_wrap(~ data_source)
 
+
+# test aggreate model -----------------------------------------------------
+
+# joint_data <- abundance_models %>%
+#   filter(population_structure == 'one-pop',
+#          population_filtering == 'all',
+#          data_source == 'length_to_density') %>%
+#   unnest()
+#
+# afla <- joint_data %>%
+#   filter(classcode == 'afla') %>%
+#   group_by(factor_year) %>%
+#   summarise(nobs = sum(any_seen),
+#             not_seen = sum(!any_seen))
+#
+# observed <- glm('log_density ~ factor_year*classcode + observer + mean_vis',
+#                 data = joint_data %>% filter(any_seen))
+
 # estimate abundance through delta-glm ------------------------------------
 
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
-  mutate(
+  # filter(commonname == 'blue rockfish',
+  #        population_structure == 'one-pop',
+  #        population_filtering == 'all',
+  #        data_source  == 'length_to_density') %>%
+    mutate(
     seen_model = pmap(
       list(data = data,
            ind_covars = ind_covars,
@@ -634,6 +693,14 @@ return(data)
 abundance_models <- abundance_models %>%
   mutate(seen_aug = map(seen_aug, add_covars_foo),
          seeing_aug = map(seeing_aug, add_covars_foo))
+
+abundance_models <- abundance_models %>%
+  mutate(seen_rank_deficient = map_lgl(seen_model, ~ length(.$coefficients) > .$rank),
+         seeing_rank_deficient = map_lgl(seeing_model, ~ length(.$coefficients) > .$rank))
+
+wtf <- abundance_models %>%
+  filter(seen_rank_deficient == T)
+
 
 abundance_models <- abundance_models %>%
   mutate(abundance_index = pmap(
@@ -778,18 +845,17 @@ calc_raw_abundance <- function(data, population_structure) {
 
 }
 
-
-abundance_indices <- abundance_models %>%
-  # mutate(standardized_abundance_trend = map(
-  #   abundance_index,
-  #   ~ select(., factor_year, region, abundance_index) %>% mutate(year = as.character(factor_year) %>% as.numeric())
-  # )) %>%
-  mutate(raw_abundance_trend = map2(data,population_structure, calc_raw_abundance))
+process_vast_foo <- function(data){
 
 
-compare_trends <- abundance_indices %>%
-  nest(-classcode,-commonname)
+  out <- data$time_index %>%
+    select(Year, abundance) %>%
+    rename(year = Year, abundance_index = abundance) %>%
+    mutate(population_level = 'one-pop')
+}
 
+vast_abundance <- vast_abundance %>%
+  mutate(vast_abundance_index = map(vast_index, process_vast_foo))
 
 simplify_trend <- function(dat, population_structure){
 
@@ -815,11 +881,22 @@ simplify_trend <- function(dat, population_structure){
 
   }
 
+
   return(out_frame)
 
 }
 
-compare_trend_foo(compare_trends$commonname[[1]],compare_trends$data[[1]], run_dir = run_dir )
+
+abundance_indices <- abundance_models %>%
+  left_join(vast_abundance %>%   select(classcode, population_filtering, population_structure, data_source, vast_abundance_index)
+, by = c('classcode','population_filtering', 'population_structure','data_source')) %>%
+  mutate(raw_abundance_trend = map2(data,population_structure, calc_raw_abundance)) %>%
+  mutate(raw_abundance_index = map2(raw_abundance_trend, population_structure, simplify_trend),
+         glm_abundance_index = map2(abundance_index, population_structure, simplify_trend))
+
+
+compare_trends <- abundance_indices %>%
+  nest(-classcode,-commonname)
 
 walk2(compare_trends$commonname,
       compare_trends$data,
@@ -834,31 +911,79 @@ save(file = paste0(run_dir, '/abundance_indices.Rdata'),
 # prepare candidate did runs ----------------------------------------------
 
 
+# annual_conditions <- conditions_data %>%
+#   left_join(site_data %>% select(site, region), by = 'site') %>%
+#   group_by(region, year) %>%
+#   summarise(
+#     mean_annual_temp = mean(mean_temp, na.rm = T),
+#     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
+#   ) %>%
+#   gather(variable, value,-year,-region) %>%
+#   group_by(variable) %>%
+#   mutate(value = zoo::na.approx(value),
+#          value = center_scale(value)) %>%
+#   spread(variable, value)
+
 annual_conditions <- conditions_data %>%
   left_join(site_data %>% select(site, region), by = 'site') %>%
-  group_by(region, year) %>%
+  group_by(year) %>%
   summarise(
     mean_annual_temp = mean(mean_temp, na.rm = T),
     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
   ) %>%
-  gather(variable, value,-year,-region) %>%
+  gather(variable, value,-year) %>%
   group_by(variable) %>%
   mutate(value = zoo::na.approx(value),
          value = center_scale(value)) %>%
   spread(variable, value)
 
 did_data <- abundance_indices %>%
-  select(classcode, data) %>%
+  select(classcode, population_filtering, population_structure, data_source, contains('_index')) %>%
+  select(-abundance_index) %>%
+  gather('abundance_source','abundance_index',contains('_index')) %>%
   unnest() %>%
   left_join(life_history_data, by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
   left_join(pdo, by = 'year') %>%
-  left_join(annual_conditions, by = c('year', 'region')) %>%
+  left_join(annual_conditions, by = c('year')) %>%
   left_join(ci_catches, by = c('classcode', 'year')) %>%
   mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
   mutate(targeted = as.numeric(targeted == 'Targeted'),
          post_mpa = as.numeric(year >= 2003))
 
+
+compare_annual_abundance <- function(data){
+
+
+  out <-  data %>%
+    group_by(abundance_source) %>%
+    mutate(abundance_index = (abundance_index - mean(abundance_index)) / (2 * sd(abundance_index))) %>%
+    ggplot(aes(year, abundance_index, color = abundance_source)) +
+    geom_line() +
+    geom_point()
+
+
+}
+
+
+
+annual_abundance_trends_foo <-
+  function(classcode,
+           data_source,
+           annual_abundance_trends,
+           run_dir) {
+    ggsave(file = paste0(run_dir, '/', classcode, '-', data_source, '-annual-abundance-trends.pdf'),
+           annual_abundance_trends, height = 8, width = 8)
+  }
+trend_data <- did_data %>%
+  filter(population_structure == 'one-pop',
+         population_filtering ==  'all') %>%
+  nest(-classcode,-data_source) %>%
+  mutate(annual_abundance_trends = map(data, compare_annual_abundance))
+
+pwalk(list(classcode = trend_data$classcode, data_source = trend_data$data_source,
+           annual_abundance_trends = trend_data$annual_abundance_trends), annual_abundance_trends_foo,
+      run_dir = run_dir)
 
 
 did_terms <- did_data %>%

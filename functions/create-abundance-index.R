@@ -96,9 +96,8 @@ create_abundance_index <-
 
 
     # create reference frame for probabilities and calculate abundance index
-
-    prob_seen <-
-      predict(seeing_model, newdata = seen_series, type = 'response') # calculate probabilty of seeing
+    prob_seen <- predict(seeing_model, newdata = seen_series, type = 'response') # calculate probabilty of seeing
+        # predict(seeing_model, newdata = broom::augment(seeing_model), type = 'response') # calculate probabilty of seeing
 
 
     if (pop_structure == 'one-pop') {
