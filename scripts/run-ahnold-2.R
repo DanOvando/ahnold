@@ -42,7 +42,7 @@ write(run_description,
 
 run_length_to_density <-  F
 
-run_vast <- T # run VAST, best to leave off for now
+run_vast <- F # run VAST, best to leave off for now
 
 num_knots <-  10
 
@@ -107,6 +107,10 @@ conditions_data <- length_data %>%
   )
 
 
+
+
+# ggmap::qmplot(x = mean_longitude, y = mean_latitude,data = species_distributions)
+
 density_data <- read_csv('data/ci_reserve_data_final3 txt.csv') %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   gather('concat.name', 'value', grep('_', colnames(.)), convert = T) %>%
@@ -124,6 +128,22 @@ site_coords <- density_data %>%
   group_by(site, side) %>%
   summarise(latitude = mean(lon.wgs84, na.rm = T),
             longitude = mean(lat.wgs84, na.rm = T))
+
+species_distributions <- length_data %>%
+  left_join(site_coords, by = 'site') %>%
+  ungroup() %>%
+  filter(is.na(latitude) == F & is.na(longitude) == F) %>%
+  group_by(classcode) %>%
+  mutate(count = ifelse(is.na(count), 0, count)) %>%
+  summarise(mean_latitude = sum(count * latitude, na.rm = T) / sum(count, na.rm = T),
+            mean_longitude = sum(count * longitude, na.rm = T) / sum(count, na.rm = T),
+            max_latitude = max(latitude, na.rm = T),
+            min_latitude = min(latitude, na.rm = T),
+            max_longitude = max(longitude, na.rm = T),
+            min_longitude = min(longitude, na.rm = T))
+
+ggmap::qmplot(min_longitude,min_latitude, data = species_distributions)
+
 
 # ggmap::qmplot(longitude,latitude, color = side, data = site_coords)
 
@@ -908,7 +928,7 @@ save(file = paste0(run_dir, '/abundance_indices.Rdata'),
 
 
 
-# prepare candidate did runs ----------------------------------------------
+# prepare candidate did data and runs ----------------------------------------------
 
 
 # annual_conditions <- conditions_data %>%
@@ -941,12 +961,14 @@ did_data <- abundance_indices %>%
   select(classcode, population_filtering, population_structure, data_source, contains('_index')) %>%
   select(-abundance_index) %>%
   gather('abundance_source','abundance_index',contains('_index')) %>%
+  # filter(!(abundance_source == 'vast_abundance_index' & data_source == 'supplied_density')) %>%
   unnest() %>%
   left_join(life_history_data, by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
   left_join(pdo, by = 'year') %>%
   left_join(annual_conditions, by = c('year')) %>%
   left_join(ci_catches, by = c('classcode', 'year')) %>%
+  left_join(species_distributions, by = 'classcode') %>%
   mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
   mutate(targeted = as.numeric(targeted == 'Targeted'),
          post_mpa = as.numeric(year >= 2003))
@@ -975,6 +997,7 @@ annual_abundance_trends_foo <-
     ggsave(file = paste0(run_dir, '/', classcode, '-', data_source, '-annual-abundance-trends.pdf'),
            annual_abundance_trends, height = 8, width = 8)
   }
+
 trend_data <- did_data %>%
   filter(population_structure == 'one-pop',
          population_filtering ==  'all') %>%
@@ -985,23 +1008,105 @@ pwalk(list(classcode = trend_data$classcode, data_source = trend_data$data_sourc
            annual_abundance_trends = trend_data$annual_abundance_trends), annual_abundance_trends_foo,
       run_dir = run_dir)
 
-
 did_terms <- did_data %>%
   select(year, targeted) %>%
-  mutate(index = 1:nrow(.),
-         targeted = as.numeric(targeted == 'Targeted')) %>%
+  mutate(index = 1:nrow(.)) %>%
   spread(year, targeted, fill = 0) %>%
   select(-index) %>%
   set_names(., paste0('did_', colnames(.))) %>%
-  select(-did_2002)
+  select(-did_2000)
+
+
+did_data <- did_data %>%
+  bind_cols(did_terms)
+
+did_data <- did_data %>%
+  nest(-population_structure, -data_source, -population_filtering,-abundance_source)
+
+# visually inspect abundance trends ---------------------------------------
+#
+# a <- did_data$data[[1]]
+#
+# a %>%
+#   group_by(classcode) %>%
+#   mutate(abundance_index = abundance_index / max(abundance_index)) %>%
+#   ggplot(aes(year, abundance_index, color = as.logical(targeted))) +
+#   ggbeeswarm::geom_beeswarm(alpha = 0.25)+
+#   geom_smooth()
+
+test_parallel_trends <- function(data, mpa_year = 2003){
+  pre_species_correlations <- data %>%
+    select(year,population_level,classcode, abundance_index) %>%
+    spread(classcode, abundance_index) %>%
+    filter(year <= mpa_year) %>%
+    select(-year,-population_level) %>%
+    corrr::correlate()
+
+
+  post_species_correlations <- data %>%
+    select(year,population_level,classcode, abundance_index) %>%
+    spread(classcode, abundance_index) %>%
+    filter(year > mpa_year) %>%
+    select(-year,-population_level) %>%
+    corrr::correlate()
+
+  overall_species_correlations <- data %>%
+    select(year,population_level,classcode, abundance_index) %>%
+    spread(classcode, abundance_index) %>%
+    select(-year,-population_level) %>%
+    corrr::correlate()
+
+
+trend_data <- data %>%
+  mutate(abundance_index = (abundance_index - mean(abundance_index)) / (2 * sd(abundance_index))) %>%
+  group_by(year, targeted) %>%
+  filter(year <= mpa_year) %>%
+  summarise(mean_abundance = mean(abundance_index)) %>%
+  spread(targeted, mean_abundance)
+
+pre_correlation_test <- cor.test(~ `0` + `1`, data = trend_data)
+
+
+trend_data <- data %>%
+  mutate(abundance_index = (abundance_index - mean(abundance_index)) / (2 * sd(abundance_index))) %>%
+  group_by(year, targeted) %>%
+  filter(year > mpa_year) %>%
+  summarise(mean_abundance = mean(abundance_index)) %>%
+  spread(targeted, mean_abundance)
+
+post_correlation_test <- cor.test(~ `0` + `1`, data = trend_data)
+
+
+trend_data <- data %>%
+  mutate(abundance_index = (abundance_index - mean(abundance_index)) / (2 * sd(abundance_index))) %>%
+  group_by(year, targeted) %>%
+  summarise(mean_abundance = mean(abundance_index)) %>%
+  spread(targeted, mean_abundance)
+
+overall_correlation_test <- cor.test(~ `0` + `1`, data = trend_data)
+
+out <- list(pre_correlation_test = pre_correlation_test,
+            post_correlation_test = post_correlation_test,
+            overall_correlation_test = overall_correlation_test,
+            pre_species_correlations = pre_species_correlations,
+            post_species_correlations = post_species_correlations,
+            overall_species_correlations = overall_species_correlations)
+
+}
+
+
+did_data <- did_data %>%
+  mutate(correlation_tests = map(data, test_parallel_trends)) %>%
+  mutate(pre_correlation = map_dbl(correlation_tests, ~.x$overall_correlation_test$estimate),
+         pre_correlation_signif = map_dbl(correlation_tests, ~.x$overall_correlation_test$p.value))
+
+did_data %>%
+  ggplot(aes(pre_correlation_signif, fill = population_structure)) +
+  geom_density() +
+  facet_wrap(~abundance_source)
 
 # fit DiD estimator on abundance indicies ---------------------------------
 # so this is where you need to do a bunch of work in setting up the model runs
-
-
-
-
-
 
 
 did_reg <-
@@ -1009,19 +1114,19 @@ did_reg <-
     c(
       'targeted',
       'post_mpa',
-      'mean_enso',
-      'mean_pdo',
-      '(mean_annual_temp|classcode)',
+      'mean_enso*mean_longitude',
+      'mean_pdo*mean_longitude',
+      'mean_annual_temp*mean_longitude',
       'mean_annual_kelp',
       colnames(did_terms)
     ),
     collapse = '+'
   ))
 
+
 did_models <- did_data %>%
-  nest(-data_source, -abundance_source) %>%
   mutate(did_reg = did_reg) %>%
-  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
+  mutate(did_model = map2(data, did_reg, ~ lm(.y, data = .x)))
 
 
 did_plot_foo <- function(x) {
@@ -1048,16 +1153,20 @@ did_models <- did_models %>%
 did_plot_foo <-
   function(data_source,
            abundance_source,
+           population_filtering,
+           population_structure,
            did_plot,
            run_dir) {
-    ggsave(file = paste0(run_dir, '/', data_source, '-', abundance_source, '-did.pdf'),
-           did_plot)
+    ggsave(file = paste0(run_dir, '/', data_source, '-', abundance_source,'-',population_filtering,'-',population_structure, '-did.pdf'),
+           did_plot, height = 8, width = 8)
   }
 
 pwalk(
   list(
     data_source = did_models$data_source,
     abundance_source =  did_models$abundance_source,
+    population_filtering = did_models$population_filtering,
+    population_structure = did_models$population_structure,
     did_plot = did_models$did_plot
   ),
   did_plot_foo,
