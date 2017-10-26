@@ -1,0 +1,139 @@
+---
+title: "ahnold stan reminder"
+output: html_document
+---
+
+The point here is just a quick notebook to remind yourself how to work in and write STAN code, with the end goal of estimating a fully integrated version of the model, one step at a time. 
+
+```{r}
+library(tidyverse)
+library(rstan)
+```
+
+```{r}
+
+
+schools_data <- list(
+  J = 8,
+  y = c(28,  8, -3,  7, -1,  1, 18, 12),
+  sigma = c(15, 10, 16, 11,  9, 11, 10, 18),
+  test_position = c(1,2,3),
+  thing = c(6,6,6)
+)
+
+fit1 <- stan(
+  file = '../scripts/eight-schools.stan',
+  data = schools_data,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000,
+  cores = 2, 
+  refresh = 500
+)
+
+
+plot(fit1)
+
+```
+
+OK, that gets the general concept.... why not just start poking at the actual data right away and see where you get. Step 1 sill be to get the observation model up and converging, and see how things comapre to you other approaches to getting abundance. 
+
+# Testing stanified-ahnold
+
+```{r}
+
+run_name <- 'Working'
+
+run_dir <- file.path('../results', run_name)
+
+load(file = paste0(run_dir, '/abundance_indices.Rdata'))
+
+data <- abundance_indices$data[[1]]
+
+seen_data <- data %>% 
+  filter(any_seen == T) %>% 
+  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>% 
+  mutate(mean_canopy = (mean_canopy - mean(mean_canopy)) / (2 * sd(mean_canopy)))  
+
+
+year_data <- seen_data %>% 
+  select(year) %>% 
+  mutate(marker = 1, 
+         index = 1:nrow(.)) %>% 
+  spread(year, marker, fill = 0) %>% 
+  select(-index)
+
+region_data <- seen_data %>% 
+  select(region) %>% 
+  mutate(marker = 1, 
+         index = 1:nrow(.)) %>% 
+  spread(region, marker, fill = 0) %>% 
+  select(-index)
+
+visibility_data <- seen_data %>% 
+  select(mean_vis) 
+
+canopy_data <- seen_data %>% 
+  select(mean_canopy) %>%
+
+x <- bind_cols(intercept = rep(1, nrow(year_data)),visibility_data,canopy_data,year_data, region_data)
+
+stan_data <- list(
+  n_parameters = ncol(year_data) + ncol(region_data) + 3,
+  n_observations = nrow(year_data),
+  n_years = ncol(year_data),
+  n_regions = ncol(region_data),
+  year_positions = which(str_detect(colnames(x),'20')),
+  region_positions = which(colnames(x) %in% colnames(region_data)),
+  intercept_position = 1,
+  vis_position = 2,
+  kelp_position = 3,
+  x = x,
+  log_density = seen_data$log_density
+  )
+
+ahnold_stan_fit<- stan(
+  file = '../scripts/fit-ahnold.stan',
+  data = stan_data,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000,
+  cores = 1, 
+  refresh = 500,
+  control = list(max_treedepth = 10)
+)
+
+check <- rstanarm::stan_glmer('log_density ~ (1|factor_year) + (1|region) + mean_canopy + mean_vis', data = seen_data)
+
+
+```
+
+Now let's think through the liklihood here, taking it nice and easy, one step at a time. 
+
+You have coefficients for year effects, region effect, visibility, and kelp, in this particular example (you'll tackle observers next). 
+
+Let's examine the year and region terms first. The idea here is that each come from a distribution with mean something. That means that the mean effect of year and region can be soaked up into the intercept. So the year terms can then be thought of coming from a normal distribution with mean 0 and standard deviation $\sigma_{year}$. You would then also need a prior on the $\sigma_{year}$ term, which you should look up in a moment. The same goes for the regional term, though need to estimate a new $\sigma_{region}$ term there. 
+
+That then just leaves the intercept, the vis term, and the kelp term. For now, I think you can just treat those as uniform priors, and so don't need to be explicitly incorporated? But you can check on that and see if you should come up with something a little better. 
+
+What's a good prior for the sigmas? inverse gamma seems to be a plausible candidate for the variance, the square root of which would be the standard deviation. Alpha and beta are the two paramters of the inverse gamma in STAN `inv_gamma`. For now let's go with a scale and a shape of 2, seems to be pretty uninformative, but would be good to check and see how STAN handles that
+
+```{r}
+install.packages('invgamma')
+library(invgamma)
+
+
+mu <- 2
+sd <- 100
+
+a <- rinvgamma(10000, shape = (mu^2 / sd^2) + 2, scale = mu * (mu^2/sd^2 + 1))
+
+a <- dinvgamma(seq(.001,10, length.out = 100), shape =(mu^2 / sd^2) + 2, scale = mu * (mu^2/sd^2 + 1) )
+
+
+hist(a)
+
+```
+
+
+

@@ -1114,9 +1114,9 @@ did_reg <-
     c(
       'targeted',
       'post_mpa',
-      'mean_enso*mean_longitude',
-      'mean_pdo*mean_longitude',
-      'mean_annual_temp*mean_longitude',
+      'mean_enso:mean_longitude',
+      '(mean_pdo|classcode)',
+      'mean_annual_temp:mean_longitude',
       'mean_annual_kelp',
       colnames(did_terms)
     ),
@@ -1126,7 +1126,7 @@ did_reg <-
 
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%
-  mutate(did_model = map2(data, did_reg, ~ lm(.y, data = .x)))
+  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
 
 
 did_plot_foo <- function(x) {
@@ -1172,3 +1172,9 @@ pwalk(
   did_plot_foo,
   run_dir = run_dir
 )
+
+save(file = paste0(run_dir,'did_models.Rdata'), did_models)
+
+
+
+

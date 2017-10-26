@@ -3,7 +3,7 @@ title: "ahnold_labbook"
 author: "Dan Ovando"
 date: "December 14, 2016"
 output: 
-  html_notebook:
+  html_document:
     toc: yes
     toc_float: yes
 ---
@@ -1873,6 +1873,30 @@ This should be back in familiar territory. It doesn't really make any sense to c
 But, you could think about treatment as something like "generation time protected", or "growth years" protected. This gets a bit tricky to think about how to do in a defensible way, but definitely worth exploring. 
 
 So through your filtering it seems that you're losing years again. Need to go back and make sure that you have a filter for only species that have been seen every year 2000-2013, just as your base case of the most reliable results possible tnc
+
+# 2017-10-23 v2.0 up and running
+
+v2.0 has been benchmarked, meaning that you now have DiD estimators fit to a whole slew of different data inputs. Woot!
+
+So what now?
+
+I'd like to test out a Bayesian state-space approach, on the simplest case possible (one population), to just get a sense for how different the results might be. That way, you have something like a bookend of all the possible outcomes for this analysis and you don't leave any "well if I only tried this" things out there for reviewers. 
+
+Let's doa  bit of testing that idea, just to make sure you know how to use STAN correctly. GOod excuse to get better at it anyway. 
+
+```{r}
+
+
+
+
+```
+
+
+
+
+
+
+
 
 
 
