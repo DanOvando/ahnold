@@ -6,8 +6,10 @@ output: html_document
 The point here is just a quick notebook to remind yourself how to work in and write STAN code, with the end goal of estimating a fully integrated version of the model, one step at a time. 
 
 ```{r}
+set.seed(123)
 library(tidyverse)
 library(rstan)
+library(stringr)
 ```
 
 ```{r}
@@ -74,13 +76,14 @@ visibility_data <- seen_data %>%
   select(mean_vis) 
 
 canopy_data <- seen_data %>% 
-  select(mean_canopy) %>%
+  select(mean_canopy)
 
 x <- bind_cols(intercept = rep(1, nrow(year_data)),visibility_data,canopy_data,year_data, region_data)
 
+
 stan_data <- list(
   n_parameters = ncol(year_data) + ncol(region_data) + 3,
-  n_observations = nrow(year_data),
+  n_observations = nrow(seen_data),
   n_years = ncol(year_data),
   n_regions = ncol(region_data),
   year_positions = which(str_detect(colnames(x),'20')),
@@ -96,14 +99,102 @@ ahnold_stan_fit<- stan(
   file = '../scripts/fit-ahnold.stan',
   data = stan_data,
   chains = 1,
+  warmup = 2000,
+  iter = 5000,
+  cores = 1, 
+  refresh = 500, 
+  control = list(adapt_delta = 0.85)
+)
+
+# seeing data
+# 
+seeing_data <- data %>% 
+  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>% 
+  mutate(mean_canopy = (mean_canopy - mean(mean_canopy)) / (2 * sd(mean_canopy)))  
+
+year_data <- seeing_data %>% 
+  select(year) %>% 
+  mutate(marker = 1, 
+         index = 1:nrow(.)) %>% 
+  spread(year, marker, fill = 0) %>% 
+  select(-index)
+
+region_data <- seeing_data %>% 
+  select(region) %>% 
+  mutate(marker = 1, 
+         index = 1:nrow(.)) %>% 
+  spread(region, marker, fill = 0) %>% 
+  select(-index)
+
+visibility_data <- seeing_data %>% 
+  select(mean_vis) 
+
+canopy_data <- seeing_data %>% 
+  select(mean_canopy)
+
+x_obs <- bind_cols(intercept = rep(1, nrow(year_data)),visibility_data,canopy_data,year_data, region_data)
+
+
+stan_data <- list(
+  n_parameters = ncol(year_data) + ncol(region_data) + 3,
+  n_observations_obs = nrow(seeing_data),
+  n_years = ncol(year_data),
+  n_regions = ncol(region_data),
+  year_positions = which(str_detect(colnames(x_obs),'20')),
+  region_positions = which(colnames(x_obs) %in% colnames(region_data)),
+  intercept_position = 1,
+  vis_position = 2,
+  kelp_position = 3,
+  x_obs = x_obs,
+  observed = as.numeric(seeing_data$any_seen)
+  )
+
+ahnold_stan_fit<- stan(
+  file = '../scripts/fit-ahnold-binom.stan',
+  data = stan_data,
+  chains = 1,
   warmup = 1000,
   iter = 2000,
   cores = 1, 
-  refresh = 500,
-  control = list(max_treedepth = 10)
+  refresh = 500
 )
+  # control = list(max_treedepth = 10)
+
 
 check <- rstanarm::stan_glmer('log_density ~ (1|factor_year) + (1|region) + mean_canopy + mean_vis', data = seen_data)
+
+
+check_binom <- rstanarm::stan_glmer('any_seen ~ (1|factor_year) + (1|region) + mean_canopy + mean_vis', data = seeing_data, family = 'binomial')
+
+
+stan_data <- list(
+  n_parameters = ncol(year_data) + ncol(region_data) + 3,
+  n_observations = nrow(seen_data),
+  n_observations_obs = nrow(seeing_data),
+  n_years = ncol(year_data),
+  n_regions = ncol(region_data),
+  year_positions = which(str_detect(colnames(x),'20')),
+  region_positions = which(colnames(x) %in% colnames(region_data)),
+  intercept_position = 1,
+  vis_position = 2,
+  kelp_position = 3,
+  x_obs = x_obs,
+  x = x,
+  log_density = seen_data$log_density,
+  observed = as.numeric(seeing_data$any_seen)
+  )
+
+ahnold_stan_fit<- stan(
+  file = '../scripts/fit-ahnold-joint.stan',
+  data = stan_data,
+  chains = 1,
+  warmup = 2500,
+  iter = 5000,
+  cores = 1, 
+  refresh = 500
+)
+  # control = list(adapt_delta = 0.8)
+
 
 
 ```
