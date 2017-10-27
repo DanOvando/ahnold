@@ -50,6 +50,18 @@ transformed parameters{
 
 model{
 
+int a;
+
+a = 0;
+
+for (i in 1:10){
+
+  a = a + 1;
+  print(a)
+
+}
+
+
 target += normal_lpdf(eta | 0,1);
 
 target += normal_lpdf(y | theta, sigma);

@@ -188,10 +188,10 @@ ahnold_stan_fit<- stan(
   file = '../scripts/fit-ahnold-joint.stan',
   data = stan_data,
   chains = 1,
-  warmup = 2500,
-  iter = 5000,
+  warmup = 100,
+  iter = 200,
   cores = 1, 
-  refresh = 500
+  refresh = 10
 )
   # control = list(adapt_delta = 0.8)
 
