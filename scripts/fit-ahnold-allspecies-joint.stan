@@ -6,9 +6,13 @@ data{
 
   int<lower = 0> n_parameters; //number of parameters
 
+  int<lower = 0> n_did_parameters; //number of did parameters
+
   int<lower = 0> n_observations_seen; //number of observations
 
   int<lower = 0> n_observations_seeing; //number of observations
+
+  int<lower = 0> n_observations_did; //number of did observations
 
   int<lower = 0> n_species; //number of observations
 
@@ -34,6 +38,8 @@ data{
 
   matrix[n_standard,n_parameters] standard_matrix; // covariates
 
+  matrix[n_observations_did,n_did_parameters] x_did; // covariates
+
   vector[n_observations_seen] log_density; // observed log densities
 
   int<lower=0, upper = 1> observed[n_observations_seeing]; // observed or not observed
@@ -44,7 +50,7 @@ parameters{
 
 // seen fish parameters
 
-vector[n_parameters] betas;
+vector[n_parameters] betas; // vector of regression coefficients for seen fish
 
 vector<lower = 0>[n_species] sigma_year_species; // standard deviation of the year effects
 
@@ -54,17 +60,23 @@ real<lower = 0> sigma_density; // standard deviation of the observed densities
 
 // seeing fish parameters
 
-vector[n_parameters] seeing_betas;
+vector[n_parameters] seeing_betas; //vector of regression coefficients for seeing fish
 
-vector<lower = 0>[n_species] seeing_sigma_year_species; // standard deviation of the year effects
+vector<lower = 0>[n_species] seeing_sigma_year_species; // standard deviation of the seeing year effects
 
-vector<lower = 0>[n_species] seeing_sigma_region_species; // standard deviation of the year effects
+vector<lower = 0>[n_species] seeing_sigma_region_species; // standard deviation of the seeing region effects
+
+// did parameters
+
+vector[n_did_parameters] did_betas; //vector of regression coefficients for seeing fish
+
+real<lower = 0> sigma_abundance; // standard deviation of the observed densities
 
 
 } // close parameters
 
 transformed parameters{
-
+// Pull out hierarchichal parts of the betas
 // seen fish
 
   vector[n_year_species] year_species_betas;
@@ -167,49 +179,36 @@ counter = counter + regions_per_species[i];
 
 }
 
-
 standardized_prob_seen = 1 ./ (1 + exp(-standard_matrix * seeing_betas));
 
-standardized_abundance = standardized_prob_seen .* exp(year_species_betas);
+standardized_abundance = standardized_prob_seen .* exp(year_species_betas); // and finally the standardized abundance indicies
 
 prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
+
+
+// did_model //////////////////////////////////////////////
+
+
+target += normal_lpdf(log(standardized_abundance) | x_did * did_betas, sigma_abundance);
 
 // rest of the likelihood
 
 //
 target += cauchy_lpdf( sigma_density |0, 5);
 //
+target += cauchy_lpdf( sigma_abundance |0, 5);
+
 target += cauchy_lpdf(sigma_year_species | 0, 5);
 //
+target += cauchy_lpdf(sigma_region_species | 0, 5);
+
+target += cauchy_lpdf(seeing_sigma_year_species | 0, 5);
+//
+target += cauchy_lpdf(seeing_sigma_region_species | 0, 5);
+
 target += normal_lpdf(log_density | log_density_hat, sigma_density);
 
 target += bernoulli_lpmf(observed | prob_seen);
-
-
-//   sigma_density ~ cauchy(0, 5);
-//
-//   sigma_year ~ cauchy(0, 2.5);
-//
-//   sigma_region ~ cauchy(0, 2.5);
-//
-//   sigma_year_obs ~ cauchy(0, 5);
-//
-//   sigma_region_obs ~ cauchy(0, 5);
-//
-// year_effects ~ normal(0, sigma_year);
-//
-// region_effects ~ normal(0, sigma_region);
-//
-// year_effects_obs ~ normal(0, sigma_year_obs);
-//
-// region_effects_obs ~ normal(0, sigma_region_obs);
-//
-// log_density ~ normal(log_density_hat, sigma_density);
-
-// observed ~ bernoulli_logit(p_raw);
-
-// observed ~ bernoulli(p_obs);
-// I think you can use the target += notation to make the likelihood out of an arbitrary number of betas and sigmas, so long as the type of data is known. i.e. loop over the sigmas and betas, adding the the likelihood as needed
 
 }
 
@@ -218,6 +217,10 @@ generated quantities{
 vector[n_standard] s_prob_seen;
 //
 vector[n_standard] standardized_abundance_index; //
+
+vector[n_observations_did] log_abundance_hat; //
+
+log_abundance_hat = x_did * did_betas;
 
 s_prob_seen = 1 ./ (1 + exp(-standard_matrix * seeing_betas));
 //

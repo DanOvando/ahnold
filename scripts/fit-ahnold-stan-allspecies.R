@@ -11,8 +11,14 @@ run_dir <- file.path('results', run_name)
 
 load(file = paste0(run_dir, '/abundance_indices.Rdata'))
 
+# subspecies <- abundance_indices %>%
+#   select(classcode, targeted) %>%
+#   mutate(a = 1:nrow(.)) %>%
+#   group_by(targeted) %>%
+#   top_n(3,a)
+
 data <- abundance_indices %>%
-  slice(1:3) %>%
+  # filter(classcode %in% subspecies$classcode) %>%
   select(classcode, data) %>%
   unnest()
 
@@ -207,10 +213,45 @@ standard_matrix <- species_data %>%
   select(smat) %>%
   unnest()
 
+
+# prep did data -----------------------------------------------------------
+
+load(file = paste0(run_dir,'/did_models.Rdata'))
+
+
+dat <- did_models %>%
+  filter(population_filtering == 'all',
+         population_structure == 'one-pop',
+         data_source == 'length_to_density')
+
+x_did <- dat$data[[1]] %>%
+  filter(classcode %in% unique(seen_data$classcode)) %>%
+  select(classcode,year, targeted, contains('enso'), contains('pdo'),
+         mean_annual_temp) %>%
+  mutate(fished = targeted) %>%
+  mutate(post_mpa = as.numeric(year > 2003)) %>%
+  spread(year, targeted, fill = 0) %>%
+  mutate(intercept = 1)
+
+did_classcodes <- did_data$classcode
+
+x_did <- x_did %>%
+  select(-classcode)
+
+did_names <- colnames(x_did)
+
+enso_locations <- which(str_detect(did_names,'enso'))
+
+pdo_locations <- which(str_detect(did_names,'pdo'))
+
+did_locations <- which(str_detect(did_names,'20'))
+
 stan_data <- list(
   n_parameters = ncol(x_seen),
+  n_did_parameters = ncol(x_did),
   n_observations_seen = nrow(x_seen),
   n_observations_seeing = nrow(x_seeing),
+  n_observations_did =nrow(x_did),
   n_species = length(years_per_species),
   n_year_species = ncol(year_species_data),
   n_region_species = ncol(region_species_data),
@@ -222,6 +263,7 @@ stan_data <- list(
   species_intercepts_positions = which(str_detect(colnames(x_seen), 'intercept')),
   x_seen = x_seen,
   x_seeing = x_seeing,
+  x_did = x_did,
   log_density = seen_data$log_density,
   observed =seeing_data$any_seen %>% as.numeric(),
   standard_matrix = standard_matrix
@@ -231,13 +273,14 @@ stan_data <- list(
 ahnold_stan_fit <- stan(
   file = 'scripts/fit-ahnold-allspecies-joint.stan',
   data = stan_data,
-  chains = 1,
+  chains = 4,
   warmup = 500,
   iter = 1000,
-  cores = 1,
-  refresh = 100
+  cores = 4,
+  refresh = 250
 )
 
+save(file = 'woop.Rdata', ahnold_stan_fit)
 
 abundance_names <- colnames(standard_matrix)[ str_detect(colnames(standard_matrix), '\\d')]
 
@@ -258,13 +301,15 @@ abundance_indicies %>%
   facet_wrap(~species)
 
 abundance_indicies %>%
-  ggplot(aes(factor(year), abundance, color = species)) +
-geom_boxplot() +
+  group_by(species) %>%
+  mutate(abundance = abundance / max(abundance)) %>%
+  ggplot(aes(factor(year), abundance, fill = species)) +
+geom_violin() +
   facet_wrap(~species)
 
 
-check2 <-
-  rstanarm::stan_glmer(log_density ~ (1 |classcode) + mean_canopy + mean_vis,
-                       data = seen_data,chains = 1)
+# check2 <-
+#   rstanarm::stan_glmer(log_density ~ (1 |classcode) + mean_canopy + mean_vis,
+#                        data = seen_data,chains = 1)
 
 # control = list(adapt_delta = 0.8)
