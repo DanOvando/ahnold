@@ -1884,13 +1884,45 @@ I'd like to test out a Bayesian state-space approach, on the simplest case possi
 
 Let's doa  bit of testing that idea, just to make sure you know how to use STAN correctly. GOod excuse to get better at it anyway. 
 
-```{r}
+
+# 2017-10-30 -------
+
+Might need to think about doing things at the monthly level and controlling for month, there is a shift in the months sampled and there is some evidence that it leads to to slightly different densities, see below if you include month in the length_to_density data
+
+```{r, eval = F}
+a <- length_data %>% 
+  mutate(date = lubridate::ymd(paste(year, month, day, sep = '/')),
+         mmonth = lubridate::month(date),
+         yyear = lubridate::year(date)) %>% 
+  ggplot(aes(x = mmonth, y = factor(year))) + 
+  geom_density_ridges()
+
+a %>% 
+  mutate(year = lubridate::year(date),
+         month= lubridate::month(date)) %>% 
+  group_by(year,month) %>% 
+  summarise(ns = length(classcode)) %>% 
+  ggplot(aes(month, ns, fill = factor(year))) + 
+  geom_col(position = 'dodge')
+
+length_to_density_data %>% 
+  ggplot(aes(month, total_biomass_g)) + 
+  geom_point()
+
+a = lm(
+  log(total_biomass_g) ~ factor(month) + factor(year) + classcode,
+  data = length_to_density_data %>% filter(total_biomass_g > 0))
+  
+
+v <- broom::tidy(a) %>% 
+  filter(str_detect(term, 'month'))
 
 
-
+v %>% 
+  ggplot(aes(term, estimate, fill = p.value<= 0.05)) + 
+  geom_col()
 
 ```
-
 
 
 

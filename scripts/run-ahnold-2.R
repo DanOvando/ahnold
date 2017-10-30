@@ -260,7 +260,7 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
       observer = ifelse(is.na(observer), 'unknown', observer),
       surge = ifelse(is.na(observer), 'unknown', surge)
     ) %>%
-    group_by(classcode, site, side, year, transect, observer) %>%
+    group_by(classcode, site, side, year,month, transect, observer) %>%
     summarise(
       total_biomass_g = sum(biomass_g),
       mean_temp = mean(temp, na.rm = T),
