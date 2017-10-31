@@ -21,10 +21,6 @@ data <- abundance_indices %>%
   filter(population_structure == 'one-pop',
          population_filtering == 'all',
          data_source == 'length_to_density') %>%
-<<<<<<< month-effects
-  # filter(classcode %in% subspecies$classcode) %>%
-=======
->>>>>>> isolating delta-glm part of stan to speed up tuns
   select(classcode, data) %>%
   unnest()
 
@@ -339,18 +335,11 @@ ahnold_stan_fit <- stan(
   file = 'scripts/fit-ahnold-abundance.stan',
   data = stan_data,
   chains = 1,
-<<<<<<< month-effects
-  warmup = 500,
-  iter = 1000,
-  cores = 1,
-  refresh = 50)
-=======
   warmup = 100,
   iter = 200,
   cores = 1,
   refresh = 1
 )
->>>>>>> isolating delta-glm part of stan to speed up tuns
 
 Sys.time() - a
 
