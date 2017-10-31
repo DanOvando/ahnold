@@ -18,7 +18,9 @@ load(file = paste0(run_dir, '/abundance_indices.Rdata'))
 #   top_n(3,a)
 
 data <- abundance_indices %>%
-  # filter(classcode %in% subspecies$classcode) %>%
+  filter(population_structure == 'one-pop',
+         population_filtering == 'all',
+         data_source == 'length_to_density') %>%
   select(classcode, data) %>%
   unnest()
 
@@ -257,15 +259,18 @@ x_did <- x_did %>%
 #
 x_seen <- x_seen %>%
   select(-contains('intercept')) %>%
-  mutate(intercept = 1)
+  mutate(intercept = 1,
+         species_intercept = 1)
 
 x_seeing <-  x_seeing %>%
   select(-contains('intercept')) %>%
-  mutate(intercept = 1)
+  mutate(intercept = 1,
+         species_intercept = 1)
 
 standard_matrix <- standard_matrix %>%
   select(-contains('intercept')) %>%
-  mutate(intercept = 1)
+  mutate(intercept = 1,
+         species_intercept = 1)
 
 
 did_names <- colnames(x_did)
@@ -293,6 +298,13 @@ stan_data <- list(
     colnames(x_seen), paste(unique(data$region), collapse = '|')
   )),
   species_intercepts_positions = which(str_detect(colnames(x_seen), 'intercept')),
+  species_intercept_position = which(colnames(x_seen) == 'species_intercept'),
+  non_nested_positions = which(!str_detect(colnames(x_seen), '\\d') & !str_detect(
+    colnames(x_seen), paste(unique(data$region), collapse = '|')
+  )),
+  n_non_nested = length(which(!str_detect(colnames(x_seen), '\\d') & !str_detect(
+    colnames(x_seen), paste(unique(data$region), collapse = '|')
+  ))),
   did_positions = did_positions,
   n_did = length(did_positions),
   x_seen = x_seen,
@@ -300,20 +312,33 @@ stan_data <- list(
   x_did = x_did,
   log_density = seen_data$log_density,
   observed = seeing_data$any_seen %>% as.numeric(),
-  standard_matrix = standard_matrix
+  standard_matrix = standard_matrix,
+  cauchy_2 = 2.5
 )
 
 
+# a <- Sys.time()
+# ahnold_stan_fit <- stan(
+#   file = 'scripts/fit-ahnold-allspecies-joint.stan',
+#   data = stan_data,
+#   chains = 1,
+#   warmup = 100,
+#   iter = 200,
+#   cores = 1,
+#   refresh = 1
+# )
+#
+# Sys.time() - a
+
 a <- Sys.time()
 ahnold_stan_fit <- stan(
-  file = 'scripts/fit-ahnold-allspecies-joint.stan',
+  file = 'scripts/fit-ahnold-abundance.stan',
   data = stan_data,
-  chains = 2,
-  warmup = 500,
-  iter = 1000,
-  cores = 2,
-  refresh = 50,
-  control = list(adapt_delta = 0.85)
+  chains = 1,
+  warmup = 100,
+  iter = 200,
+  cores = 1,
+  refresh = 1
 )
 
 Sys.time() - a
