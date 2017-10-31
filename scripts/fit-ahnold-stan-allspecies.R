@@ -18,6 +18,9 @@ load(file = paste0(run_dir, '/abundance_indices.Rdata'))
 #   top_n(3,a)
 
 data <- abundance_indices %>%
+  filter(population_structure == 'one-pop',
+         population_filtering == 'all',
+         data_source == 'length_to_density') %>%
   # filter(classcode %in% subspecies$classcode) %>%
   select(classcode, data) %>%
   unnest()
