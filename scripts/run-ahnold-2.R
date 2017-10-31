@@ -40,7 +40,7 @@ write(run_description,
 
 # options -----------------------------------------------------------------
 
-run_length_to_density <-  F
+run_length_to_density <-  T
 
 run_vast <- F # run VAST, best to leave off for now
 
@@ -142,7 +142,7 @@ species_distributions <- length_data %>%
             max_longitude = max(longitude, na.rm = T),
             min_longitude = min(longitude, na.rm = T))
 
-ggmap::qmplot(min_longitude,min_latitude, data = species_distributions)
+# ggmap::qmplot(min_longitude,min_latitude, data = species_distributions)
 
 
 # ggmap::qmplot(longitude,latitude, color = side, data = site_coords)
@@ -262,7 +262,7 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
     ) %>%
     group_by(classcode, site, side, year,month, transect, observer) %>%
     summarise(
-      total_biomass_g = sum(biomass_g),
+      total_biomass_g = mean(biomass_g),
       mean_temp = mean(temp, na.rm = T),
       mean_vis = mean(vis, na.rm = T),
       mean_depth = mean(depth, na.rm = T),
@@ -278,11 +278,10 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
     summarise(species_seen = list(unique(classcode)))
 
 
-
   length_to_density_data <- length_to_density_data %>%
     ungroup() %>%
     left_join(site_data %>% select(site, region), by = 'site') %>%
-    select(region, site, side, year, transect) %>%
+    select(region, site, side, year,month, transect) %>%
     unique() %>%  {
       pmap(
         list(
@@ -345,7 +344,13 @@ length_to_density_data <- length_to_density_data %>%
   mutate(
     any_seen = mean_biomass_g > 0,
     factor_year = factor(year),
-    log_density = log(mean_biomass_g)
+    log_density = log(mean_biomass_g),
+    factor_month = factor(month)
+  ) %>%
+  group_by(site, side, month,year) %>%
+  mutate(
+    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+    mean_canopy = ifelse(is.na(mean_canopy), mean(mean_canopy, na.rm = T), mean_canopy)
   ) %>%
   group_by(site, side, year) %>%
   mutate(
@@ -371,7 +376,13 @@ length_to_density_data <- length_to_density_data %>%
 
 density_data <- reg_data %>%
   mutate(factor_year = factor(year),
-         log_density = log(biomass)) %>%
+         log_density = log(biomass),
+         factor_month = factor(9)) %>%
+  group_by(site, side, factor_month,year) %>%
+  mutate(
+    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
+    mean_canopy = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)
+  ) %>%
   group_by(site, side, year) %>%
   mutate(
     mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
@@ -438,13 +449,14 @@ raw_length_covars <-
   paste(c(
     'region',
     'mean_vis',
-    'mean_canopy'
+    'mean_canopy',
+    'factor_month'
   ),
   collapse = '+')
 
 
 prob_raw_length_covars <-
-  paste(c('region','mean_vis', 'mean_canopy'),
+  paste(c('region','mean_vis', 'mean_canopy','factor_month'),
         collapse = '+')
 
 supplied_density_covars <-
@@ -805,7 +817,9 @@ save_foo <-
         data_source,
         '.pdf'
       ),
-      abundance_plot
+      abundance_plot,
+      width = 8,
+      height = 8
     )
   }
 
@@ -1113,20 +1127,33 @@ did_reg <-
   paste0('abundance_index ~', paste(
     c(
       'targeted',
-      'post_mpa',
-      'mean_enso:mean_longitude',
-      '(mean_pdo|classcode)',
-      'mean_annual_temp:mean_longitude',
-      'mean_annual_kelp',
+      'factor(year)',
+      'mean_enso',
+      'mean_pdo:mean_longitude',
       colnames(did_terms)
     ),
     collapse = '+'
   ))
 
+# did_reg <-
+#   paste0('abundance_index ~', paste(
+#     c(
+#       'targeted',
+#       'post_mpa',
+#       'mean_enso:mean_longitude',
+#       '(mean_pdo|classcode)',
+#       'mean_annual_temp:mean_longitude',
+#       'mean_annual_kelp',
+#       colnames(did_terms)
+#     ),
+#     collapse = '+'
+#   ))
+
 
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%
-  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
+  # mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
+mutate(did_model = map2(data, did_reg, ~ lm(.y, data = .x)))
 
 
 did_plot_foo <- function(x) {

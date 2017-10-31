@@ -24,8 +24,6 @@ data{
 
   int<lower = 0> n_standard; // number of region species combinations
 
-  real<lower = 0> cauchy_2 ; // cauchy parameter
-
   int years_per_species[n_species]; // number of years for each species
 
   int regions_per_species[n_species]; // number of years for each species
@@ -101,6 +99,7 @@ transformed parameters{
 
   vector[n_did] did_effects;
 
+
   year_species_betas = betas[year_species_positions];
 
   region_species_betas = betas[region_species_positions];
@@ -137,7 +136,6 @@ vector[n_standard] standardized_prob_seen;
 //
 vector[n_standard] standardized_abundance; // year effects
 
-// print("please work")
 
 // observed model- hierarchichal structure of year effects
 counter = 1;
@@ -221,19 +219,19 @@ prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
 target += normal_lpdf(did_effects | 0, sigma_did);
 // rest of the likelihood
 
-target += cauchy_lpdf( sigma_did |0, cauchy_2);
+target += cauchy_lpdf( sigma_did |0, 2.5);
 
-target += cauchy_lpdf( sigma_density | 0, cauchy_2);
+target += cauchy_lpdf( sigma_density | 0, 2.5);
 //
-target += cauchy_lpdf( sigma_abundance |0, cauchy_2);
+target += cauchy_lpdf( sigma_abundance |0, 2.5);
 
-target += cauchy_lpdf(sigma_year_species | 0, cauchy_2);
+target += cauchy_lpdf(sigma_year_species | 0, 2.5);
 //
-target += cauchy_lpdf(sigma_region_species | 0, cauchy_2);
+target += cauchy_lpdf(sigma_region_species | 0, 2.5);
 
-target += cauchy_lpdf(seeing_sigma_year_species | 0, cauchy_2);
+target += cauchy_lpdf(seeing_sigma_year_species | 0, 2.5);
 //
-target += cauchy_lpdf(seeing_sigma_region_species | 0, cauchy_2);
+target += cauchy_lpdf(seeing_sigma_region_species | 0, 2.5);
 
 target += normal_lpdf(log_density | log_density_hat, sigma_density);
 
