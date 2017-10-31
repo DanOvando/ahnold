@@ -308,13 +308,11 @@ a <- Sys.time()
 ahnold_stan_fit <- stan(
   file = 'scripts/fit-ahnold-allspecies-joint.stan',
   data = stan_data,
-  chains = 2,
+  chains = 1,
   warmup = 500,
   iter = 1000,
-  cores = 2,
-  refresh = 50,
-  control = list(adapt_delta = 0.85)
-)
+  cores = 1,
+  refresh = 50)
 
 Sys.time() - a
 

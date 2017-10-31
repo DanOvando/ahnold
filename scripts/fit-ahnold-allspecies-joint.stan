@@ -136,6 +136,7 @@ vector[n_standard] standardized_prob_seen;
 //
 vector[n_standard] standardized_abundance; // year effects
 
+print("please work")
 
 // observed model- hierarchichal structure of year effects
 counter = 1;
