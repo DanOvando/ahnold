@@ -245,9 +245,9 @@ prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
 
 // target += cauchy_lpdf( sigma_abundance |0, cauchy_2);
 
-target += normal_lpdf(non_nested_seeing_betas | 0, 100);
+target += normal_lpdf(non_nested_seeing_betas | 0, 1);
 
-target += normal_lpdf(non_nested_seen_betas | 0, 100);
+target += normal_lpdf(non_nested_seen_betas | 0, 1);
 
 target += cauchy_lpdf( sigma_density | 0, cauchy_2);
 
