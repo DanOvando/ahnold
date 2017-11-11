@@ -40,7 +40,7 @@ write(run_description,
 
 # options -----------------------------------------------------------------
 
-run_length_to_density <-  T
+run_length_to_density <-  F
 
 run_vast <- F # run VAST, best to leave off for now
 

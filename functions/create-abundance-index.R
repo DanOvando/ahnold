@@ -54,7 +54,7 @@ create_abundance_index <-
     if (pop_structure == 'one-pop') {
       seen_series <-
         create_reference_case(seen_aug = seen_aug, seen_model = seen_model) %>%
-        mutate(smearing_term = mean(exp(.resid)))
+        mutate(smearing_term = mean(exp(seen_aug$.resid)))
     }
     if (pop_structure == 'regional-pops')
     {

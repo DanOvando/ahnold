@@ -36,9 +36,7 @@ data{
 
   int region_species_positions[n_region_species]; // the location of region-species effects
 
-  int species_intercept_position; // the location of region-species effects
-
-  // int species_intercepts_positions[n_species]; // the location of region-species effects
+  // int species_intercept_position; // the location of each species intercept
 
   int did_positions[n_did]; // the location of did effects
 
@@ -107,13 +105,13 @@ transformed parameters{
 
   vector[n_non_nested] non_nested_seeing_betas;
 
-  real species_intercept;
+  // real species_intercept;
 
   // vector[n_species] seeing_species_intercepts;
 
   // vector[n_did] did_effects;
 
-  species_intercept = betas[species_intercept_position];
+  // species_intercept = betas[species_intercept_position];
 
   // print(species_intercept);
 
@@ -170,9 +168,9 @@ for (i in 1:n_species){ // hierarchical priors on year effects by species
 
 // target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercepts[i], sigma_year_species[i]);
 
-// target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, sigma_year_species[i]);
+target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, sigma_year_species[i]);
 
-target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercept, sigma_year_species[i]);
+// target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercept, sigma_year_species[i]);
 
 counter = counter + years_per_species[i];
 
@@ -184,7 +182,10 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on region effects by species
 
-target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercept, sigma_region_species[i]);
+
+target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | 0, sigma_region_species[i]);
+
+// target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercept, sigma_region_species[i]);
 
 // target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercepts[i], sigma_region_species[i]);
 
@@ -205,10 +206,12 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on year effects by species
 
+target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, seeing_sigma_year_species[i]);
+
 // target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | seeing_species_intercepts[i], seeing_sigma_year_species[i]);
 
-target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercept, seeing_sigma_year_species[i]);
-
+// target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercept, seeing_sigma_year_species[i]);
+//
 
 counter = counter + years_per_species[i];
 
@@ -220,7 +223,11 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on region effects by species
 
-target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercept, seeing_sigma_region_species[i]);
+
+target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | 0, seeing_sigma_region_species[i]);
+
+//
+// target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercept, seeing_sigma_region_species[i]);
 
 // target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | seeing_species_intercepts[i], seeing_sigma_region_species[i]);
 
@@ -245,9 +252,9 @@ prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
 
 // target += cauchy_lpdf( sigma_abundance |0, cauchy_2);
 
-target += normal_lpdf(non_nested_seeing_betas | 0, 1);
+target += normal_lpdf(non_nested_seeing_betas | 0, 100);
 
-target += normal_lpdf(non_nested_seen_betas | 0, 1);
+target += normal_lpdf(non_nested_seen_betas | 0, 100);
 
 target += cauchy_lpdf( sigma_density | 0, cauchy_2);
 
