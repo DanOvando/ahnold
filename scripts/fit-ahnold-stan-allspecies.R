@@ -348,9 +348,9 @@ stan_data <- list(
 arm_data <- seen_data %>%
   mutate(factor_year = as.factor(year))
 
-# test <- rstanarm::stan_glm('log_density ~
-#                              factor_year:classcode  + mean_vis',
-#                              data = arm_data, refresh = 1)
+test <- rstanarm::stan_glm('log_density ~
+                             factor_year:classcode  + mean_vis',
+                             data = arm_data, refresh = 1)
 
 a <- Sys.time()
 ahnold_stan_fit <- stan(
