@@ -46,8 +46,7 @@ run_vast <- F # run VAST, best to leave off for now
 
 num_knots <-  10
 
-aggregate_transects  <-
-  F # should transects be aggregated up (mean across observer) or left as raw
+aggregate_transects <-F # should transects be aggregated up (mean across observer) or left as raw
 
 channel_islands_only <- T # only include channel islands, leave T
 
@@ -69,7 +68,6 @@ life_history_data <-
   read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
   rename(classcode = pisco_classcode) %>%
   mutate(classcode = tolower(classcode)) %>%
-  # rename(description_2 = Description) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
 site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
@@ -86,8 +84,7 @@ site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
   mutate(eventual_mpa = (year_mpa > 0))
 
 length_data <- length_data %>%
-  left_join(life_history_data, by = 'classcode') #%>%
-# left_join(site_data, by = c('site', 'side'))
+  left_join(life_history_data, by = 'classcode')
 
 ci_catches <-
   read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
@@ -105,8 +102,6 @@ conditions_data <- length_data %>%
     mean_kelp = mean(pctcnpy, na.rm = T),
     mean_vis = mean(vis, na.rm = T)
   )
-
-
 
 
 # ggmap::qmplot(x = mean_longitude, y = mean_latitude,data = species_distributions)
@@ -190,9 +185,7 @@ if (file.exists('data/pdo.csv')) {
 
 }
 
-
 # deal with processed densities -------------------------------------------
-
 
 reg_data <- density_data %>%
   select(biomass, site, side, site_side, year, classcode) %>%
@@ -209,19 +202,13 @@ reg_data <- density_data %>%
     targeted = as.numeric(targeted == 'Targeted'),
     post_mlpa = as.numeric(year >= 2003)
   )
-# # select_(.dots = as.list(reg_vars)) %>%
-# map2_df(
-#   colnames(.),
-#   center_scale,
-#   omit_names = c('log_density','biomass', 'year', 'mean_enso', 'mean_pdo',
-#                  'targeted','year_mpa',paste0('lag',1:4,'_enso'),paste0('lag',1:4,'_pdo'))
-# ) %>%
 
 
 # convert transect data to density estimates ------------------------------
 
 if (file.exists('data/length-to-density-data.Rdata') == F |
     run_length_to_density == T) {
+
   density_example <- density_data %>%
     filter(is.na(biomass) == F & biomass > 0) %>%
     sample_n(1)
@@ -234,7 +221,7 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
       side == density_example$side,
       year == density_example$year
     )
-
+browser()
   length_example <-   length_data %>%
     filter(is.na(commonname) == F) %>%
     mutate(biomass_g = pmap_dbl(
@@ -254,19 +241,32 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
       ),
       length_to_weight
     ))
+browser()
+  # length_to_density_data <- length_example %>%
+  #   mutate(
+  #     observer = ifelse(is.na(observer), 'unknown', observer),
+  #     surge = ifelse(is.na(surge), 'unknown', surge)
+  #   ) %>%
+  #   group_by(classcode, site, side, year,month, transect, observer) %>%
+  #   summarise(
+  #     total_biomass_g = mean(biomass_g),
+  #     mean_temp = mean(temp, na.rm = T),
+  #     mean_vis = mean(vis, na.rm = T),
+  #     mean_depth = mean(depth, na.rm = T),
+  #     mean_canopy = mean(pctcnpy, na.rm = T)
+  #   )
 
   length_to_density_data <- length_example %>%
     mutate(
       observer = ifelse(is.na(observer), 'unknown', observer),
-      surge = ifelse(is.na(observer), 'unknown', surge)
+      surge = ifelse(is.na(surge), 'unknown', surge)
     ) %>%
-    group_by(classcode, site, side, year,month, transect, observer) %>%
-    summarise(
-      total_biomass_g = mean(biomass_g),
-      mean_temp = mean(temp, na.rm = T),
-      mean_vis = mean(vis, na.rm = T),
-      mean_depth = mean(depth, na.rm = T),
-      mean_canopy = mean(pctcnpy, na.rm = T)
+    rename(
+      total_biomass_g = biomass_g,
+      mean_temp = temp,
+      mean_vis = vis,
+      mean_depth = depth,
+      mean_canopy = pctcnpy
     )
 
   length_to_density_data %>%
@@ -335,10 +335,8 @@ if (aggregate_transects == T) {
 
 }
 
-
 # deal with missing covariates --------------------------------------------
 # pretty hacky for now, need to go back and deal with this better
-
 
 length_to_density_data <- length_to_density_data %>%
   mutate(
@@ -413,18 +411,16 @@ observer_experience <- length_to_density_data %>%
   summarise(n_obs = length(log_density)) %>%
   arrange(observer, year) %>%
   group_by(observer) %>%
-  mutate(cumulative_n_obs = cumsum(n_obs))
+  mutate(cumulative_n_obs = cumsum(n_obs),
+         lifetime_obs = sum(n_obs)) %>%
+  ungroup() %>%
+  mutate(observer_ranking = percent_rank(lifetime_obs)) %>%
+  mutate(trunc_observer = ifelse(observer_ranking > 0.5 & observer != 'unknown', observer,
+                                 'infrequent'))
 
-# a <- length_to_density_data %>%
-#   left_join(observer_experience, by = c('observer','year')) %>%
-#   ungroup() %>%
-#   left_join(life_history_data %>% select(classcode,vbgf.linf), by = 'classcode')
-#
-# b <- a %>%
-#   group_by(classcode,year) %>%
-#   summarise(nobs = sum(any_seen, na.rm = T))
-#
-# b <- glm(any_seen ~ vbgf.linf, data = a, family = 'binomial')
+length_to_density_data <- length_to_density_data %>%
+  left_join(observer_experience %>% select(observer, trunc_observer, cumulative_n_obs),
+            by = 'observer')
 
 consistent_sites <- length_to_density_data %>%
   group_by(site) %>%
@@ -449,15 +445,31 @@ raw_length_covars <-
   paste(c(
     'region',
     'mean_vis',
-    'mean_canopy',
-    'factor_month'
+    'factor_month',
+    'trunc_observer',
+    'cumulative_n_obs',
+    'method',
+    'level',
+    'surge'
   ),
   collapse = '+')
 
-
 prob_raw_length_covars <-
-  paste(c('region','mean_vis', 'mean_canopy','factor_month'),
-        collapse = '+')
+  paste(c(
+    'region',
+    'mean_vis',
+    'factor_month',
+    'trunc_observer',
+    'cumulative_n_obs',
+    'method',
+    'level',
+    'surge'
+  ),
+  collapse = '+')
+
+# prob_raw_length_covars <-
+#   paste(c('region','mean_vis', 'mean_canopy','factor_month'),
+#         collapse = '+')
 
 supplied_density_covars <-
   paste(c('region','mean_kelp', 'mean_vis'),
@@ -494,14 +506,14 @@ nobs_quantiles <- length_to_density_data %>%
 
 well_observed_species <- length_to_density_data %>%
   filter(year > 1999) %>%
-  left_join(life_history_data %>% select(classcode,commonname, targeted), by = c('classcode')) %>%
   group_by(year, classcode,commonname, targeted) %>%
   summarise(nseen = sum(any_seen, na.rm = T)) %>%
   group_by(commonname,classcode, targeted) %>%
   summarise(min_seen = min(nseen, na.rm = T)) %>%
   arrange(desc(min_seen)) %>%
   ungroup() %>%
-  filter(min_seen > nobs_quantiles[2]) %>%
+  filter(min_seen >10) %>%
+  # filter(min_seen > nobs_quantiles[3]) %>%
   mutate(classcode = (classcode))
 
 filterfoo <-
@@ -570,8 +582,6 @@ abundance_models <- cross_df(list(data = list(abundance_models),
          population_filtering = population_filtering)) %>%
   unnest()
 
-
-
 # run vast ----------------------------------------------------------------
 
 
@@ -592,8 +602,6 @@ vast_abundance <- abundance_models %>%
 
 if (run_vast == T) {
   arg <- safely(vasterize_pisco_data)
-
-
 
   vast_abundance <- vast_abundance %>%
     mutate(vast_results = purrr::pmap(
@@ -631,24 +639,6 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
   geom_col(position = 'dodge') +
   coord_flip() +
   facet_wrap(~ data_source)
-
-
-# test aggreate model -----------------------------------------------------
-
-# joint_data <- abundance_models %>%
-#   filter(population_structure == 'one-pop',
-#          population_filtering == 'all',
-#          data_source == 'length_to_density') %>%
-#   unnest()
-#
-# afla <- joint_data %>%
-#   filter(classcode == 'afla') %>%
-#   group_by(factor_year) %>%
-#   summarise(nobs = sum(any_seen),
-#             not_seen = sum(!any_seen))
-#
-# observed <- glm('log_density ~ factor_year*classcode + observer + mean_vis',
-#                 data = joint_data %>% filter(any_seen))
 
 # estimate abundance through delta-glm ------------------------------------
 
@@ -700,11 +690,6 @@ abundance_models <- abundance_models %>%
                                is.null(.y))) %>%
   filter(no_error == T) #filter out models that didn't converge for some reason
 
-
-# abundance_models %>%
-#   group_by(targeted) %>%
-#   summarise(nobs = length(no_error))
-
 abundance_models <- abundance_models %>%
   mutate(
     seen_coefs = map(seen_model, broom::tidy),
@@ -730,9 +715,9 @@ abundance_models <- abundance_models %>%
   mutate(seen_rank_deficient = map_lgl(seen_model, ~ length(.$coefficients) > .$rank),
          seeing_rank_deficient = map_lgl(seeing_model, ~ length(.$coefficients) > .$rank))
 
-wtf <- abundance_models %>%
-  filter(seen_rank_deficient == T)
-
+# wtf <- abundance_models %>%
+#   filter(seen_rank_deficient == T)
+#
 
 abundance_models <- abundance_models %>%
   mutate(abundance_index = pmap(

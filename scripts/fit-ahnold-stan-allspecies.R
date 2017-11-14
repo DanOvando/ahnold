@@ -11,11 +11,11 @@ run_dir <- file.path('results', run_name)
 
 load(file = paste0(run_dir, '/abundance_indices.Rdata'))
 
-# subspecies <- abundance_indices %>%
-#   select(classcode, targeted) %>%
-#   mutate(a = 1:nrow(.)) %>%
-#   group_by(targeted) %>%
-#   top_n(3,a)
+subspecies <- abundance_indices %>%
+  select(classcode, targeted) %>%
+  mutate(a = 1:nrow(.)) %>%
+  group_by(targeted) %>%
+  top_n(3,a)
 
 data <- abundance_indices %>%
   filter(population_structure == 'one-pop',
@@ -85,11 +85,17 @@ canopy_data <- seen_data %>%
 
 n_intercepts <- length(years_per_species)
 
-intercept_data <-
-  matrix(1, nrow = nrow(year_species_data), ncol = n_intercepts) %>%
-  as_data_frame() %>%
-  set_names(paste0(unique(seen_data$classcode)[1:n_intercepts], '_intercept'))
+# intercept_data <-
+#   matrix(1, nrow = nrow(year_species_data), ncol = n_intercepts) %>%
+#   as_data_frame() %>%
+#   set_names(paste0(unique(seen_data$classcode)[1:n_intercepts], '_intercept'))
 
+intercept_data <- seen_data %>%
+  select(classcode) %>%
+  mutate(seen = 1, id = 1:nrow(.)) %>%
+  spread(classcode, seen, fill = 0) %>%
+  select(-id) %>%
+  set_names(glue::glue('{colnames(.)}_intercept'))
 
 x_seen <-
   bind_cols(
@@ -160,12 +166,18 @@ canopy_data <- seeing_data %>%
   select(mean_canopy)
 
 n_intercepts <- length(years_per_species)
+#
+# intercept_data <-
+#   matrix(1, nrow = nrow(year_species_data), ncol = n_intercepts) %>%
+#   as_data_frame() %>%
+#   set_names(paste0(unique(seeing_data$classcode)[1:n_intercepts], '_intercept'))
 
-
-intercept_data <-
-  matrix(1, nrow = nrow(year_species_data), ncol = n_intercepts) %>%
-  as_data_frame() %>%
-  set_names(paste0(unique(seeing_data$classcode)[1:n_intercepts], '_intercept'))
+intercept_data <- seeing_data %>%
+  select(classcode) %>%
+  mutate(seen = 1, id = 1:nrow(.)) %>%
+  spread(classcode, seen, fill = 0) %>%
+  select(-id) %>%
+  set_names(glue::glue('{colnames(.)}_intercept'))
 
 x_seeing <-
   bind_cols(
@@ -226,11 +238,14 @@ standard_matrix <- species_data %>%
   select(smat) %>%
   unnest()
 
+# a <- standard_matrix %>%
+#   select(contains('intercept')) %>%
+#   gather(variable, value)
+#
 
 # prep did data -----------------------------------------------------------
 
 load(file = paste0(run_dir, '/did_models.Rdata'))
-
 
 dat <- did_models %>%
   filter(
@@ -257,20 +272,20 @@ x_did <- x_did %>%
   select(-classcode) #,-contains('enso'),-contains('pdo'),-contains('temp'))
 
 #
-x_seen <- x_seen %>%
-  select(-contains('intercept')) %>%
-  mutate(intercept = 1,
-         species_intercept = 1)
+# x_seen <- x_seen %>%
+#   select(-contains('intercept')) %>%
+#   mutate(intercept = 1,
+#          species_intercept = 1)
 
-x_seeing <-  x_seeing %>%
-  select(-contains('intercept')) %>%
-  mutate(intercept = 1,
-         species_intercept = 1)
+# x_seeing <-  x_seeing %>%
+#   select(-contains('intercept')) %>%
+#   mutate(intercept = 1,
+#          species_intercept = 1)
 
-standard_matrix <- standard_matrix %>%
-  select(-contains('intercept')) %>%
-  mutate(intercept = 1,
-         species_intercept = 1)
+# standard_matrix <- standard_matrix %>%
+#   select(-contains('intercept')) %>%
+#   mutate(intercept = 1,
+#          species_intercept = 1)
 
 
 did_names <- colnames(x_did)
@@ -297,8 +312,8 @@ stan_data <- list(
   region_species_positions = which(str_detect(
     colnames(x_seen), paste(unique(data$region), collapse = '|')
   )),
-  species_intercepts_positions = which(str_detect(colnames(x_seen), 'intercept')),
-  species_intercept_position = which(colnames(x_seen) == 'species_intercept'),
+  # species_intercepts_positions = which(str_detect(colnames(x_seen), 'intercept')),
+  # species_intercept_position = which(colnames(x_seen) == 'species_intercept'),
   non_nested_positions = which(!str_detect(colnames(x_seen), '\\d') & !str_detect(
     colnames(x_seen), paste(unique(data$region), collapse = '|')
   )),
@@ -329,6 +344,13 @@ stan_data <- list(
 # )
 #
 # Sys.time() - a
+
+arm_data <- seen_data %>%
+  mutate(factor_year = as.factor(year))
+
+test <- rstanarm::stan_glm('log_density ~
+                             factor_year:classcode  + mean_vis',
+                             data = arm_data, refresh = 1)
 
 a <- Sys.time()
 ahnold_stan_fit <- stan(
