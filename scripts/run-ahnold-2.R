@@ -40,7 +40,7 @@ write(run_description,
 
 # options -----------------------------------------------------------------
 
-run_length_to_density <-  T
+run_length_to_density <-  F
 
 run_vast <- F # run VAST, best to leave off for now
 
@@ -221,7 +221,10 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
       side == density_example$side,
       year == density_example$year
     )
-browser()
+
+  # missing_weight <- length_data %>%
+  #   filter(is.na(wl_a) | is.na(wl_b))
+
   length_example <-   length_data %>%
     filter(is.na(commonname) == F) %>%
     mutate(biomass_g = pmap_dbl(
@@ -234,6 +237,7 @@ browser()
         weight_b = wl_b,
         length_type_for_weight = wl_input_length,
         length_for_weight_units = wl_l_units,
+        weight_units = wl_w_units,
         tl_sl_a = lc.a._for_wl,
         tl_sl_b = lc.b._for_wl,
         tl_sl_type = lc_type_for_wl,
@@ -241,7 +245,50 @@ browser()
       ),
       length_to_weight
     ))
-browser()
+
+  # Filter data per operations in Fish size biomass processing CIMPA.sas file
+
+length_example <- length_example %>%
+  filter(level != 'CAN',
+         campus == 'UCSB',
+         method %in%  c('SBTL_FISH', 'SBTL_FISH_NPS', 'SBTL_FISH_CRANE', 'SBTL_FISH_VRG'),
+        !(site == 'SCI_PELICAN' & side == 'FAR WEST'),
+        !(toupper(classcode) %in% c('NO_ORG', 'LDAL', 'CNIC'))
+         )
+
+yoy_foo <- function(classcode, fish_tl){
+
+new_classcode <- classcode
+  if (fish_tl <= 5 & is.na(fish_tl) == F & classcode %in% c('cpun','bfre','ocal','hsem')){
+
+     new_classcode <- glue::glue('{classcode}_yoy')
+
+  } # close less than 5cm
+
+  if (fish_tl <= 10 & is.na(fish_tl) == F){
+
+    if (toupper(classcode) %in% c('PCLA','SMYS','SPAU','SPIN','SPUL')){
+      new_classcode <- glue::glue('{classcode}_yoy')
+    }
+
+    if (toupper(classcode)  %in% c('SATR', 'SCAR', 'SCAU', 'SCHR', 'GBY')){new_clascode = 'kgb'}
+
+    if (toupper(classcode)%in% c('SFLA', 'SSER', 'SMEL', 'OYT')){ new_classcode ='oyb'}
+
+    if (toupper(classcode) %in% c('SMIN', 'SNEB', 'SRAS', 'STRE', 'SSAX', 'SDAL', 'SDIP', 'SEBSPP')){
+    new_classcode = 'r_yoy'}
+
+
+  } #close less than than 10cm
+
+return(new_classcode)
+
+} # close yoy_foo
+
+
+length_example <- length_example %>%
+  mutate(classcode = map2_chr(classcode, fish_tl, yoy_foo))
+
   # length_to_density_data <- length_example %>%
   #   mutate(
   #     observer = ifelse(is.na(observer), 'unknown', observer),
@@ -305,7 +352,6 @@ browser()
   load('data/length-to-density-data.Rdata')
 
 }
-
 
 if (aggregate_transects == T) {
   length_to_density_data <- length_to_density_data %>%
@@ -569,7 +615,9 @@ abundance_models <- abundance_models %>%
     'Targeted',
     targeted
   )) %>%
-  filter(str_detect(commonname, 'YOY') == F, is.na(targeted) == F) #%>%
+  filter(str_detect(commonname, 'YOY') == F,
+         is.na(targeted) == F,
+         str_detect(classcode,'_yoy') == F) #%>%
   # mutate(data = map(data, ~ purrrlyr::dmap_if(.x, is.numeric, center_scale))) # center and scale continuos data
 
 
@@ -583,8 +631,6 @@ abundance_models <- cross_df(list(data = list(abundance_models),
   unnest()
 
 # run vast ----------------------------------------------------------------
-
-
 
 vast_abundance <- abundance_models %>%
   # select(classcode, data_source, data, ) %>%
@@ -922,10 +968,18 @@ walk2(compare_trends$commonname,
       safely(compare_trend_foo),
       run_dir = run_dir)
 
+# a <- object.size(abundance_indices)
+
+abundance_indices <- abundance_indices %>%
+  mutate(seen_model = map(seen_model, ~strip::strip(.x, keep = c('predict','print'))),
+         seeing_model = map(seeing_model, ~strip::strip(.x, keep = c('predict','print'))))
+
+walk(abundance_indices, ~print(object.size(.x), units = 'Gb'))
+
+# b <- object.size(ai2)
+
 save(file = paste0(run_dir, '/abundance_indices.Rdata'),
      abundance_indices)
-
-
 
 # prepare candidate did data and runs ----------------------------------------------
 
@@ -1109,19 +1163,19 @@ did_data %>%
 
 
 did_reg <-
-  paste0('abundance_index ~', paste(
+  paste0('log(abundance_index) ~', paste(
     c(
       'targeted',
-      'factor(year)',
-      'mean_enso',
-      'mean_pdo:mean_longitude',
+      'post_mpa',
+      'mean_annual_kelp',
+      'mean_annual_temp*mean_latitude',
       colnames(did_terms)
     ),
     collapse = '+'
   ))
 
 # did_reg <-
-#   paste0('abundance_index ~', paste(
+#   paste0('log(abundance_index) ~', paste(
 #     c(
 #       'targeted',
 #       'post_mpa',
@@ -1185,7 +1239,26 @@ pwalk(
   run_dir = run_dir
 )
 
-save(file = paste0(run_dir,'/did_models.Rdata'), did_models)
+wtf <- did_models %>%
+  filter(population_structure == 'one-pop',
+         data_source == 'length_to_density',
+         population_filtering == 'all',
+         abundance_source == 'glm_abundance_index')
+
+pwalk(
+  list(
+    data_source = wtf$data_source,
+    abundance_source =  wtf$abundance_source,
+    population_filtering = wtf$population_filtering,
+    population_structure = wtf$population_structure,
+    did_plot = wtf$did_plot
+  ),
+  did_plot_foo,
+  run_dir = run_dir
+)
+
+
+save(file = glue::glue('{run_dir}/did_models.Rdata'), did_models)
 
 
 

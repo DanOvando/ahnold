@@ -89,7 +89,7 @@ fit_fish <-
 
     }
     if (model_type == 'glm') {
-      model <- glm(reg_fmla, data  = data, family = family)
+      model <- glm(reg_fmla, data  = data, family = family, y = FALSE, model = FALSE)
     }
     if (model_type == 'glmer') {
       model <-
