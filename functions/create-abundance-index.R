@@ -99,14 +99,11 @@ create_abundance_index <-
     prob_seen <- predict(seeing_model, newdata = seen_series, type = 'response') # calculate probabilty of seeing
         # predict(seeing_model, newdata = broom::augment(seeing_model), type = 'response') # calculate probabilty of seeing
 
-
     if (pop_structure == 'one-pop') {
       seen_series <- seen_series %>%
         mutate(prob_seen = prob_seen) %>%
         mutate(
-          abundance_index = linear_predictions * prob_seen,
-          abundance_index = center_scale(abundance_index)
-        )
+          abundance_index = linear_predictions * prob_seen)
 
     }
     if (pop_structure == 'regional-pops')
@@ -115,9 +112,7 @@ create_abundance_index <-
         mutate(prob_seen = prob_seen) %>%
         group_by(region) %>%
         mutate(
-          abundance_index = linear_predictions * prob_seen,
-          abundance_index = center_scale(abundance_index)
-        )
+          abundance_index = linear_predictions * prob_seen)
 
 
     }
@@ -126,9 +121,7 @@ create_abundance_index <-
         mutate(prob_seen = prob_seen) %>%
         group_by(eventual_mpa) %>%
         mutate(
-          abundance_index = linear_predictions * prob_seen,
-          abundance_index = center_scale(abundance_index)
-        )
+          abundance_index = linear_predictions * prob_seen)
 
     }
 

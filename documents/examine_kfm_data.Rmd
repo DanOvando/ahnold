@@ -1,0 +1,70 @@
+---
+title: "Examine KFM Data"
+author: "Dan Ovando"
+date: "11/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r}
+library(tidyverse)
+library(stringr)
+```
+
+
+These data from from [the new repo](https://portal.edirepository.org/nis/mapbrowse?packageid=edi.5.2), goal here is to explore a little and see if they might be useful as another method of MLPA model
+
+
+```{r load-data}
+
+fish_density <- read_csv('../data/kfm_data/Fish Density Data.csv')
+
+fish_sizes <- read_csv('../data/kfm_data/Fish size frequency data.csv')
+
+```
+
+
+
+```{r}
+
+fish_density %>% 
+  head()
+
+```
+Fish density is pretty useless. 
+
+```{r}
+fish_sizes
+```
+
+Hello, you're useful. This is just about the same as the length_to_density_data. Let's play with it a bit. 
+
+
+```{r}
+
+fish_sizes <- fish_sizes %>% 
+  set_names(tolower) %>% 
+  mutate(month = str_replace_all(date, '\\d',''),
+         day = map_dbl(date, ~str_split(.x,'\\D', simplify = T)[1] %>% as.numeric()),
+         sci_name = str_extract(scientificname, '.*(?=,)'))
+
+fish_sizes
+
+life_history_data <- 
+  read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>%
+  mutate(classcode = tolower(classcode)) %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+fish_sizes <- fish_sizes %>% 
+  left_join(life_history_data, by = c('sci_name' = 'taxa'))
+
+```
+
+OK data are all here, now let's convert to biomass
+
+
+

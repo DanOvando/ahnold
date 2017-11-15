@@ -2,10 +2,14 @@
 .Rhistory
 .Rdata
 ~Data**/*.Rdata
+~data**/*.csv
+
 **/*.DS_Store
 **/*.pdf
 **/*.xlsx
 **/*.xls
+**/*.csv
+**/*.xml
 **/*.Rproj
 **/*.Rdata
 **/*.rdx
@@ -36,3 +40,5 @@ data/SouthCoastHumanActivitiesCommercialFisheriesEconomicandSpatialData1992to201
 libs/
 _ignore/.*
 _ignore**/*.*
+data/.*
+

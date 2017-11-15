@@ -34,25 +34,26 @@ length_to_weight <-
 
       if (length_type_for_weight == 'SL') {
         if (tl_sl_type  == 'TYPICAL') {
+
           weight_lengths <-  lengths * tl_sl_a + tl_sl_b
         } else{
           weight_lengths <- (lengths - tl_sl_b) / tl_sl_a
 
-        }
+        } # convert from observed total lengths to standard lengths
 
       } else {
         weight_lengths <-  lengths
-      }
+      } # convert from standard length to total length if needed
 
-      if (length_units == 'cm' & length_for_weight_units == 'mm') {
-        weight_lengths <- weight_lengths * 10
-      }
+      if (length_for_weight_units == 'mm'){
+
+       weight_a <-  weight_a * 10^weight_b
+      } # get a units correct for dealing with length observations in cm instead of mm
+
+      if (weight_units == 'kg'){ weight_a <-  weight_a / 1000} # convert from kg to grams
 
       weight <-  weight_a * weight_lengths ^ weight_b
 
-      if (weight_units == 'kg') {
-        weight <- weight * 1000
-      }
       outweight = sum(weight)
     }
     return(outweight)

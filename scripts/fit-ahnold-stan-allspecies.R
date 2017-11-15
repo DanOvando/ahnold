@@ -22,7 +22,8 @@ data <- abundance_indices %>%
          population_filtering == 'all',
          data_source == 'length_to_density') %>%
   select(classcode, data) %>%
-  unnest()
+  unnest() %>%
+  filter(classcode %in% subspecies$classcode)
 
 seen_data <- data %>%
   filter(any_seen == T) %>%
@@ -345,12 +346,12 @@ stan_data <- list(
 #
 # Sys.time() - a
 
-arm_data <- seen_data %>%
-  mutate(factor_year = as.factor(year))
-
-test <- rstanarm::stan_glm('log_density ~
-                             factor_year:classcode  + mean_vis',
-                             data = arm_data, refresh = 1)
+# arm_data <- seen_data %>%
+#   mutate(factor_year = as.factor(year))
+#
+# test <- rstanarm::stan_glm('log_density ~
+#                              factor_year:classcode  + mean_vis',
+#                              data = arm_data, refresh = 1)
 
 a <- Sys.time()
 ahnold_stan_fit <- stan(
