@@ -881,7 +881,7 @@ calc_raw_abundance <- function(data, population_structure) {
     group_by(factor_year) %>%
     summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
     ungroup() %>%
-    mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
+    # mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
     mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
     ungroup()
   }
@@ -891,7 +891,7 @@ calc_raw_abundance <- function(data, population_structure) {
       group_by(region,factor_year) %>%
       summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
       ungroup() %>%
-      mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
+      # mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
       mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
       ungroup()
   }
@@ -901,7 +901,7 @@ calc_raw_abundance <- function(data, population_structure) {
       group_by(eventual_mpa,factor_year) %>%
       summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
       ungroup() %>%
-      mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
+      # mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
       mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
       ungroup()
   }
@@ -1024,7 +1024,8 @@ did_data <- abundance_indices %>%
   left_join(species_distributions, by = 'classcode') %>%
   mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
   mutate(targeted = as.numeric(targeted == 'Targeted'),
-         post_mpa = as.numeric(year >= 2003))
+         post_mpa = as.numeric(year >= 2003)) %>%
+  mutate(abundance_index = abundance_index + 1e-6)
 
 
 compare_annual_abundance <- function(data){
@@ -1188,6 +1189,13 @@ did_reg <-
 #     collapse = '+'
 #   ))
 
+
+
+
+wtf <- did_data$data %>% map(~min(.x$abundance_index))
+
+wtf <- did_data %>%
+  slice(2)
 
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%
