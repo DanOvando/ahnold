@@ -848,9 +848,6 @@ abundance_models <- abundance_models %>%
   mutate(seen_rank_deficient = map_lgl(seen_model, ~ length(.$coefficients) > .$rank),
          seeing_rank_deficient = map_lgl(seeing_model, ~ length(.$coefficients) > .$rank))
 
-# wtf <- abundance_models %>%
-#   filter(seen_rank_deficient == T)
-#
 
 abundance_models <- abundance_models %>%
   mutate(abundance_index = pmap(
@@ -1073,18 +1070,18 @@ save(file = paste0(run_dir, '/abundance_indices.Rdata'),
 # prepare candidate did data and runs ----------------------------------------------
 
 
-# annual_conditions <- conditions_data %>%
-#   left_join(site_data %>% select(site, region), by = 'site') %>%
-#   group_by(region, year) %>%
-#   summarise(
-#     mean_annual_temp = mean(mean_temp, na.rm = T),
-#     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
-#   ) %>%
-#   gather(variable, value,-year,-region) %>%
-#   group_by(variable) %>%
-#   mutate(value = zoo::na.approx(value),
-#          value = center_scale(value)) %>%
-#   spread(variable, value)
+annual_regional_conditions <- conditions_data %>%
+  left_join(site_data %>% select(site, region), by = 'site') %>%
+  group_by(region, year) %>%
+  summarise(
+    mean_annual_temp = mean(mean_temp, na.rm = T),
+    mean_annual_kelp = mean(mean_kelp, na.rm  = T)
+  ) %>%
+  gather(variable, value,-year,-region) %>%
+  group_by(variable) %>%
+  mutate(value = zoo::na.approx(value),
+         value = center_scale(value)) %>%
+  spread(variable, value)
 
 annual_conditions <- conditions_data %>%
   left_join(site_data %>% select(site, region), by = 'site') %>%
@@ -1109,13 +1106,36 @@ did_data <- abundance_indices %>%
   left_join(life_history_data, by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
   left_join(pdo, by = 'year') %>%
-  left_join(annual_conditions, by = c('year')) %>%
   left_join(ci_catches, by = c('classcode', 'year')) %>%
   left_join(species_distributions, by = 'classcode') %>%
   mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
   mutate(targeted = as.numeric(targeted == 'Targeted'),
          post_mpa = as.numeric(year >= 2003)) %>%
   mutate(abundance_index = abundance_index + 1e-6)
+
+
+annual_conditions_foo <- function(population_structure, data, abundance_source, annual_conditions,annual_regional_conditions){
+
+  if (population_structure == 'regional-pops' &  abundance_source != 'vast_abundance_index'){
+    data <- data %>%
+      left_join(annual_regional_conditions, by = c('year','population_level' = 'region'))
+  } else{
+
+    data <- data %>%
+      left_join(annual_conditions, by = 'year')
+  }
+
+return(data)
+}
+
+did_data <- did_data %>%
+  nest(-population_structure, -abundance_source) %>%
+  mutate(data = pmap(list(population_structure = population_structure,
+                          data = data,
+                          abundance_source = abundance_source), annual_conditions_foo, annual_conditions,
+                     annual_regional_conditions)) %>%
+           unnest() %>%
+  filter(year <=2013)
 
 
 compare_annual_abundance <- function(data){
@@ -1259,38 +1279,17 @@ did_reg <-
       'targeted',
       'post_mpa',
       'mean_annual_kelp',
-      'mean_annual_temp*mean_latitude',
+      'mean_annual_temp',
+      '((mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
       colnames(did_terms)
     ),
     collapse = '+'
   ))
 
-# did_reg <-
-#   paste0('log(abundance_index) ~', paste(
-#     c(
-#       'targeted',
-#       'post_mpa',
-#       'mean_enso:mean_longitude',
-#       '(mean_pdo|classcode)',
-#       'mean_annual_temp:mean_longitude',
-#       'mean_annual_kelp',
-#       colnames(did_terms)
-#     ),
-#     collapse = '+'
-#   ))
-
-
-
-
-wtf <- did_data$data %>% map(~min(.x$abundance_index))
-
-wtf <- did_data %>%
-  slice(2)
-
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%
-  # mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
-mutate(did_model = map2(data, did_reg, ~ lm(.y, data = .x)))
+  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
+# mutate(did_model = map2(data, did_reg, ~ lm(.y, data = .x)))
 
 
 did_plot_foo <- function(x) {
@@ -1312,7 +1311,12 @@ did_plot_foo <- function(x) {
 }
 
 did_models <- did_models %>%
-  mutate(did_plot = map(did_model, did_plot_foo))
+  mutate(did_plot = map(did_model, did_plot_foo) ,
+         did_diagnostics = map(did_model, diagnostic_plots)) #%>%
+  # filter(data_source == 'kfm_density',
+  #        population_filtering == 'all',
+  #        abundance_source == 'glm_abundance_index',
+  #        population_structure == 'one-pop')
 
 did_plot_foo <-
   function(data_source,
@@ -1338,22 +1342,5 @@ pwalk(
 )
 
 
-
-pwalk(
-  list(
-    data_source = did_models$data_source,
-    abundance_source =  did_models$abundance_source,
-    population_filtering = did_models$population_filtering,
-    population_structure = did_models$population_structure,
-    did_plot = did_models$did_plot
-  ),
-  did_plot_foo,
-  run_dir = run_dir
-)
-
-
 save(file = glue::glue('{run_dir}/did_models.Rdata'), did_models)
-
-
-
 
