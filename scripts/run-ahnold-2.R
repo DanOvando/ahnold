@@ -781,7 +781,7 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
-  filter(data_source == 'kfm_density') %>%
+  # filter(data_source == 'kfm_density') %>%
     mutate(
     seen_model = pmap(
       list(data = data,
@@ -835,7 +835,7 @@ add_covars_foo <- function(data){
 
   if(is.null(data$region)){data$region <- 'somewhere'}
 
-  if(is.null(data$eventual_mpa)){data$eventual_mpa <- 'maybe'}
+  if(is.null(data$eventual_mpa)){data$eventual_mpa <- TRUE}
 
 return(data)
 }
@@ -1055,6 +1055,8 @@ walk2(compare_trends$commonname,
       safely(compare_trend_foo),
       run_dir = run_dir)
 
+rm(compare_trends)
+
 # a <- object.size(abundance_indices)
 
 abundance_indices <- abundance_indices %>%
@@ -1097,11 +1099,12 @@ annual_conditions <- conditions_data %>%
          value = center_scale(value)) %>%
   spread(variable, value)
 
+
 did_data <- abundance_indices %>%
   select(classcode, population_filtering, population_structure, data_source, contains('_index')) %>%
   select(-abundance_index) %>%
   gather('abundance_source','abundance_index',contains('_index')) %>%
-  # filter(!(abundance_source == 'vast_abundance_index' & data_source == 'supplied_density')) %>%
+  filter(!(abundance_source == 'vast_abundance_index' & data_source == 'kfm_density')) %>%
   unnest() %>%
   left_join(life_history_data, by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
@@ -1326,19 +1329,15 @@ pwalk(
   run_dir = run_dir
 )
 
-wtf <- did_models %>%
-  filter(population_structure == 'one-pop',
-         data_source == 'length_to_density',
-         population_filtering == 'all',
-         abundance_source == 'glm_abundance_index')
+
 
 pwalk(
   list(
-    data_source = wtf$data_source,
-    abundance_source =  wtf$abundance_source,
-    population_filtering = wtf$population_filtering,
-    population_structure = wtf$population_structure,
-    did_plot = wtf$did_plot
+    data_source = did_models$data_source,
+    abundance_source =  did_models$abundance_source,
+    population_filtering = did_models$population_filtering,
+    population_structure = did_models$population_structure,
+    did_plot = did_models$did_plot
   ),
   did_plot_foo,
   run_dir = run_dir
