@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = F, message = F, warning = F)
 ```{r}
 library(tidyverse)
 library(stringr)
+demons::load_functions('../functions')
+
 ```
 
 
@@ -20,38 +22,9 @@ These data from from [the new repo](https://portal.edirepository.org/nis/mapbrow
 
 ```{r load-data}
 
-fish_density <- read_csv('../data/kfm_data/Fish Density Data.csv')
+kfm_density <- read_csv('../data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
 
-fish_sizes <- read_csv('../data/kfm_data/Fish size frequency data.csv')
-
-```
-
-
-
-```{r}
-
-fish_density %>% 
-  head()
-
-```
-Fish density is pretty useless. 
-
-```{r}
-fish_sizes
-```
-
-Hello, you're useful. This is just about the same as the length_to_density_data. Let's play with it a bit. 
-
-
-```{r}
-
-fish_sizes <- fish_sizes %>% 
-  set_names(tolower) %>% 
-  mutate(month = str_replace_all(date, '\\d',''),
-         day = map_dbl(date, ~str_split(.x,'\\D', simplify = T)[1] %>% as.numeric()),
-         sci_name = str_extract(scientificname, '.*(?=,)'))
-
-fish_sizes
+kfm_locations <- read_csv('../data/kfm_data/SBCMBON_site_geolocation_20170520.csv')
 
 life_history_data <- 
   read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
@@ -59,12 +32,124 @@ life_history_data <-
   mutate(classcode = tolower(classcode)) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
-fish_sizes <- fish_sizes %>% 
-  left_join(life_history_data, by = c('sci_name' = 'taxa'))
+
 
 ```
 
-OK data are all here, now let's convert to biomass
+
+
+```{r}
+
+kfm_density <- kfm_density %>% 
+  filter(sample_method !="visualfish" & sample_method!="crypticfish")%>% 
+  left_join(life_history_data, by = c('taxon_name' = 'taxa')) %>% 
+  left_join(kfm_locations %>% select(-data_source), by = 'site_id')
+
+
+```
+
+OK data are all here, now let's convert to biomass and see what happens.
+
+Whoops, well damn. These just have numbers, not lengths, and not biomasses. But, you can at least do some comparisons across numbers to get a sense of how similar those trends are? 
+
+
+```{r explore-trends}
+
+ kfm_density <-   kfm_density %>% 
+  filter(str_detect(geolocation, '_island'),
+         data_source != 'lter') %>% 
+  mutate(region = str_extract(geolocation, '.*(?=_island)')) %>% 
+  filter(region %in% c('anacapa','santa_cruz','santa_rosa','san_miguel')) 
+
+
+kfm_density <- kfm_density %>% 
+  mutate(count = as.numeric(count),
+         density = count / area,
+         year = lubridate::year(date)) 
+
+kfm_density %>% 
+  ggplot(aes(year, density, fill = data_source)) + 
+  geom_smooth() + 
+  ylab('Smoothed Density Trend')
+  
+
+```
+
+Well there are certainly differences... what if you filter down to just consistent sites on both groups just to double check it's not the same old sampling problems. 
+
+zeros are pre-included here, which is certainly nice
+```{r}
+
+kfm_density %>% 
+  group_by(data_source) %>% 
+  summarise(min = min(count, na.rm = T))
+
+consistent_sites <- kfm_density %>% 
+  group_by(data_source, site_id) %>%
+  summarise(years_sampled = n_distinct(year),
+            min_year = min(year),
+            max_year = max(year)) %>% 
+  filter(min_year <= 2000, years_sampled >10)
+
+kfm_density %>% 
+  filter(site_id %in% consistent_sites$site_id) %>% 
+  ggplot() + 
+  geom_smooth(aes(year, density, fill = data_source)) 
+
+```
+
+Check that there's nothing strange going on with the KFM targeting data. 
+
+```{r}
+
+kfm_density %>% 
+  group_by(data_source, targeted) %>% 
+  summarise(nobs = length(count))
+
+```
+
+No problems there. So now let's play with that other data from [here](http://www.esapubs.org/archive/ecol/E094/245/) that has the actual lengths and see if there's a similar trend there. If the trends in those data match the trends in the above data, then next step will be to incorporate the kfm length data into the analysis as another data source. 
+
+```{r}
+
+kfm_sizes <- read_csv('../data/kfm_data/Fish size frequency data.csv') %>% 
+  set_names(tolower) %>% 
+  mutate(month = str_replace_all(date,'\\d',''),
+         scientific_name = str_extract(scientificname,'.*(?=,)')) %>% 
+  left_join(life_history_data, by = c('scientific_name' = 'taxa'))
+
+kfm_sizes <-   kfm_sizes %>%
+  filter(is.na(commonname.x) == F,
+         is.na(wl_a) == F, is.na(wl_b) == F) %>% 
+    mutate(biomass_g = pmap_dbl(
+      list(
+        mean_length = totallength,
+        min_length = minlength,
+        max_length = maxlength,
+        count = count,
+        weight_a = wl_a,
+        weight_b = wl_b,
+        length_type_for_weight = wl_input_length,
+        length_for_weight_units = wl_l_units,
+        weight_units = wl_w_units,
+        tl_sl_a = lc.a._for_wl,
+        tl_sl_b = lc.b._for_wl,
+        tl_sl_type = lc_type_for_wl,
+        tl_sl_formula = ll_equation_for_wl
+      ),
+      (length_to_weight)
+    ))
+
+kfm_sizes %>% 
+  ggplot(aes(year, biomass_g, fill = targeted)) + 
+  geom_boxplot()
+
+
+```
+
+And damnitalltohell. Those only cover 2007-2010. ugh. 
+
+So, the options would be a numbers-only version of the kfm_density data.... Not the worst idea in the world, at least as a starting point. 
 
 
 

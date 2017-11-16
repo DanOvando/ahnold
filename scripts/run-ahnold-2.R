@@ -86,6 +86,11 @@ site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
 length_data <- length_data %>%
   left_join(life_history_data, by = 'classcode')
 
+kfm_data <- read_csv('data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
+
+kfm_locations <- read_csv('data/kfm_data/SBCMBON_site_geolocation_20170520.csv')
+
+
 ci_catches <-
   read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
   summarise(catch = sum(pounds_caught, na.rm = T))
@@ -353,6 +358,69 @@ length_example <- length_example %>%
 
 }
 
+# Process kfm count data
+
+kfm_sites <- kfm_locations %>%
+  select(latitude, longitude) %>%
+  as.matrix() %>%
+  na.omit()
+
+pisco_sites <- site_coords %>%
+  ungroup() %>%
+  select(latitude, longitude) %>%
+  as.matrix()
+
+nearest_pisco_site <- RANN::nn2(pisco_sites, kfm_sites)
+
+nearest_pisco_site <- site_coords[nearest_pisco_site$nn.idx[,1],]
+
+kfm_pisco_locations <- kfm_locations %>%
+  na.omit() %>%
+  bind_cols(nearest_pisco_site)
+
+
+kfm_data <- kfm_data %>%
+  filter(sample_method !="visualfish" & sample_method!="crypticfish", data_source == 'kfm')%>%
+  left_join(life_history_data, by = c('taxon_name' = 'taxa')) %>%
+  left_join(kfm_pisco_locations %>% select(-data_source), by = 'site_id') %>%
+  filter(str_detect(geolocation, '_island'),
+         data_source != 'lter',
+         is.na(geolocation) == F
+         ) %>%
+  mutate(region = str_extract(geolocation, '.*(?=_island)')) %>%
+  filter(region %in% c('anacapa','santa_cruz','santa_rosa','san_miguel'))
+
+kfm_data <- kfm_data %>%
+  mutate(count = as.numeric(count),
+         density = count / area,
+         year = lubridate::year(date),
+         month = lubridate::month(date))
+
+region_table <- tribble(
+  ~region,~short_region,
+  'anacapa','ANA',
+  'santa_cruz','SCI',
+  'santa_rosa','SRI',
+  'san_miguel','SMI'
+)
+
+kfm_data <- kfm_data %>%
+  left_join(region_table, by = 'region') %>%
+  select(-region) %>%
+  rename(region = short_region)
+
+kfm_data <- kfm_data %>%
+  mutate(log_density = log(density),
+         any_seen = density >0,
+         factor_year = as.factor(year),
+         factor_month = as.factor(month),
+         mean_biomass_g = density) %>%
+  select(-region) #for compatibility with things later on
+
+
+# aggreage etc ------------------------------------------------------------
+
+
 if (aggregate_transects == T) {
   length_to_density_data <- length_to_density_data %>%
     group_by(classcode, observer, site, side, year) %>%
@@ -513,6 +581,20 @@ prob_raw_length_covars <-
   ),
   collapse = '+')
 
+kfm_length_covars <-
+  paste(c(
+    'region',
+    'factor_month'
+  ),
+  collapse = '+')
+
+prob_kfm_length_covars <-
+  paste(c(
+    'region',
+    'factor_month'
+  ),
+  collapse = '+')
+
 # prob_raw_length_covars <-
 #   paste(c('region','mean_vis', 'mean_canopy','factor_month'),
 #         collapse = '+')
@@ -525,21 +607,27 @@ prob_supplied_density_covars <-
   paste(c('region','mean_kelp', 'mean_vis'),
         collapse = '+')
 
+
+
 length_to_density_models <- length_to_density_data %>%
   nest(-classcode) %>%
   mutate(ind_covars = raw_length_covars,
-         prob_ind_covars = prob_raw_length_covars)
+         prob_ind_covars = prob_raw_length_covars) %>%
+  mutate(data_source = 'length_to_density')
+
 
 supplied_density_models <- density_data %>%
   nest(-classcode) %>%
   mutate(ind_covars = supplied_density_covars,
-         prob_ind_covars = prob_supplied_density_covars)
-
-length_to_density_models <- length_to_density_models %>%
-  mutate(data_source = 'length_to_density')
-
-supplied_density_models <- supplied_density_models %>%
+         prob_ind_covars = prob_supplied_density_covars) %>%
   mutate(data_source = 'supplied_density')
+
+
+kfm_to_density_models <- kfm_data %>%
+  nest(-classcode) %>%
+  mutate(ind_covars = kfm_length_covars,
+         prob_ind_covars = prob_kfm_length_covars) %>%
+  mutate(data_source = 'kfm_density')
 
 # filter data -------------------------------------------------------------
 
@@ -593,13 +681,13 @@ filterfoo <-
 
 abundance_models <- length_to_density_models %>%
   bind_rows(supplied_density_models) %>%
+  bind_rows(kfm_to_density_models) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
   mutate(data = map2(data,classcode, filterfoo, min_year = min_year,
                     filter_level = quo(classcode))) %>% # filter out things
   mutate(dim_data = map_dbl(data, nrow)) %>%
   filter(dim_data > 0)
-
 
 # prepare data for abundance estimates aggregate, augment, center-scale data ----------------------------------------------
 
@@ -632,21 +720,24 @@ abundance_models <- cross_df(list(data = list(abundance_models),
 
 # run vast ----------------------------------------------------------------
 
-vast_abundance <- abundance_models %>%
-  # select(classcode, data_source, data, ) %>%
-  mutate(survey_region = 'california_current',
-         n_x = num_knots) %>%
-  mutate(
-    vast_data = map2(
-      data,
-      classcode,
-      vast_prep,
-      site_coords = site_coords,
-      conditions_data = conditions_data
-    )
-  )
-
 if (run_vast == T) {
+
+
+  vast_abundance <- abundance_models %>%
+    # select(classcode, data_source, data, ) %>%
+    mutate(survey_region = 'california_current',
+           n_x = num_knots) %>%
+    mutate(
+      vast_data = map2(
+        data,
+        classcode,
+        vast_prep,
+        site_coords = site_coords,
+        conditions_data = conditions_data
+      )
+    )
+
+
   arg <- safely(vasterize_pisco_data)
 
   vast_abundance <- vast_abundance %>%
@@ -674,7 +765,6 @@ if (run_vast == T) {
 vast_abundance <- vast_abundance %>%
   mutate(vast_index = map(vast_results, 'result'))
 
-
 species_comp_by_dbase_plot <- abundance_models %>%
   ggplot(aes(commonname, dim_data, fill = data_source)) +
   geom_col(position = 'dodge') +
@@ -691,10 +781,7 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
-  # filter(commonname == 'blue rockfish',
-  #        population_structure == 'one-pop',
-  #        population_filtering == 'all',
-  #        data_source  == 'length_to_density') %>%
+  filter(data_source == 'kfm_density') %>%
     mutate(
     seen_model = pmap(
       list(data = data,
