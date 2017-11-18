@@ -22,8 +22,13 @@ data <- abundance_indices %>%
          population_filtering == 'all',
          data_source == 'length_to_density') %>%
   select(classcode, data) %>%
-  unnest() %>%
-  filter(classcode %in% subspecies$classcode)
+  unnest() #%>%
+  # filter(classcode %in% subspecies$classcode)
+
+wtf <- data %>%
+  filter(any_seen == T)
+
+View(data$data[[1]] %>% filter(any_seen == T))
 
 seen_data <- data %>%
   filter(any_seen == T) %>%
@@ -33,11 +38,27 @@ seen_data <- data %>%
   select(log_density,
          classcode,
          year,
-         mean_canopy,
+         month,
          mean_vis,
-         region) %>%
+         region,
+         trunc_observer,
+         cumulative_n_obs,
+         method,
+         level,
+         surge) %>%
   na.omit()
 
+arm_data <- seen_data %>%
+  mutate(factor_year = as.factor(year),
+         factor_month = as.factor(month))
+
+
+test <- rstanarm::stan_glm(
+  'log_density ~
+  factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',
+  data = arm_data,
+  refresh = 1
+)
 
 
 # lme4::glmer('log_density ~ (factor_year|classcode) + mean_canopy + mean_vis', data = seen_data)
@@ -49,6 +70,13 @@ year_species_data <- seen_data %>%
   mutate(marker = 1,
          index = 1:nrow(.)) %>%
   spread(year_classcode, marker, fill = 0) %>%
+  select(-index)
+
+observer_data <- seen_data %>%
+  select(trunc_observer) %>%
+  mutate(marker = 1,
+         index = 1:nrow(.)) %>%
+  spread(trunc_observer, marker, fill = 0) %>%
   select(-index)
 
 years_per_species <-
@@ -346,12 +374,7 @@ stan_data <- list(
 #
 # Sys.time() - a
 
-# arm_data <- seen_data %>%
-#   mutate(factor_year = as.factor(year))
-#
-# test <- rstanarm::stan_glm('log_density ~
-#                              factor_year:classcode  + mean_vis',
-#                              data = arm_data, refresh = 1)
+
 
 a <- Sys.time()
 ahnold_stan_fit <- stan(

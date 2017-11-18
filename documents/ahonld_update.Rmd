@@ -1,0 +1,180 @@
+---
+title: "Update on “Effects of the MLPA"
+author: "Dan Ovando"
+date: "11/16/2017"
+output: 
+  bookdown::pdf_document2: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r load-life}
+rm(list = ls())
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(glue)
+library(hrbrthemes)
+library(extrafont)
+library(viridis)
+library(scales)
+library(stringr)
+extrafont::loadfonts()
+
+demons::load_functions('functions')
+
+run_name <- 'Working'
+
+run_dir <- file.path('../results', run_name)
+```
+
+```{r load-data}
+
+load(glue("{run_dir}/abundance_indices.Rdata"))
+
+load(glue("{run_dir}/did_models.Rdata"))
+
+load(glue("{run_dir}/rawish_ahnold_data.Rdata"))
+
+```
+
+
+# Project Overview
+
+The goal of this chapter is to answer the question: What effect did the Marine Life Protection Act (MLPA) have on the density of fished species in the Channel Islands?
+
+We've been hunting this question for quite a while, due to a series of complications in the data and analysis. The purpose of this document is to give a high-level overview of my current results, so that we can make decisions on the next steps forward. 
+
+To provide a high level summary:
+
+Substantial amounts of theory and modeling work supports the idea that networks of MPAs should affect (and hopefully benefit) fish populations in the waters both inside and surrounding the MPAs, through mechanisms such as larval or adult spillover (as well as their affect on fishing behavior). However, the vast bulk of empirical work on MPAs has focused on assessing what happens inside MPAs (or inside-outside comparisons), rather than on asking what the network-wide effects of a web of MPAs is. To fill that gap, this study looks to determine what affect the network of MPAs placed in the Channel Islands in 2003 has had on the abundance of fishes throughout the Islands in the years since the implementation of the reserves. 
+
+## Identification Strategy
+
+We need some sort of identification strategy to isolate the causal effect of the MLPA from other factors such as environmental drivers. For now, we have selected to use fished and unfished species as as treatment/control in a difference in difference estimator. The underlying hypothesis behind this assumption is that unfished species (e.g. garibaldi) and fished species (e.g. blue rockfish) are both affected by environmental drivers such as El Niño, but only the fished species are substantially affected by the placement of MPAs. As such, we use the trends in abundance of unfished species as our control for broader environmental trends, and more or less the divergence in trends between the fished and unfished groups post-MLPA as our estimate of the causal effect of the MPAs. I will provide evidence in support of this choice later on, but obviously there are concerns with this selected strategy that bear consideration. 
+
+Ignoring other controls for the moment then, the general model being considered is
+
+$$ Abundance_{s,y} = Fished_{s} + PostMLPA_{y} + Fished_{s}*PostMLPA_{y}$$
+
+Where *s* is species *s*, *y* is year, and abundance is derived from densities (as will be explained later). 
+
+This seems simple enough, so why aren't we done? Well, as always the devil is in the details, and below I'm going to walk us through those details and that our decisions related to them mean for our results. 
+
+# Method Choices
+
+There are three basic groups of problems that we need to tackle here, and I'll do my best to briefly outline the choices that are available and how I've addressed them. I have run the model over every factorial combination of these choices, and will present high level summaries of the results in the "results" section.  
+
+## What data to use
+
+All the data available to us are visual survey scuba transects performed throughout the Channel Islands, in which divers ID, count, and in some cases estimate lengths, for observed fish species.However, there are three choices of which of these data to actually use. 
+
+The first is the processed density data utilized in @Caselle2015. These data come from PISCO, and have already been converted from raw fish observations to biomass densities, and have the advantage of having been vetted by a team who are experts in the local system and in the details of the data collection process. 
+
+The second is the raw PISCO data. These data need to be converted from raw observations of species-numbers-lengths to biomasses, which requires a series of QAQC steps, but is relatively straightforward. Working at this level provides access to finer-scale data such as the names of indivudal observers, which we can then control for in our model. For now, this is my preferred method of analysis. 
+
+The third is a similar but separate database, collected through the Kelp Forest Monitoring (GFM) program of the Channel Islands National Park. The methods are similar, but the data from the KFM program goes back earlier than the PISCO data. However, length estimates are only available for a small subset of years in the KFM data, as such densities can only be measured in terms of numbers, not biomass. Therefore, the KFM data is useful to as as a check for whether we see starkly different results with different data but is likely not good for our primary results. 
+
+Here are a few summary graphs just to given an idea of the differences in data coverage and raw densities by database. 
+
+We can see that there are pronounced differences in both data coverage and mean abundance trends across the KFM/PISCO data, and minor differences between the manually processed PISCO data and the PISCO data utilized by @Caselle2015 (Fig.\@ref(fig:compare-raw-densities)). We also see some visual evidence that the parallel trends assumption is not ludicrous, as the fished and unfished species do appear on average to follow similar trends over time. 
+
+```{r compare-raw-densities, fig.cap='Mean density over time for each data source. Circles indicate number of observations'}
+
+lengths <- length_to_density_data %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(targeted, factor_year) %>% 
+  summarise(mean_density = mean(mean_biomass_g, na.rm = T),
+            nobs = length(mean_biomass_g)) %>% 
+  mutate(data_source = 'lengths converted to densities') %>% 
+  ungroup() %>% 
+  mutate(targeted = targeted == 'Targeted' & is.na(targeted) == F)
+
+raws <- density_data %>% 
+    filter(is.na(targeted) == F) %>% 
+  group_by(targeted, factor_year) %>% 
+  summarise(mean_density = mean(biomass, na.rm = T),
+            nobs = length(biomass)) %>% 
+    mutate(data_source = 'Caselle et al. 2015') %>% 
+   ungroup() %>% 
+  mutate(targeted = targeted == 1 & is.na(targeted) == F)
+
+
+kfms <- kfm_data %>% 
+    filter(is.na(targeted) == F) %>% 
+  group_by(targeted, factor_year) %>% 
+  summarise(mean_density = mean(density, na.rm = T),
+            nobs = length(density)) %>% 
+    mutate(data_source = 'kelp forest monitoring') %>% 
+   ungroup() %>% 
+  mutate(targeted = targeted == 'Targeted' & is.na(targeted) == F)
+
+comp <- lengths %>% 
+  bind_rows(raws) %>% 
+  bind_rows(kfms)
+
+comp %>% 
+  ungroup() %>% 
+  mutate(year = factor_year %>% as.character() %>% as.numeric()) %>% 
+  group_by(data_source, targeted) %>% 
+  mutate(mean_density = mean_density / max(mean_density, na.rm = T)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, mean_density, color = targeted)) + 
+  geom_line() + 
+  geom_point(aes(size = nobs),alpha = 0.5) + 
+  facet_wrap(~data_source)
+
+```
+
+Regardless of the choice of database to use, we then need to decide on some filtration steps in the data. These aren't particularly interesting but for consistency worth noting. For every run, we only include species that have been seen at least 10 times a year every year since 2000, in order to control for rare species dropping in and out of the database, and only include observations from the main Channel Islands (ANA, SCI, SRI, SMI). 
+
+As an additional option, after this filtering we can also consider only locations in the CIs that have been consistently sampled throughout the entire study period. 
+
+## How to structure the higher level model
+
+Our final goal is to estimate the coefficients of the DiD estimator. We have the data for the DiD estimator, as well as a slew of covariates that vary slightly be database, but broadly include environmental factors both local(temperature, visibility, kelp, surge) and regional (El Niño, PDO), location, life history traits, and observer characteristics. We could in theory then dump all of these variables into one regression in which we attempt to use observables to control for both environmental and observational confounders, and use the DiD estimaators to control for unobserved time-invariant differences. 
+
+There are unfortunately (at least) two problems with this. The first is simply conceptual: the resulting model has hundreds of coefficients and so becomes somewhat unweildly to interpret and make sure that the isolated DiD estimator is doing what we think it is doing. 
+
+The second and more substantial problem is how to deal with sampling events in which a particular fish wasn't seen. Given that we're dealing with visual transect data in a challenging environment (low vis, surge, kelp), most transects do not observe every possible fish species each transect (possible fish are defined as a species that has been observed at least once at a given island at any time in the datbase). Conditional on the list of candidate fish species, if a fish species was not observed, we then have to determine whether it was there and not seen, or whether it was just not there but could have been there. Given the challenges of visual survey data, most of the observations in our database are zeros (~`r 100*(1 - mean(length_to_density_data$any_seen, na.rm = T)) %>% round(2)`%, Fig.\@ref(fig:lhist) ). 
+
+This is a common problem in ecological research, but presents some problems for us. Our goal is obtain our DiD estimators. We can't though just include the zeros and positive observations in the same regression, since the zeros will dominate the data and lead to all kinds of violations of our error assumptions. A tobit model could be considered, but the problem here is not truncated data, but rather a "hurdle" process in which a given group of fish at a transect have a probability of being observed, and a true density conditional on being observed. 
+s
+To address this in ecology, we commonly use "delta" or "hurdle" models, in which the expected density is a function of the probability of observing a density *d* greater than 0 $p(d>0)$ and the expected densidy conditional on observation $E(d|d>0)$
+
+$$\hat{d} = p(d>0)E(d|d>0)$$
+
+This model is fit using a logit type regression for the probability of observation, an appropriate regression for the observed densities (e.g. lognormal). 
+
+How then do we incorporate this process into our DiD estimator? We could simply fit two DiD regressions for each part of the delta model, but then how do we create an... hmmm idea here. What if you control for all the stuff and manually back out the neet effect of being a fished species in a given year.... 
+
+
+
+@Caselle2015 filled 
+
+
+Looking at a histogram of the log-densities observed from the length data, 
+
+```{r lhist, fig.cap = 'Histogram of log transformed densities (small number added to zeros)'}
+
+length_to_density_data %>% 
+  ggplot(aes(log(mean_biomass_g + 1e-3))) +
+  geom_histogram(fill = 'steelblue2', color = 'black') + 
+  labs(x = 'log density')
+
+
+```
+
+
+
+
+So, we have the density data, and a whole bunch of covariates, so we can just plug the data into a regression and we're done right? Sadly no. Unfortunately there are a few issues that need to be addressed. 
+
+
+
+## Alternative hypotheses of DiD model estimators
+
+
+# Early results

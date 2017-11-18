@@ -517,6 +517,11 @@ density_data <- reg_data %>%
   )
 
 
+# save raw-isa data -------------------------------------------------------
+
+save(file = glue::glue("{run_dir}/rawish_ahnold_data.Rdata"), length_to_density_data,
+     density_data, kfm_data)
+
 # prepare data for model fitting ------------------------------------------
 
 
@@ -533,8 +538,8 @@ observer_experience <- length_to_density_data %>%
                                  'infrequent'))
 
 length_to_density_data <- length_to_density_data %>%
-  left_join(observer_experience %>% select(observer, trunc_observer, cumulative_n_obs),
-            by = 'observer')
+  left_join(observer_experience %>% select(observer, year,trunc_observer, cumulative_n_obs),
+            by = c('observer','year'))
 
 consistent_sites <- length_to_density_data %>%
   group_by(site) %>%
@@ -646,7 +651,7 @@ well_observed_species <- length_to_density_data %>%
   summarise(min_seen = min(nseen, na.rm = T)) %>%
   arrange(desc(min_seen)) %>%
   ungroup() %>%
-  filter(min_seen >10) %>%
+  filter(min_seen > 2) %>%
   # filter(min_seen > nobs_quantiles[3]) %>%
   mutate(classcode = (classcode))
 
@@ -1273,6 +1278,18 @@ did_data %>%
 # so this is where you need to do a bunch of work in setting up the model runs
 
 
+# did_reg <-
+#   paste0('log(abundance_index) ~', paste(
+#     c(
+#       'targeted',
+#       'post_mpa',
+#       'mean_annual_kelp',
+#       'mean_annual_temp',
+#       '((mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
+#       '(targeted|factor_year)'),
+#     collapse = '+'
+#   ))
+
 did_reg <-
   paste0('log(abundance_index) ~', paste(
     c(
@@ -1280,15 +1297,21 @@ did_reg <-
       'post_mpa',
       'mean_annual_kelp',
       'mean_annual_temp',
-      '((mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
+      'mean_pdo',
+      'lag1_pdo',
+      'lag2_pdo'
+      '(1|factor_year)',
+      '((1 + mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
+      'catch',
       colnames(did_terms)
     ),
     collapse = '+'
   ))
 
+
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%
-  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x)))
+  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x %>% mutate(factor_year = factor(year)))))
 # mutate(did_model = map2(data, did_reg, ~ lm(.y, data = .x)))
 
 
