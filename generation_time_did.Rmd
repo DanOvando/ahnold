@@ -1,0 +1,66 @@
+---
+title: "generatio did"
+output: html_notebook
+---
+
+
+An idea here, building off of stopping somewhere normal in `run_ahnold_2`. 
+
+What if instead of just time, you define DiD based on either generation time protected, intrinsic growth potential, time to "recruitment" in the survey, etc. 
+
+Let's see what you have to play with a bit here. The options that come to mind
+
+
+1. Age at maturity intervals (e.g. protected for three generations)
+
+2. Time to "recruitment" in the survey
+
+3. Something related to intrinsic growth rate?
+
+Let's play with the first two for now. 
+
+```{r}
+
+library(FishLife)
+library(stringr)
+
+life_history_data$taxa
+
+fish_life <- life_history_data$taxa %>% str_split(' ', simplify = T) %>% 
+  as_data_frame() %>% 
+  select(1:2) %>% 
+  set_names(c('genus','species'))
+
+get_fish_life <- function(genus, species){
+Predict = Plot_taxa( Search_species(Genus=genus,Species=species)$match_taxonomy, mfrow=c(2,2), partial_match = T, verbose = F )
+
+out <- Predict[[1]]$Mean_pred %>% 
+  as.matrix() %>% 
+  as.data.frame() %>% 
+  mutate(variable = row.names(.)) %>% 
+  spread(variable, V1)
+
+out[colnames(out) != 'Temperature'] <- exp(out[colnames(out) != 'Temperature'])
+
+return(out)
+
+}
+
+fish_life <- fish_life %>% 
+  mutate(life_traits = map2(genus, species, safely(get_fish_life)))
+
+fish_life <- fish_life %>% 
+  mutate(fish_life_worked = map(life_traits,'error') %>% map_lgl(is.null)) %>% 
+  filter(fish_life_worked) %>% 
+  mutate(life_traits = map(life_traits, 'result')) %>% 
+  unnest() %>% 
+  mutate(taxa = glue::glue('{genus} {species}')) %>% 
+  set_names(tolower)
+  
+
+length_to_density_data <- length_to_density_data %>% 
+  left_join(fish_life, by = 'taxa')
+
+
+```
+

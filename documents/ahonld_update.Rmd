@@ -148,14 +148,9 @@ $$\hat{d} = p(d>0)E(d|d>0)$$
 
 This model is fit using a logit type regression for the probability of observation, an appropriate regression for the observed densities (e.g. lognormal). 
 
-How then do we incorporate this process into our DiD estimator? We could simply fit two DiD regressions for each part of the delta model, but then how do we create an... hmmm idea here. What if you control for all the stuff and manually back out the neet effect of being a fished species in a given year.... 
+We could of course include the DiD estimators inside each of the 
 
 
-
-@Caselle2015 filled 
-
-
-Looking at a histogram of the log-densities observed from the length data, 
 
 ```{r lhist, fig.cap = 'Histogram of log transformed densities (small number added to zeros)'}
 
@@ -166,8 +161,6 @@ length_to_density_data %>%
 
 
 ```
-
-
 
 
 So, we have the density data, and a whole bunch of covariates, so we can just plug the data into a regression and we're done right? Sadly no. Unfortunately there are a few issues that need to be addressed. 

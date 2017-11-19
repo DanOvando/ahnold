@@ -6,6 +6,9 @@ output: html_notebook
 So another idea.... what if you've been making this all wayyyyy too complicated. Couldn't you run the hurdle, and then manually back out the DiD terms in the same way you manually create the bundance indicies?
 
 
+
+How then do we incorporate this process into our DiD estimator? We could simply fit two DiD regressions for each part of the delta model, but then how do we create an... hmmm idea here. What if you control for all the stuff and manually back out the neet effect of being a fished species in a given year.... 
+
 ```{r}
 
 a <- abundance_models %>%
@@ -24,9 +27,7 @@ seen_data <- a %>%
          post_mpa = year >=2003)
 
 
-
-
-test <- lme4::lmer(log_density ~  targeted + post_mpa +targeted:factor_year + region + mean_vis +
+test <- lme4::lmer(log_density ~  targeted + post_mpa +targeted:factor_year + region + mean_vis + linf
              mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + (1|factor_year) -1, data = seen_data)
 
 dids <- test %>%
@@ -40,6 +41,13 @@ dids %>%
   geom_pointrange(aes(x = year, y = estimate, ymin =  estimate - 1.96*std.error,
                       ymax = estimate + 1.96*std.error))
 
+
+summary(test)
+
+```
+
+Try again for seeing data
+```{r}
 
 seeing_data <- a %>%
   mutate(targeted = (targeted == 'Targeted') %>% as.numeric()) %>%

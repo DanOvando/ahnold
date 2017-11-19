@@ -70,6 +70,50 @@ life_history_data <-
   mutate(classcode = tolower(classcode)) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
+fish_life <- life_history_data$taxa %>% str_split(' ', simplify = T) %>%
+  as_data_frame() %>%
+  select(1:2) %>%
+  set_names(c('genus','species'))
+
+get_fish_life <- function(genus, species){
+  Predict = Plot_taxa( Search_species(Genus=genus,Species=species)$match_taxonomy, mfrow=c(2,2), partial_match = T, verbose = F )
+
+  out <- Predict[[1]]$Mean_pred %>%
+    as.matrix() %>%
+    as.data.frame() %>%
+    mutate(variable = row.names(.)) %>%
+    spread(variable, V1)
+
+  out[colnames(out) != 'Temperature'] <- exp(out[colnames(out) != 'Temperature'])
+
+  return(out)
+
+}
+
+fish_life <- fish_life %>%
+  mutate(life_traits = map2(genus, species, safely(get_fish_life)))
+
+fish_life <- fish_life %>%
+  mutate(fish_life_worked = map(life_traits,'error') %>% map_lgl(is.null)) %>%
+  filter(fish_life_worked) %>%
+  mutate(life_traits = map(life_traits, 'result')) %>%
+  unnest() %>%
+  mutate(taxa = glue::glue('{genus} {species}')) %>%
+  set_names(tolower)
+
+life_history_data <- life_history_data %>%
+  left_join(fish_life, by = 'taxa')
+
+# check age at recruitment to survey
+
+smallest_length_seen <- length_data %>%
+  group_by(classcode) %>%
+  summarise(smallest_length_seen = min(fish_tl, na.rm = T))
+
+life_history_data <- life_history_data %>%
+  left_join(smallest_length_seen, by = 'classcode') %>%
+  mutate(first_age_seen = log(1 - smallest_length_seen/loo)/-k)
+
 site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   select(site,
@@ -1177,6 +1221,7 @@ pwalk(list(classcode = trend_data$classcode, data_source = trend_data$data_sourc
            annual_abundance_trends = trend_data$annual_abundance_trends), annual_abundance_trends_foo,
       run_dir = run_dir)
 
+
 did_terms <- did_data %>%
   select(year, targeted) %>%
   mutate(index = 1:nrow(.)) %>%
@@ -1185,6 +1230,32 @@ did_terms <- did_data %>%
   set_names(., paste0('did_', colnames(.))) %>%
   select(-did_2000)
 
+generation_did_terms <- did_data %>%
+  select(year, targeted, tm) %>%
+  mutate(index = 1:nrow(.),
+         years_protected = pmax(0,year - year_mpa),
+         generations_protected = round(years_protected / round(tm))) %>%
+  select(index,generations_protected, targeted) %>%
+  spread(generations_protected, targeted, fill = 0) %>%
+  select(-index) %>%
+  set_names(., paste0('did_', colnames(.))) %>%
+  select(-did_0)
+
+generation_did_terms <- generation_did_terms[, colSums(generation_did_terms) >0]
+
+
+recruitment_did_terms <- did_data %>%
+  select(year, targeted, first_age_seen) %>%
+  mutate(index = 1:nrow(.),
+         years_protected = pmax(0,year - year_mpa),
+         recruits_protected = round(years_protected / round(first_age_seen))) %>%
+  select(index,recruits_protected, targeted) %>%
+  spread(recruits_protected, targeted, fill = 0) %>%
+  select(-index) %>%
+  set_names(., paste0('did_', colnames(.))) %>%
+  select(-did_0)
+
+did_terms <- generation_did_terms
 
 did_data <- did_data %>%
   bind_cols(did_terms)
@@ -1299,9 +1370,9 @@ did_reg <-
       'mean_annual_temp',
       'mean_pdo',
       'lag1_pdo',
-      'lag2_pdo'
+      'lag2_pdo',
       '(1|factor_year)',
-      '((1 + mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
+      '((1 + mean_annual_temp)|classcode)',
       'catch',
       colnames(did_terms)
     ),
@@ -1327,9 +1398,9 @@ did_plot_foo <- function(x) {
       ymin = estimate - 1.96 * std.error,
       ymax = estimate + 1.96 * std.error
     )) +
-    geom_vline(aes(xintercept = 2003),
-               color = 'red',
-               linetype = 2) +
+    # geom_vline(aes(xintercept = 2003),
+    #            color = 'red',
+    #            linetype = 2) +
     geom_hline(aes(yintercept = 0))
 }
 
