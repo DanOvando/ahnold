@@ -4,6 +4,7 @@ library(tidyverse)
 library(rstan)
 library(stringr)
 library(purrr)
+rstan_options(auto_write = TRUE)
 
 run_name <- 'Working'
 
@@ -28,7 +29,7 @@ data <- abundance_indices %>%
 wtf <- data %>%
   filter(any_seen == T)
 
-View(data$data[[1]] %>% filter(any_seen == T))
+# View(data$data[[1]] %>% filter(any_seen == T))
 
 seen_data <- data %>%
   filter(any_seen == T) %>%
@@ -53,12 +54,13 @@ arm_data <- seen_data %>%
          factor_month = as.factor(month))
 
 
-test <- rstanarm::stan_glm(
-  'log_density ~
-  factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',
-  data = arm_data,
-  refresh = 1
-)
+# test <- rstanarm::stan_glm(
+#   'log_density ~
+#   factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',
+#   data = arm_data,
+#   refresh = 1,
+#   chains = 1
+# )
 
 
 # lme4::glmer('log_density ~ (factor_year|classcode) + mean_canopy + mean_vis', data = seen_data)
@@ -109,8 +111,8 @@ regions_per_species <- seen_data %>%
 visibility_data <- seen_data %>%
   select(mean_vis)
 
-canopy_data <- seen_data %>%
-  select(mean_canopy)
+# canopy_data <- seen_data %>%
+#   select(mean_canopy)
 
 n_intercepts <- length(years_per_species)
 
@@ -130,7 +132,6 @@ x_seen <-
   bind_cols(
     intercept_data,
     visibility_data,
-    canopy_data,
     year_species_data,
     region_species_data
   )
@@ -148,8 +149,6 @@ seeing_data <- data %>%
          mean_vis,
          region) %>%
   na.omit()
-
-
 
 # lme4::glmer('log_density ~ (factor_year|classcode) + mean_canopy + mean_vis', data = seen_data)
 year_species_data <- seeing_data %>%
@@ -191,8 +190,8 @@ regions_per_species <- seeing_data %>%
 visibility_data <- seeing_data %>%
   select(mean_vis)
 
-canopy_data <- seeing_data %>%
-  select(mean_canopy)
+# canopy_data <- seeing_data %>%
+#   select(mean_canopy)
 
 n_intercepts <- length(years_per_species)
 #
@@ -212,7 +211,6 @@ x_seeing <-
   bind_cols(
     intercept_data,
     visibility_data,
-    canopy_data,
     year_species_data,
     region_species_data
   )
@@ -265,7 +263,8 @@ species_data <- seeing_data %>%
 standard_matrix <- species_data %>%
   mutate(smat = map2(classcode, data, create_standard_mat, x = x_seeing)) %>%
   select(smat) %>%
-  unnest()
+  unnest() %>%
+  select(-mean_canopy)
 
 # a <- standard_matrix %>%
 #   select(contains('intercept')) %>%

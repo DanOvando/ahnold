@@ -1308,23 +1308,33 @@ did_data <- did_data %>%
 
 # fit DiD estimator on abundance indicies ---------------------------------
 
+# did_reg <-
+#   paste0('log(abundance_index) ~', paste(
+#     c(
+#       'targeted',
+#       'post_mpa',
+#       'mean_annual_kelp',
+#       'mean_annual_temp',
+#       'mean_pdo',
+#       'lag1_pdo',
+#       'lag2_pdo',
+#       '(1|factor_year)',
+#       '((1 + mean_annual_temp)|classcode)',
+#       colnames(did_terms)
+#     ),
+#     collapse = '+'
+#   ))
+
 did_reg <-
   paste0('log(abundance_index) ~', paste(
     c(
       'targeted',
-      'post_mpa',
       'mean_annual_kelp',
-      'mean_annual_temp',
-      'mean_pdo',
-      'lag1_pdo',
-      'lag2_pdo',
       '(1|factor_year)',
-      '((1 + mean_annual_temp)|classcode)',
-      colnames(did_terms)
-    ),
+      '((1 + mean_annual_temp +mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
+    colnames(did_terms)),
     collapse = '+'
   ))
-
 
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%

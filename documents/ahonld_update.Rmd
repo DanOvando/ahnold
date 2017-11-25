@@ -375,36 +375,6 @@ abundance_comparison %>%
 
 ```
 
-
-```{r}
-
-bs <- abundance_indices %>% 
-  filter(commonname == 'blacksmith',
-                  population_structure == 'one-pop',
-         population_filtering == 'all')
-
-expected_density <- bs %>% 
-  select(data_source, abundance_index) %>% 
-  mutate(ed =map(bs$abundance_index, `[`,c('factor_year','linear_predictions'))) %>% 
-  select(-abundance_index) %>% 
-  unnest()
-
-prob_seen <- bs %>% 
-  select(data_source, abundance_index) %>% 
-  mutate(ed =map(bs$abundance_index, `[`,c('factor_year','prob_seen'))) %>% 
-  select(-abundance_index) %>% 
-  unnest()
-
-
-expected_density %>% 
-mutate(year = as.numeric(as.character(factor_year))) %>% 
-  group_by(data_source) %>% 
-  mutate(linear_predictions = linear_predictions / max(linear_predictions)) %>% 
-  ggplot(aes(year, linear_predictions, color = data_source)) + 
-  geom_line()
-
-```
-
 ```{r}
 abundance_comparison <-did_models %>% 
   filter(data_source == 'supplied_density',
@@ -488,7 +458,31 @@ eg_run %>%
 
 ```
 
-```{r}
+```{r recriuits-effects}
+eg_run <-did_models %>% 
+  filter(
+         population_structure == 'one-pop',
+         abundance_source == 'glm_abundance_index',
+         population_filtering == 'all',
+         did_term_names == 'recruits-protected') %>% 
+  select(data_source, did_model) %>% 
+  mutate(tidy_model = map(did_model, ~broom::tidy(.x))) %>% 
+  select(-did_model) %>% 
+  unnest() %>% 
+  filter(str_detect(term,'did_')) %>% 
+  mutate(year = str_replace_all(term,'\\D','') %>% as.numeric())
+
+eg_run %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_line(aes(year, estimate, color = data_source)) + 
+  geom_ribbon(aes(year, ymin = estimate - 1.96 * std.error, ymax = estimate + 1.96 * std.error, fill = data_source), alpha = 0.1)
+
+```
+
+
+
+```{r regional-pops}
 eg_run <-did_models %>% 
   filter(
          population_structure == 'regional-pops',
@@ -573,6 +567,8 @@ did_reg <-
     ),
     collapse = '+'
   ))
+
+
 
 eg_run <- eg_run %>% 
   mutate(did_reg = did_reg) %>% 
