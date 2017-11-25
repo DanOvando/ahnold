@@ -50,7 +50,6 @@ create_abundance_index <-
 
     # seen_aug <-   seen_model %>%
     #   broom::augment()
-
     if (pop_structure == 'one-pop') {
       seen_series <-
         create_reference_case(seen_aug = seen_aug, seen_model = seen_model) %>%
@@ -59,26 +58,35 @@ create_abundance_index <-
     if (pop_structure == 'regional-pops')
     {
 
+      regional_smear <- seen_aug %>%
+        group_by(region) %>%
+        summarise(smearing_term = mean(exp(.resid)))
+
       seen_series <- seen_aug %>%
         nest(-region) %>%
         mutate(seen_series = map(data, create_reference_case, seen_model = seen_model)) %>%
         select(-data) %>%
         unnest() %>%
-        group_by(region) %>%
-        mutate(smearing_term = mean(exp(.resid))) %>%
+        left_join(regional_smear, by = 'region') %>%
         ungroup()
 
 
     }
     if (pop_structure == 'mpa-pops') {
+
+      smearing_term <- seen_aug %>%
+        group_by(eventual_mpa) %>%
+        summarise(smearing_term = mean(exp(.resid)))
+
+
       seen_series <- seen_aug %>%
         nest(-eventual_mpa) %>%
         mutate(seen_series = map(data, create_reference_case, seen_model = seen_model)) %>%
         select(-data) %>%
         unnest() %>%
-        group_by(eventual_mpa) %>%
-        mutate(smearing_term = mean(exp(.resid))) %>%
+        left_join(smearing_term, by = 'eventual_mpa') %>%
         ungroup()
+
 
     }
 
