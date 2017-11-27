@@ -53,7 +53,43 @@ arm_data <- seen_data %>%
   mutate(factor_year = as.factor(year),
          factor_month = as.factor(month))
 
+year_effects <- test$stan_summary %>%
+  as.data.frame() %>%
+  mutate(variable = rownames(.)) %>%
+  as_data_frame() %>%
+  filter(str_detect(variable,'factor_year')) %>%
+  mutate(year = str_replace_all(variable,'\\D','') %>% as.numeric(),
+         species = str_replace_all(variable,'.*(?=classcode)','')) %>%
+  mutate(species = str_replace_all(species, 'classcode',''))
 
+year_effects %>%
+  ggplot() +
+  geom_line(aes(year, exp(mean + se_mean^2/2), color = species)) +
+  facet_wrap(~species, scales = 'free_y') +
+  theme_classic()
+
+save(file = 'rstanarm-test.Rdata', test)
+
+
+abundance_comparison <-did_models %>%
+  filter(data_source == 'length_to_density',
+         population_structure == 'one-pop',
+         abundance_source == 'glm_abundance_index' |abundance_source == 'raw_abundance_index' ,
+         population_filtering == 'all',
+         did_term_names == 'years-protected') %>%
+  select(abundance_source, data) %>%
+  unnest()
+
+
+abundance_comparison %>%
+  group_by(commonname, abundance_source) %>%
+  mutate(abundance_index = abundance_index / max(abundance_index)) %>%
+  ungroup() %>%
+  ggplot(aes(year, abundance_index, color = abundance_source)) +
+  geom_line() +
+  facet_wrap(~classcode) +
+  theme_classic() +
+  theme(strip.text = element_text(size = 8))
 # test <- rstanarm::stan_glm(
 #   'log_density ~
 #   factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',

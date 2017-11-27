@@ -29,7 +29,7 @@ run_name <- 'Working'
 
 run_dir <- file.path('../results', run_name)
 
-summary_theme <- hrbrthemes::theme_ipsum(base_size = 16)
+summary_theme <- hrbrthemes::theme_ipsum(base_size = 12)
 
 theme_set(summary_theme)
 
@@ -346,6 +346,35 @@ a %>%
 ```
 
 
+```{r, fig.cap='Correlation between abundance and catch for fished and unfished species'}
+
+
+eg_run$data[[1]] %>% 
+              group_by(targeted) %>% 
+              summarise(tc = sum(catch))
+
+a <- eg_run$data[[1]] %>% 
+  group_by(classcode) %>% 
+  arrange(classcode,year) %>% 
+  mutate(lag1_catch = lag(catch,1),
+         lag2_catch = lag(catch,2)) %>% 
+  ungroup() %>% 
+  select(abundance_index, targeted, contains('catch')) %>% 
+  nest(-targeted) %>% 
+  mutate(correlation = map(data,foo)) %>% 
+  select(targeted,correlation) %>% 
+  unnest()
+
+a %>% 
+  ggplot() +
+  geom_col(aes(thing, ., fill = factor(targeted)), position = 'dodge')
+
+
+
+```
+
+
+
 ## Abundance Trends
 
 To give an idea of the effect of the "standardization" process, we can compare the hurdle-model standardized indicies of abundance against the simple mean density by year for each of the species in the analysis. We can see that for many species (e.g. painted greenling) the process has neglible effects, while for other species (e.g. blacksmith) the standardization process produces a starkly different estimate of population trajectory. 
@@ -428,9 +457,11 @@ eg_run <-did_models %>%
   mutate(year = str_replace_all(term,'\\D','') %>% as.numeric())
 
 eg_run %>% 
-  ggplot() + 
+  ggplot(aes(year, estimate, color = data_source)) + 
   geom_hline(aes(yintercept = 0), linetype = 2) +
-  geom_line(aes(year, estimate, color = data_source)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = 'red') +
+  geom_line() + 
+  geom_point() +
   geom_ribbon(aes(year, ymin = estimate - 1.96 * std.error, ymax = estimate + 1.96 * std.error, fill = data_source), alpha = 0.1)
 
 ```

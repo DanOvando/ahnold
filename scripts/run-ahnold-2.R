@@ -158,6 +158,30 @@ life_history_data <- life_history_data %>%
   left_join(smallest_length_seen, by = 'classcode') %>%
   mutate(first_age_seen = log(1 - smallest_length_seen/loo)/-k)
 
+#Convert to fished species things with CDFW catches
+
+ci_catches <-
+  read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
+  summarise(catch = sum(pounds_caught, na.rm = T))
+
+fished_species <-
+  data_frame(classcode = unique(ci_catches$classcode),
+             fished = 1)
+
+life_history_data <- life_history_data %>%
+  left_join(fished_species, by = 'classcode') %>%
+  mutate(targeted = ifelse(
+    fished == 1 &
+      is.na(fished) == F,
+    'Targeted',
+    targeted
+  )) %>%
+  select(-fished)
+
+# add life history data into length data
+length_data <- length_data %>%
+  left_join(life_history_data, by = 'classcode')
+
 site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   select(site,
@@ -171,22 +195,10 @@ site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
   unique() %>%
   mutate(eventual_mpa = (year_mpa > 0))
 
-length_data <- length_data %>%
-  left_join(life_history_data, by = 'classcode')
 
 kfm_data <- read_csv('data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
 
 kfm_locations <- read_csv('data/kfm_data/SBCMBON_site_geolocation_20170520.csv')
-
-
-ci_catches <-
-  read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
-  summarise(catch = sum(pounds_caught, na.rm = T))
-
-fished_species <-
-  data_frame(classcode = unique(ci_catches$classcode),
-             fished = 1)
-
 
 conditions_data <- length_data %>%
   group_by(site, side, year) %>%
@@ -765,14 +777,14 @@ abundance_models <- abundance_models %>%
   mutate(classcode = tolower(classcode)) %>%
   left_join(life_history_data %>% select(classcode, commonname, targeted),
             by = 'classcode') %>%
-  left_join(fished_species, by = 'classcode') %>%
-  mutate(targeted = ifelse(
-    fished == 1 &
-      is.na(fished) == F &
-      targeted == "Non-targeted",
-    'Targeted',
-    targeted
-  )) %>%
+  # left_join(fished_species, by = 'classcode') %>%
+  # mutate(targeted = ifelse(
+  #   fished == 1 &
+  #     is.na(fished) == F &
+  #     targeted == "Non-targeted",
+  #   'Targeted',
+  #   targeted
+  # )) %>%
   filter(str_detect(commonname, 'YOY') == F,
          is.na(targeted) == F,
          str_detect(classcode,'_yoy') == F) #%>%
@@ -1308,22 +1320,6 @@ did_data <- did_data %>%
 
 # fit DiD estimator on abundance indicies ---------------------------------
 
-# did_reg <-
-#   paste0('log(abundance_index) ~', paste(
-#     c(
-#       'targeted',
-#       'post_mpa',
-#       'mean_annual_kelp',
-#       'mean_annual_temp',
-#       'mean_pdo',
-#       'lag1_pdo',
-#       'lag2_pdo',
-#       '(1|factor_year)',
-#       '((1 + mean_annual_temp)|classcode)',
-#       colnames(did_terms)
-#     ),
-#     collapse = '+'
-#   ))
 
 did_reg <-
   paste0('log(abundance_index) ~', paste(
@@ -1331,8 +1327,11 @@ did_reg <-
       'targeted',
       'mean_annual_kelp',
       '(1|factor_year)',
-      '((1 + mean_annual_temp +mean_pdo + lag1_pdo + lag2_pdo)|classcode)',
-    colnames(did_terms)),
+      'mean_pdo',
+      # 'lag1_pdo',
+      # 'lag2_pdo',
+      '((1 + mean_annual_temp)|classcode)',
+      colnames(did_terms)),
     collapse = '+'
   ))
 
@@ -1347,6 +1346,14 @@ did_models <- did_models %>%
   select(did_model,did_term_names) %>%
   unnest()
 
+check_model <- did_models %>%
+  filter(data_source == 'length_to_density',
+         population_structure == 'one-pop',
+         abundance_source == 'glm_abundance_index',
+         population_filtering == 'all',
+         did_term_names == 'years-protected')
+
+check_model$did_model[[1]] %>% broom::glance()
 
 did_plot_foo <- function(x) {
   x %>%
