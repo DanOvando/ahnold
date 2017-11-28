@@ -41,7 +41,7 @@ write(run_description,
 
 # options -----------------------------------------------------------------
 
-run_length_to_density <-  T
+run_length_to_density <-  F
 
 run_vast <- F # run VAST, best to leave off for now
 
@@ -171,15 +171,15 @@ fished_species <-
   data_frame(classcode = unique(ci_catches$classcode),
              fished = 1)
 
-# life_history_data <- life_history_data %>%
-#   left_join(fished_species, by = 'classcode') %>%
-#   mutate(targeted = ifelse(
-#     fished == 1 &
-#       is.na(fished) == F,
-#     'Targeted',
-#     targeted
-#   )) %>%
-#   select(-fished)
+life_history_data <- life_history_data %>%
+  left_join(fished_species, by = 'classcode') %>%
+  mutate(targeted = ifelse(
+    fished == 1 &
+      is.na(fished) == F,
+    'Targeted',
+    targeted
+  )) %>%
+  select(-fished)
 
 # add life history data into length data
 length_data <- length_data %>%
@@ -458,7 +458,9 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
 
 }
 
-# sum biomass across all observed sizes
+
+# sum biomass across all observed sizes ---------------------------------
+
 
 transect_covariates <- c('mean_depth','mean_vis','mean_temp','surge','mean_canopy','observer','n_obs','cumulative_n_obs')
 
@@ -551,7 +553,8 @@ length_to_density_data <- length_to_density_data %>%
     any_seen = total_biomass_g > 0,
     factor_year = factor(year),
     log_density = log(total_biomass_g),
-    factor_month = factor(month)
+    factor_month = factor(month),
+    site_side = glue::glue('{site}-{side}')
   ) %>%
   group_by(site, side, month,year) %>%
   mutate(
@@ -645,7 +648,7 @@ raw_length_covars <-
   paste(c(
     'region',
     'zone',
-    'site',
+    'site_side',
     'level',
     'mean_vis',
     'surge',
@@ -660,7 +663,7 @@ prob_raw_length_covars <-
   paste(c(
     'region',
     'zone',
-    'site',
+    'site_side',
     'level',
     'mean_vis',
     'surge',
@@ -690,11 +693,11 @@ prob_kfm_length_covars <-
 #         collapse = '+')
 
 supplied_density_covars <-
-  paste(c('region','mean_kelp', 'mean_vis'),
+  paste(c('region','mean_kelp', 'mean_vis','site_side'),
         collapse = '+')
 
 prob_supplied_density_covars <-
-  paste(c('region','mean_kelp', 'mean_vis'),
+  paste(c('region','mean_kelp', 'mean_vis','site_side'),
         collapse = '+')
 
 
@@ -907,10 +910,11 @@ abundance_models <- abundance_models %>%
   )
 
 
+#filter out models that didn't converge for some reason
 abundance_models <- abundance_models %>%
   mutate(no_error = map2_lgl(seeing_error, seen_error, ~ is.null(.x) &
                                is.null(.y))) %>%
-  filter(no_error == T) #filter out models that didn't converge for some reason
+  filter(no_error == T)
 
 abundance_models <- abundance_models %>%
   mutate(
@@ -1353,14 +1357,14 @@ did_models <- did_models %>%
   select(did_model,did_term_names) %>%
   unnest()
 
-check_model <- did_models %>%
-  filter(data_source == 'length_to_density',
-         population_structure == 'one-pop',
-         abundance_source == 'glm_abundance_index',
-         population_filtering == 'all',
-         did_term_names == 'years-protected')
-
-check_model$did_model[[1]] %>% broom::glance()
+# check_model <- did_models %>%
+#   filter(data_source == 'length_to_density',
+#          population_structure == 'one-pop',
+#          abundance_source == 'glm_abundance_index',
+#          population_filtering == 'all',
+#          did_term_names == 'years-protected')
+#
+# check_model$did_model[[1]] %>% broom::glance()
 
 did_plot_foo <- function(x) {
   x %>%
@@ -1410,6 +1414,9 @@ pwalk(
   run_dir = run_dir
 )
 
+check_ahnold(length_to_density_data = length_to_density_data,
+             abundance_indices = abundance_indices,
+             did_models = did_models)
 
 save(file = glue::glue('{run_dir}/did_models.Rdata'), did_models)
 

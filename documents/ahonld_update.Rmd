@@ -33,6 +33,10 @@ summary_theme <- hrbrthemes::theme_ipsum(base_size = 12)
 
 theme_set(summary_theme)
 
+check_ahnold(length_to_density_data = length_to_density_data,
+             abundance_indices = abundance_indices, 
+             did_models = did_models)
+
 ```
 
 ```{r load-data, cache = T}
