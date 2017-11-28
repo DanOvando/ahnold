@@ -33,6 +33,10 @@ summary_theme <- hrbrthemes::theme_ipsum(base_size = 12)
 
 theme_set(summary_theme)
 
+check_ahnold(length_to_density_data = length_to_density_data,
+             abundance_indices = abundance_indices, 
+             did_models = did_models)
+
 ```
 
 ```{r load-data, cache = T}
@@ -98,8 +102,8 @@ We can see that there are pronounced differences in both data coverage and mean 
 lengths <- length_to_density_data %>% 
   filter(is.na(targeted) == F) %>% 
   group_by(targeted, factor_year) %>% 
-  summarise(mean_density = mean(mean_biomass_g, na.rm = T),
-            nobs = length(mean_biomass_g)) %>% 
+  summarise(mean_density = mean(total_biomass_g, na.rm = T),
+            nobs = length(total_biomass_g)) %>% 
   mutate(data_source = 'lengths converted to densities') %>% 
   ungroup() %>% 
   mutate(targeted = targeted == 'Targeted' & is.na(targeted) == F)
@@ -175,7 +179,7 @@ The advantage to this method is that it deals with the zeros in the data, and pr
 ```{r lhist, fig.cap = 'Histogram of log transformed densities (small number added to zeros)'}
 
 length_to_density_data %>% 
-  ggplot(aes(log(mean_biomass_g + 1e-3))) +
+  ggplot(aes(log(total_biomass_g + 1e-3))) +
   geom_histogram(fill = 'steelblue2', color = 'black') + 
   labs(x = 'log density')
 
@@ -227,8 +231,8 @@ We have already looked at the raw density trends, which give some evidence of pa
 lengths <- length_to_density_data %>% 
   filter(is.na(targeted) == F) %>% 
   group_by(targeted, factor_year) %>% 
-  summarise(mean_density = mean(mean_biomass_g, na.rm = T),
-            nobs = length(mean_biomass_g)) %>% 
+  summarise(mean_density = mean(total_biomass_g, na.rm = T),
+            nobs = length(total_biomass_g)) %>% 
   mutate(data_source = 'lengths converted to densities') %>% 
   ungroup() %>% 
   mutate(targeted = targeted == 'Targeted' & is.na(targeted) == F) %>% 
