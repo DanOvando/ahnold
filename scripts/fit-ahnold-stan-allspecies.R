@@ -53,6 +53,15 @@ arm_data <- seen_data %>%
   mutate(factor_year = as.factor(year),
          factor_month = as.factor(month))
 
+# test <- rstanarm::stan_glm(
+#   'log_density ~
+#   factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',
+#   data = arm_data,
+#   refresh = 1,
+#   chains = 1
+# )
+
+
 year_effects <- test$stan_summary %>%
   as.data.frame() %>%
   mutate(variable = rownames(.)) %>%
@@ -90,13 +99,6 @@ abundance_comparison %>%
   facet_wrap(~classcode) +
   theme_classic() +
   theme(strip.text = element_text(size = 8))
-# test <- rstanarm::stan_glm(
-#   'log_density ~
-#   factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',
-#   data = arm_data,
-#   refresh = 1,
-#   chains = 1
-# )
 
 
 # lme4::glmer('log_density ~ (factor_year|classcode) + mean_canopy + mean_vis', data = seen_data)

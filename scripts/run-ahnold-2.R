@@ -41,13 +41,13 @@ write(run_description,
 
 # options -----------------------------------------------------------------
 
-run_length_to_density <-  F
+run_length_to_density <-  T
 
 run_vast <- F # run VAST, best to leave off for now
 
 num_knots <-  10
 
-aggregate_transects <-F # should transects be aggregated up (mean across observer) or left as raw
+aggregate_transects <- T # should transects be aggregated up (mean across observer) or left as raw
 
 channel_islands_only <- T # only include channel islands, leave T
 
@@ -63,7 +63,8 @@ use_mpa_site_effects <- F # no idea
 
 length_data <- read_csv('data/UCSB_FISH raw thru 2013.csv') %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
-  mutate(classcode = tolower(classcode))
+  mutate(classcode = tolower(classcode)) %>%
+  mutate(observer = ifelse(is.na(observer), 'unknown', observer))
 
 # Filter data per operations in Fish size biomass processing CIMPA.sas file
 
@@ -107,6 +108,8 @@ yoy_foo <- function(classcode, fish_tl){
 
 length_data <- length_data %>%
   mutate(classcode = map2_chr(classcode, fish_tl, yoy_foo))
+
+# add in covariates -------------------------------------------------------
 
 life_history_data <-
   read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
@@ -168,15 +171,15 @@ fished_species <-
   data_frame(classcode = unique(ci_catches$classcode),
              fished = 1)
 
-life_history_data <- life_history_data %>%
-  left_join(fished_species, by = 'classcode') %>%
-  mutate(targeted = ifelse(
-    fished == 1 &
-      is.na(fished) == F,
-    'Targeted',
-    targeted
-  )) %>%
-  select(-fished)
+# life_history_data <- life_history_data %>%
+#   left_join(fished_species, by = 'classcode') %>%
+#   mutate(targeted = ifelse(
+#     fished == 1 &
+#       is.na(fished) == F,
+#     'Targeted',
+#     targeted
+#   )) %>%
+#   select(-fished)
 
 # add life history data into length data
 length_data <- length_data %>%
@@ -208,6 +211,28 @@ conditions_data <- length_data %>%
     mean_vis = mean(vis, na.rm = T)
   )
 
+
+observer_experience <- length_data %>%
+  group_by(year,month,observer) %>%
+  summarise(n_obs = length(side)) %>%
+  arrange(observer, year) %>%
+  group_by(observer) %>%
+  mutate(cumulative_n_obs = cumsum(n_obs),
+         lifetime_obs = sum(n_obs)) %>%
+  ungroup() %>%
+  mutate(observer_ranking = percent_rank(lifetime_obs)) %>%
+  mutate(trunc_observer = ifelse(observer_ranking > 0.5 | observer == 'unknown', observer,
+                                 'infrequent')) %>%
+  arrange(desc(observer_ranking)) %>%
+  mutate(cumulative_n_obs = ifelse(trunc_observer == 'infrequent' | trunc_observer == 'unknown',0,cumulative_n_obs),
+         n_obs = ifelse(trunc_observer == 'infrequent' | trunc_observer == 'unknown',0,n_obs),
+         lifetime_obs = ifelse(trunc_observer == 'infrequent' | trunc_observer == 'unknown',0,lifetime_obs),
+         observer_ranking = ifelse(trunc_observer == 'infrequent' | trunc_observer == 'unknown',0,observer_ranking)) %>%
+  mutate(cumulative_n_obs_2 = cumulative_n_obs^2)
+
+
+length_data <- length_data %>%
+  left_join(observer_experience, by = c('year','month','observer'))
 
 # ggmap::qmplot(x = mean_longitude, y = mean_latitude,data = species_distributions)
 
@@ -289,6 +314,7 @@ if (file.exists('data/pdo.csv')) {
     )
 
 }
+
 
 # deal with processed densities -------------------------------------------
 
@@ -396,8 +422,6 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
 
   for (i in 1:length(classcodes)) {
 
-    print(i)
-
     where_class <-
       length_to_density_data$classcode == classcodes[i] &
       length_to_density_data$count == 0
@@ -433,6 +457,29 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
   load('data/length-to-density-data.Rdata')
 
 }
+
+# sum biomass across all observed sizes
+
+transect_covariates <- c('mean_depth','mean_vis','mean_temp','surge','mean_canopy','observer','n_obs','cumulative_n_obs')
+
+mean_foo <- function(var){
+
+  if (class(var) != 'character') {
+    out <- mean(var, na.rm = T)
+  } else{
+    out <- paste(unique(var), collapse = '-')
+  }
+
+}
+
+length_to_density_data <- length_to_density_data %>%
+  group_by(campus, method, year, month, day, site, side, zone,transect,level, classcode) %>%
+  mutate(total_biomass_g = sum(total_biomass_g),
+         counter = 1:length(total_biomass_g)) %>%
+  # purrrlyr::dmap_at(which(colnames(.) %in% transect_covariates), mean_foo) %>%
+  ungroup() %>%
+  filter(counter == 1) %>%
+  select(-counter)
 
 # Process kfm count data
 
@@ -490,51 +537,20 @@ kfm_data <- kfm_data %>%
          any_seen = density >0,
          factor_year = as.factor(year),
          factor_month = as.factor(month),
-         mean_biomass_g = density) %>%
+         total_biomass_g = density) %>%
   select(-region) #for compatibility with things later on
 
 
-# aggreage etc ------------------------------------------------------------
 
-
-
-
-if (aggregate_transects == T) {
-  length_to_density_data <- length_to_density_data %>%
-    group_by(classcode, observer, site, side, year) %>%
-    summarise(
-      mean_biomass_g = mean(total_biomass_g, na.rm = T),
-      mean_temp = mean(mean_temp, na.rm = T),
-      mean_vis = mean(mean_vis, na.rm = T),
-      mean_depth = mean(mean_depth, na.rm = T),
-      mean_canopy = mean(mean_canopy, na.rm = T)
-    ) %>%
-    mutate(
-      biomass_g_per_m2 = mean_biomass_g / (30 * 4),
-      biomass_g_per_hectare = biomass_g_per_m2 * 10000,
-      biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6
-    ) %>%
-    ungroup()
-} else {
-  length_to_density_data <- length_to_density_data %>%
-    rename(mean_biomass_g = total_biomass_g) %>%
-    mutate(
-      biomass_g_per_m2 = mean_biomass_g / (30 * 4),
-      biomass_g_per_hectare = biomass_g_per_m2 * 10000,
-      biomass_ton_per_hectare = biomass_g_per_hectare * 1e-6
-    ) %>%
-    ungroup()
-
-}
 
 # deal with missing covariates --------------------------------------------
 # pretty hacky for now, need to go back and deal with this better
 
 length_to_density_data <- length_to_density_data %>%
   mutate(
-    any_seen = mean_biomass_g > 0,
+    any_seen = total_biomass_g > 0,
     factor_year = factor(year),
-    log_density = log(mean_biomass_g),
+    log_density = log(total_biomass_g),
     factor_month = factor(month)
   ) %>%
   group_by(site, side, month,year) %>%
@@ -602,22 +618,9 @@ save(file = glue::glue("{run_dir}/rawish_ahnold_data.Rdata"), length_to_density_
 
 # prepare data for model fitting ------------------------------------------
 
-
-observer_experience <- length_to_density_data %>%
-  group_by(year,observer) %>%
-  summarise(n_obs = length(log_density)) %>%
-  arrange(observer, year) %>%
-  group_by(observer) %>%
-  mutate(cumulative_n_obs = cumsum(n_obs),
-         lifetime_obs = sum(n_obs)) %>%
-  ungroup() %>%
-  mutate(observer_ranking = percent_rank(lifetime_obs)) %>%
-  mutate(trunc_observer = ifelse(observer_ranking > 0.5 & observer != 'unknown', observer,
-                                 'infrequent'))
-
-length_to_density_data <- length_to_density_data %>%
-  left_join(observer_experience %>% select(observer, year,trunc_observer, cumulative_n_obs),
-            by = c('observer','year'))
+# length_to_density_data <- length_to_density_data %>%
+#   left_join(observer_experience %>% select(observer, year,trunc_observer, cumulative_n_obs),
+#             by = c('observer','year'))
 
 consistent_sites <- length_to_density_data %>%
   group_by(site) %>%
@@ -641,26 +644,30 @@ consistent_regions <- length_to_density_data %>%
 raw_length_covars <-
   paste(c(
     'region',
+    'zone',
+    'site',
+    'level',
     'mean_vis',
+    'surge',
     'factor_month',
     'trunc_observer',
     'cumulative_n_obs',
-    'method',
-    'level',
-    'surge'
+    'cumulative_n_obs_2'
   ),
   collapse = '+')
 
 prob_raw_length_covars <-
   paste(c(
     'region',
+    'zone',
+    'site',
+    'level',
     'mean_vis',
+    'surge',
     'factor_month',
     'trunc_observer',
     'cumulative_n_obs',
-    'method',
-    'level',
-    'surge'
+    'cumulative_n_obs_2'
   ),
   collapse = '+')
 
@@ -1037,7 +1044,7 @@ pwalk(
 
 calc_raw_abundance <- function(data, population_structure) {
   if (any(colnames(data) == 'biomass')) {
-    data$mean_biomass_g <- data$biomass
+    data$total_biomass_g <- data$biomass
 
   }
 
@@ -1045,7 +1052,7 @@ calc_raw_abundance <- function(data, population_structure) {
 
   raw_trend <- data %>%
     group_by(factor_year) %>%
-    summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
+    summarise(abundance_index = mean(total_biomass_g, na.rm = T)) %>%
     ungroup() %>%
     # mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
     mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
@@ -1055,7 +1062,7 @@ calc_raw_abundance <- function(data, population_structure) {
 
     raw_trend <- data %>%
       group_by(region,factor_year) %>%
-      summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
+      summarise(abundance_index = mean(total_biomass_g, na.rm = T)) %>%
       ungroup() %>%
       # mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
       mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
@@ -1065,7 +1072,7 @@ calc_raw_abundance <- function(data, population_structure) {
 
     raw_trend <- data %>%
       group_by(eventual_mpa,factor_year) %>%
-      summarise(abundance_index = mean(mean_biomass_g, na.rm = T)) %>%
+      summarise(abundance_index = mean(total_biomass_g, na.rm = T)) %>%
       ungroup() %>%
       # mutate(abundance_index = center_scale(abundance_index + 1e-3)) %>%
       mutate(year = factor_year %>% as.character() %>% as.numeric()) %>%
