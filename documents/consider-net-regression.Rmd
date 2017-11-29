@@ -11,26 +11,35 @@ How then do we incorporate this process into our DiD estimator? We could simply 
 
 ```{r}
 
-a <- abundance_models %>%
-  filter(data_source == 'supplied_density',
+a <- abundance_indices %>%
+  filter(data_source == 'length_to_density',
          population_structure == 'one-pop',
          population_filtering == 'all'
          ) %>%
   select(classcode,data) %>%
-  unnest()
-
-seen_data <- a %>%
-  filter(any_seen== T) %>%
-  # mutate(targeted = (targeted == 'Targeted') %>% as.numeric()) %>%
-  left_join(ci_catches, by = c('classcode', 'year')) %>%
+  unnest() %>% 
+  left_join(annual_regional_conditions, by = c('year','region')) %>% 
+    left_join(enso, by = 'year') %>%
+  left_join(pdo, by = 'year') %>%
+  left_join(ci_catches, by = c('classcode', 'year')) %>% 
+    mutate(targeted = (targeted == 'Targeted') %>% as.numeric()) %>%
   mutate(catch = ifelse(is.na(catch), 0, catch),
          post_mpa = year >=2003)
 
 
-test <- lme4::lmer(log_density ~  targeted + post_mpa +targeted:factor_year + region + mean_vis + linf
-             mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + (1|factor_year) -1, data = seen_data)
 
-dids <- test %>%
+seen_data <- a %>%
+  filter(any_seen== T)
+
+seeing_data <- a
+
+
+
+# test <- lme4::lmer(log_density ~  targeted*factor_year + site_side + mean_vis +  loo + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch, data = seen_data)
+
+seen_model <- lme4::lmer(log_density ~  targeted + post_mpa + targeted:factor_year + site_side + mean_vis + mean_canopy +  (1|classcode) + (1 | factor_year) + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch, data = seen_data)
+
+dids <- seen_model %>%
   broom::tidy() %>%
   filter(str_detect(term,'targeted:')) %>%
   mutate(year = str_replace_all(term,'\\D','') %>% as.numeric())
@@ -38,33 +47,24 @@ dids <- test %>%
 
 dids %>%
   ggplot() +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 2003), linetype = 1, color = 'red') +
+
   geom_pointrange(aes(x = year, y = estimate, ymin =  estimate - 1.96*std.error,
                       ymax = estimate + 1.96*std.error))
 
 
-summary(test)
+# seeing model
 
 ```
 
 Try again for seeing data
+
 ```{r}
 
-seeing_data <- a %>%
-  mutate(targeted = (targeted == 'Targeted') %>% as.numeric()) %>%
-  left_join(enso, by = 'year') %>%
-  left_join(pdo, by = 'year') %>%
-  left_join(ci_catches, by = c('classcode', 'year')) %>%
-  mutate(catch = ifelse(is.na(catch), 0, catch),
-         post_mpa = year >=2003)
+seeing_model <- lme4::lmer(any_seen ~  targeted + post_mpa + targeted:factor_year + site_side + mean_vis + mean_canopy +  (1|classcode) + (1 | factor_year) + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch, data = seeing_data)
 
-
-
-
-test2 <- glm(any_seen ~  targeted + post_mpa +targeted:factor_year + region + mean_vis + factor_month +
-             trunc_observer + cumulative_n_obs + level + surge  +
-             mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo , data = seeing_data, family = 'binomial')
-
-dids <- test2 %>%
+dids <- seeing_model %>%
   broom::tidy() %>%
   filter(str_detect(term,'targeted:')) %>%
   mutate(year = str_replace_all(term,'\\D','') %>% as.numeric())
@@ -72,8 +72,70 @@ dids <- test2 %>%
 
 dids %>%
   ggplot() +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 2003), linetype = 1, color = 'red') +
+
   geom_pointrange(aes(x = year, y = estimate, ymin =  estimate - 1.96*std.error,
                       ymax = estimate + 1.96*std.error))
+
+```
+
+
+```{r}
+
+seen_aug <- broom::augment(seen_model)
+
+
+seen_factors <- colnames(seen_aug)[map_lgl(seen_aug, ~class(.x) == 'factor' |class(.x) == 'character')]
+
+top_factors <- seen_aug %>%
+  group_by_at(vars(one_of(seen_factors[seen_factors != 'factor_year']))) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  ungroup() %>%
+  slice(1) %>%
+  select(-n)
+
+seen_series <- seen_aug %>%
+  purrrlyr::dmap_if(is.character, as.factor)
+
+factor_names <- colnames(top_factors)
+
+for (i in factor_names){ # filter down to the most common thing
+
+  where_seen <- (seen_series[,i] == (top_factors[,i][[1]]))
+
+  seen_series <- seen_series[where_seen,]
+
+}
+
+seen_series <- seen_series %>%
+  slice(1)
+
+if (class(seen_model) == 'lmerMod'){
+
+  num_original_years <- seen_model@flist$factor_year %>% unique()
+
+  seen_series <- seen_series[rep(1, length(num_original_years)),] #replicate the number of years
+
+  seen_series$factor_year <- levels(num_original_years) %>% as.factor()
+
+} else {
+num_original_years <- seen_model$xlevels$factor_year
+
+seen_series <- seen_series[rep(1, length(num_original_years)),] #replicate the number of years
+
+seen_series$factor_year <- seen_model$xlevels$factor_year %>% as.factor()
+}
+
+
+seen_hat <- predict(seen_model, newdata = seen_series)
+
+seeing_hat <- predict(seeing_model, newdata = seen_series, type = 
+                        'response')
+
+seeing_hat * did_terms
+
 
 ```
 

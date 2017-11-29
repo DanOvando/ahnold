@@ -23,7 +23,7 @@ library(scales)
 library(stringr)
 extrafont::loadfonts()
 
-demons::load_functions('functions')
+demons::load_functions('../functions')
 
 run_name <- 'Working'
 
@@ -32,10 +32,6 @@ run_dir <- file.path('../results', run_name)
 summary_theme <- hrbrthemes::theme_ipsum(base_size = 12)
 
 theme_set(summary_theme)
-
-check_ahnold(length_to_density_data = length_to_density_data,
-             abundance_indices = abundance_indices, 
-             did_models = did_models)
 
 ```
 
@@ -53,6 +49,10 @@ life_history_data <-
   mutate(classcode = tolower(classcode)) %>%
   magrittr::set_colnames(., tolower(colnames(.)))
 
+
+check_ahnold(length_to_density_data = length_to_density_data,
+             abundance_indices = abundance_indices, 
+             did_models = did_models)
 
 ```
 
@@ -357,13 +357,20 @@ eg_run$data[[1]] %>%
               group_by(targeted) %>% 
               summarise(tc = sum(catch))
 
-a <- eg_run$data[[1]] %>% 
-  group_by(classcode) %>% 
-  arrange(classcode,year) %>% 
-  mutate(lag1_catch = lag(catch,1),
-         lag2_catch = lag(catch,2)) %>% 
+annual_catches <- eg_run$data[[1]] %>% 
+  group_by(year) %>% 
+  summarise(annual_catch = sum(catch, na.rm = T)) %>% 
   ungroup() %>% 
+  mutate(lag1_catch = lag(annual_catch,1),
+         lag2_catch = lag(annual_catch,2))
+
+
+a <- eg_run$data[[1]] %>% 
+  ungroup() %>% 
+  select(abundance_index, targeted, year) %>% 
+left_join(annual_catches, by = 'year') %>% 
   select(abundance_index, targeted, contains('catch')) %>% 
+  na.omit() %>% 
   nest(-targeted) %>% 
   mutate(correlation = map(data,foo)) %>% 
   select(targeted,correlation) %>% 

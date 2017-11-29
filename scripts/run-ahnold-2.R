@@ -777,6 +777,7 @@ abundance_models <- length_to_density_models %>%
   filter(classcode %in% well_observed_species$classcode) %>%
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
   mutate(data = map2(data,classcode, filterfoo, min_year = min_year,
+                     min_seen_years = 14,
                     filter_level = quo(classcode))) %>% # filter out things
   mutate(dim_data = map_dbl(data, nrow)) %>%
   filter(dim_data > 0)
