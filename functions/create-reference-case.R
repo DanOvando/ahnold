@@ -26,7 +26,6 @@ for (i in factor_names){ # filter down to the most common thing
 seen_series <- seen_series %>%
   slice(1)
 
-class(seen_model)
 if (class(seen_model) == 'lmerMod'){
 
   num_original_years <- seen_model@flist$factor_year %>% unique()

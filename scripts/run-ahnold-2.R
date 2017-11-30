@@ -646,7 +646,6 @@ consistent_regions <- length_to_density_data %>%
 
 raw_length_covars <-
   paste(c(
-    'region',
     'zone',
     'site_side',
     'level',
@@ -661,7 +660,6 @@ raw_length_covars <-
 
 prob_raw_length_covars <-
   paste(c(
-    'region',
     'zone',
     'site_side',
     'level',
@@ -693,11 +691,11 @@ prob_kfm_length_covars <-
 #         collapse = '+')
 
 supplied_density_covars <-
-  paste(c('region','mean_kelp', 'mean_vis','site_side'),
+  paste(c('mean_kelp', 'mean_vis','site_side'),
         collapse = '+')
 
 prob_supplied_density_covars <-
-  paste(c('region','mean_kelp', 'mean_vis','site_side'),
+  paste(c('mean_kelp', 'mean_vis','site_side'),
         collapse = '+')
 
 
@@ -874,7 +872,6 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
 safely_fit_fish <- safely(fit_fish)
 
 abundance_models <- abundance_models %>%
-  # filter(data_source == 'kfm_density') %>%
     mutate(
     seen_model = pmap(
       list(data = data,
@@ -915,7 +912,10 @@ abundance_models <- abundance_models %>%
 abundance_models <- abundance_models %>%
   mutate(no_error = map2_lgl(seeing_error, seen_error, ~ is.null(.x) &
                                is.null(.y))) %>%
-  filter(no_error == T)
+  filter(no_error == T ) %>%
+  mutate(  seen_has_degrees = map_lgl(seen_model, ~.x$df.residual > 0),
+           seeing_has_degrees = map_lgl(seeing_model, ~.x$df.residual > 0)) %>%
+  filter(seen_has_degrees == T,seeing_has_degrees == T)
 
 abundance_models <- abundance_models %>%
   mutate(
@@ -927,7 +927,7 @@ abundance_models <- abundance_models %>%
 
 add_covars_foo <- function(data){
 
-  if(is.null(data$region)){data$region <- 'somewhere'}
+  if(is.null(data$region)){data$region <- 'SCI'}
 
   if(is.null(data$eventual_mpa)){data$eventual_mpa <- TRUE}
 
@@ -953,6 +953,8 @@ abundance_models <- abundance_models %>%
       pop_structure = population_structure
     ),
     create_abundance_index))
+
+
 
 abundance_plot_foo <- function(data,pop_structure){
 
@@ -1042,6 +1044,20 @@ pwalk(
   run_dir = run_dir
 )
 
+
+for (i in 1:nrow(abundance_models)){
+print(i)
+  save_foo(species = abundance_models$commonname[[i]],
+           pop_structure = abundance_models$population_structure[[i]],
+           pop_filtering = abundance_models$population_filtering[[i]],
+           data_source = abundance_models$data_source[[i]],
+           abundance_plot = abundance_models$abundance_plot[[i]],
+           run_dir =  run_dir)
+
+
+}
+
+abundance_models$abundance_index[[222]]
 
 # prepare abundance indicies assess standardization --------------------------------------------------
 
