@@ -40,10 +40,10 @@ fit_fish <-
 
       num_levels <- length(unique(data$region))
 
-      pop_term <- 'factor_year*region'
+      pop_term <- 'factor_year:region'
 
       if (num_levels > 1) {
-        pop_term <- 'factor_year*region'
+        pop_term <- 'factor_year:region'
       } else {
         pop_term <- 'factor_year'
       }
@@ -64,10 +64,10 @@ fit_fish <-
 
       num_levels <- length(unique(data$eventual_mpa))
 
-      pop_term <- 'factor_year*eventual_mpa'
+      pop_term <- 'factor_year:eventual_mpa'
 
       if (num_levels > 1) {
-        pop_term <- '(factor_year*eventual_mpa)'
+        pop_term <- '(factor_year:eventual_mpa)'
       } else {
         pop_term <- 'factor_year'
       }
@@ -82,7 +82,6 @@ fit_fish <-
       }
     }
     ind_vars <- paste(c(pop_term, ind_covars), collapse = '+')
-
     reg_fmla <- paste(dep_var, ind_vars, sep = '~') %>% as.formula()
 
     if (model_type == 'gam') {

@@ -62,14 +62,16 @@ create_abundance_index <-
         group_by(region) %>%
         summarise(smearing_term = mean(exp(.resid)))
 
+      # regions <- seen_aug$region %>% unique()
+
       seen_series <- seen_aug %>%
         nest(-region) %>%
+        # mutate(data = map2(data,region, ~.x %>% mutate(region = factor(.y, levels = regions)), regions = regions)) %>%
         mutate(seen_series = map(data, create_reference_case, seen_model = seen_model)) %>%
         select(-data) %>%
         unnest() %>%
         left_join(regional_smear, by = 'region') %>%
         ungroup()
-
 
     }
     if (pop_structure == 'mpa-pops') {
