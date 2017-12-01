@@ -815,7 +815,9 @@ if (run_vast == T) {
 
 
   vast_abundance <- abundance_models %>%
-    # select(classcode, data_source, data, ) %>%
+    filter(data_source == 'length_to_density',
+           population_structure == 'one-pop',
+           population_filtering == 'all') %>%
     mutate(survey_region = 'california_current',
            n_x = num_knots) %>%
     mutate(
@@ -841,7 +843,10 @@ if (run_vast == T) {
       arg,
       run_dir = run_dir,
       nstart = 100,
-      obs_model = c(2, 0)
+      obs_model = c(2, 0),
+      catchability_variables_names = c('mean_vis','surge','factor_month','zone','level'),
+      vessel = 0,
+      vessel_year = 1
     ))
 
   vast_abundance <- vast_abundance %>%
@@ -852,9 +857,11 @@ if (run_vast == T) {
   load(file = paste0(run_dir, '/vast_abundance.Rdata'))
 }
 
-
 vast_abundance <- vast_abundance %>%
-  mutate(vast_index = map(vast_results, 'result'))
+  mutate(vast_index = map(vast_results, 'result')) %>%
+  mutate(no_vast_error = map_lgl(vast_error, is.null)) %>%
+  filter(no_vast_error)
+
 
 species_comp_by_dbase_plot <- abundance_models %>%
   ggplot(aes(commonname, dim_data, fill = data_source)) +
@@ -1044,21 +1051,6 @@ pwalk(
   run_dir = run_dir
 )
 
-
-for (i in 1:nrow(abundance_models)){
-print(i)
-  save_foo(species = abundance_models$commonname[[i]],
-           pop_structure = abundance_models$population_structure[[i]],
-           pop_filtering = abundance_models$population_filtering[[i]],
-           data_source = abundance_models$data_source[[i]],
-           abundance_plot = abundance_models$abundance_plot[[i]],
-           run_dir =  run_dir)
-
-
-}
-
-abundance_models$abundance_index[[222]]
-
 # prepare abundance indicies assess standardization --------------------------------------------------
 
 
@@ -1186,12 +1178,12 @@ annual_regional_conditions <- conditions_data %>%
   summarise(
     mean_annual_temp = mean(mean_temp, na.rm = T),
     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
-  ) %>%
-  gather(variable, value,-year,-region) %>%
-  group_by(variable) %>%
-  mutate(value = zoo::na.approx(value),
-         value = center_scale(value)) %>%
-  spread(variable, value)
+  ) #%>%
+  # gather(variable, value,-year,-region) %>%
+  # group_by(variable) %>%
+  # mutate(value = zoo::na.approx(value),
+  #        value = center_scale(value)) %>%
+  # spread(variable, value)
 
 annual_conditions <- conditions_data %>%
   left_join(site_data %>% select(site, region), by = 'site') %>%
@@ -1199,19 +1191,20 @@ annual_conditions <- conditions_data %>%
   summarise(
     mean_annual_temp = mean(mean_temp, na.rm = T),
     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
-  ) %>%
-  gather(variable, value,-year) %>%
-  group_by(variable) %>%
-  mutate(value = zoo::na.approx(value),
-         value = center_scale(value)) %>%
-  spread(variable, value)
+  ) #%>%
+  # gather(variable, value,-year) %>%
+  # group_by(variable) %>%
+  # mutate(value = zoo::na.approx(value),
+  #        value = center_scale(value)) %>%
+  # spread(variable, value)
 
 
 did_data <- abundance_indices %>%
   select(classcode, population_filtering, population_structure, data_source, contains('_index')) %>%
   select(-abundance_index) %>%
   gather('abundance_source','abundance_index',contains('_index')) %>%
-  filter(!(abundance_source == 'vast_abundance_index' & data_source == 'kfm_density')) %>%
+  mutate(abundance_index_passed = !map_lgl(abundance_index, is.null)) %>%
+  filter(abundance_index_passed == T) %>%
   unnest() %>%
   left_join(life_history_data, by = 'classcode') %>%
   left_join(enso, by = 'year') %>%
@@ -1221,7 +1214,8 @@ did_data <- abundance_indices %>%
   mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
   mutate(targeted = as.numeric(targeted == 'Targeted'),
          post_mpa = as.numeric(year >= 2003)) %>%
-  mutate(abundance_index = abundance_index + 1e-6)
+  mutate(abundance_index = abundance_index + 1e-6) %>%
+  filter(year < 2008)
 
 
 annual_conditions_foo <- function(population_structure, data, abundance_source, annual_conditions,annual_regional_conditions){
@@ -1245,7 +1239,8 @@ did_data <- did_data %>%
                           abundance_source = abundance_source), annual_conditions_foo, annual_conditions,
                      annual_regional_conditions)) %>%
            unnest() %>%
-  filter(year <=2013)
+  mutate(temp_deviation = abs(mean_annual_temp - temperature))
+
 
 
 compare_annual_abundance <- function(data){
@@ -1349,23 +1344,33 @@ did_data <- did_data %>%
 # fit DiD estimator on abundance indicies ---------------------------------
 
 
+
 did_reg <-
   paste0('log(abundance_index) ~', paste(
-    c(
-      'targeted',
-      'mean_annual_kelp',
-      '(1|factor_year)',
-      'mean_pdo',
-      # 'lag1_pdo',
-      # 'lag2_pdo',
-      '((1 + mean_annual_temp)|classcode)',
-      colnames(did_terms)),
+    c(colnames(did_terms)),
     collapse = '+'
   ))
 
+# did_reg <-
+#   paste0('log(abundance_index) ~', paste(
+#     c(
+#       'targeted',
+#       'mean_annual_kelp',
+#       '(1|factor_year)',
+#       'mean_pdo',
+#       # 'lag1_pdo',
+#       # 'lag2_pdo',
+#       '(1 + temp_deviation|classcode)',
+#       colnames(did_terms)),
+#     collapse = '+'
+#   ))
+
 did_models <- did_data %>%
   mutate(did_reg = did_reg) %>%
-  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x %>% mutate(factor_year = factor(year)))))
+  mutate(did_model = map2(data, did_reg, ~ lme4::glmer(.y, data = .x %>% mutate(factor_year = factor(
+    year
+  )))))
+
 } # close fit_did
 
 

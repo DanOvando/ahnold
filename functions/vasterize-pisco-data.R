@@ -35,51 +35,80 @@
 #' @export
 #'
 vasterize_pisco_data <- function(raw_data,
-                            region = 'California_current',
-                            run_dir = '../results/',
-                            version = "VAST_v2_4_0",
-                            method = 'Mesh',
-                            strata = "All_areas",
-                            n_x = 1000,
-                            randomseed = 1,
-                            nstart = 100,
-                            iter.max = 1e3,
-                            omega1 = 1,
-                            epsilon1 = 1,
-                            omega2 = 1,
-                            epsilon2 = 1,
-                            beta1 = 0,
-                            beta2 = 0,
-                            vessel = 0,
-                            vessel_year = 0,
-                            obs_model = c(2, 0),
-                            sd_site_density = 0,
-                            sd_site_logdensity = 0,
-                            calculate_range = 1,
-                            calculate_evenness = 0,
-                            calculate_effective_area = 1,
-                            calculate_cov_se = 0,
-                            calculate_synchrony = 0,
-                            calculate_coherence = 0) {
+                                 region = 'California_current',
+                                 run_dir = '../results/',
+                                 version = "VAST_v2_4_0",
+                                 method = 'Mesh',
+                                 strata = "All_areas",
+                                 n_x = 1000,
+                                 randomseed = 1,
+                                 nstart = 100,
+                                 iter.max = 1e3,
+                                 omega1 = 1,
+                                 epsilon1 = 1,
+                                 omega2 = 1,
+                                 epsilon2 = 1,
+                                 beta1 = 0,
+                                 beta2 = 0,
+                                 vessel = 0,
+                                 vessel_year = 0,
+                                 obs_model = c(2, 0),
+                                 sd_site_density = 0,
+                                 sd_site_logdensity = 0,
+                                 calculate_range = 1,
+                                 calculate_evenness = 0,
+                                 calculate_effective_area = 1,
+                                 calculate_cov_se = 0,
+                                 calculate_synchrony = 0,
+                                 calculate_coherence = 0,
+                                 catchability_variables_names = c(
+                                   'zone',
+                                   'level',
+                                   'mean_vis',
+                                   'surge',
+                                   'cumulative_n_obs',
+                                   'cumulative_n_obs_2',
+                                   'factor_month'
+                                 ),
+                                 constant_density_variables_names = NULL ,
+                                 time_varying_density_variables_names = NULL,
+                                 core_vast_variable_names = c('year',
+                                                              'lat',
+                                                              'lon',
+                                                              'vessel',
+                                                              'areaswept_km2',
+                                                              'catch_kg',
+                                                              'spp')) {
+  if (length(catchability_variables_names) > 0) {
+    catchability_variables <- raw_data %>%
+      dplyr::select(catchability_variables_names) %>%
+      demons::spread_factors(drop_one = T) %>%
+      as.matrix()
+  }
+
+  if (length(constant_density_variables_names) > 0) {
+    constant_density_variables <- raw_data %>%
+      dplyr::select(constant_density_variables_names) %>%
+      demons::spread_factors(drop_one = T) %>%
+      as.matrix()
+
+  }
+
+  if (length(time_varying_density_variables_names) > 0) {
+    time_varying_density_variables <- raw_data %>%
+      dplyr::select(time_varying_density_variables_names) %>%
+      demons::spread_factors(drop_one = T) %>%
+      as.matrix()
+  }
 
 
-  # observer_effects <- raw_data %>%
-  #   select(vessel)  %>%
-  #   mutate(aaaa = 1, index = 1:nrow(.)) %>%
-  #   spread(vessel, aaaa, fill = 0) %>%
-  #   select(-1,-2)
-  #
-  # obs_covariates <- observer_effects %>%
-  #   mutate(mean_vis = raw_data$mean_vis) %>%
-  #   as.matrix()
-
-  obs_covariates <- data_frame(mean_vis = raw_data$mean_vis) %>%
-    as.matrix()
-
-  raw_data <- as.data.frame(raw_data) %>%
-    select(-mean_vis) %>%
+  raw_data <- raw_data %>%
+    dplyr::select(core_vast_variable_names) %>%
     mutate(vessel = as.factor(vessel),
-           spp = as.factor(spp))
+           spp = as.factor(spp)) %>%
+    as.data.frame()
+
+
   years <- min(raw_data$year):max(raw_data$year)
 
   Kmeans_Config = list("randomseed" = randomseed,
@@ -104,6 +133,8 @@ vasterize_pisco_data <- function(raw_data,
 
   overdispersion_config = c("vessel" = vessel, "vessel_year" = vessel_year)
 
+  vessel_config = c("vessel" = vessel, "vessel_year" = vessel_year)
+
   options =  c(
     "SD_site_density" = sd_site_density,
     "SD_site_logdensity" = sd_site_logdensity,
@@ -115,7 +146,9 @@ vasterize_pisco_data <- function(raw_data,
     'Calculate_Coherence' = calculate_coherence
   )
 
-  vast_file <-  paste0(getwd(),'/',run_dir, 'VAST_output')
+  # vast_file <-  paste0(getwd(),'/',run_dir, 'VAST_output')
+
+  vast_file <-  file.path(getwd(), run_dir, 'VAST_output')
 
   if (dir.exists(vast_file) == F) {
     dir.create(vast_file)
@@ -125,7 +158,6 @@ vasterize_pisco_data <- function(raw_data,
 
   extrapolation_list <-
     SpatialDeltaGLMM::Prepare_Extrapolation_Data_Fn(Region = region, strata.limits = strata_limits)
-
 
   spatial_list <-  SpatialDeltaGLMM::Spatial_Information_Fn(
     n_x = n_x,
@@ -140,13 +172,26 @@ vasterize_pisco_data <- function(raw_data,
     Save_Results = FALSE
   )
 
-
   raw_data <-  cbind(raw_data, "knot_i" = spatial_list$knot_i)
+
+  # Make X_xj, aka constant density variables, where knot is x and j is variable
+
+  if (length(constant_density_variables_names) > 0) {
+    constant_density_variables <- constant_density_variables %>%
+      as_data_frame() %>%
+      cbind("knot_x" = spatial_list$knot_i)  %>%
+      gather(variable, value, -knot_x) %>%
+      group_by(knot_x, variable) %>%
+      summarise(mean_value = mean(value)) %>%
+      spread(variable, mean_value) %>%
+      as.matrix()
+  }
+
 
   tmb_data <-  VAST::Data_Fn(
     "Version" = version,
     "FieldConfig" = FieldConfig,
-    "OverdispersionConfig" = overdispersion_config,
+    "OverdispersionConfig" = vessel_config,
     "RhoConfig" = RhoConfig,
     "ObsModel" = obs_model,
     "c_i" = as.numeric(raw_data[, 'spp']) - 1,
@@ -160,8 +205,9 @@ vasterize_pisco_data <- function(raw_data,
     "GridList" = spatial_list$GridList,
     "Method" = spatial_list$Method,
     "Options" = options,
-    'Q_ik' = obs_covariates
+    'Q_ik' = catchability_variables
   )
+
   tmb_list <-  VAST::Build_TMB_Fn(
     "TmbData" = tmb_data,
     "RunDir" = vast_file,
@@ -219,9 +265,11 @@ vasterize_pisco_data <- function(raw_data,
   spatial_densities <- report$D_xcy %>%
     reshape2::melt() %>%
     as_data_frame() %>%
-    set_names(c('knot','species','year','density')) %>%
-    mutate(species = factor(species, labels = unique(raw_data$spp) %>% as.character()) %>% as.character(),
-           year = factor(year, labels = years) %>% as.character() %>% as.numeric()) %>%
+    set_names(c('knot', 'species', 'year', 'density')) %>%
+    mutate(
+      species = factor(species, labels = unique(raw_data$spp) %>% as.character()) %>% as.character(),
+      year = factor(year, labels = years) %>% as.character() %>% as.numeric()
+    ) %>%
     left_join(spatial_list$loc_x_lat_long, by = 'knot')
 
   year_set <- years
@@ -246,7 +294,7 @@ vasterize_pisco_data <- function(raw_data,
 
 
   vast_index <- index$Table %>%
-    select(Year,Unit, Estimate_metric_tons) %>%
+    select(Year, Unit, Estimate_metric_tons) %>%
     rename(abundance = Estimate_metric_tons) %>%
     mutate(source = 'vast')
 
