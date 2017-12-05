@@ -1830,6 +1830,8 @@ While the choice of what data and what pop don't matter all that much. However, 
 
 the standardization really seems to like extreme spikey behavior, which I'm suspecting has something to do with the hurdle part of the model. gopher rockfish would be a good diagnostic case for looking into that. Brown rockfish is another pretty good example. 
 
+
+
 Really spiky as well, would be good to look into hierarchichal or GAM approaches here to see if that helps. 
 
 Pile perch is another good one, with very spikey abundance estimates. Should just browser in on a few of these and test out a few different approaches, brown rocksih is a really good one though. Rubberlip as well
@@ -1885,7 +1887,7 @@ I'd like to test out a Bayesian state-space approach, on the simplest case possi
 Let's doa  bit of testing that idea, just to make sure you know how to use STAN correctly. GOod excuse to get better at it anyway. 
 
 
-# 2017-10-30 -------
+# 2017-10-30 
 
 Might need to think about doing things at the monthly level and controlling for month, there is a shift in the months sampled and there is some evidence that it leads to to slightly different densities, see below if you include month in the length_to_density data
 
@@ -1923,6 +1925,57 @@ v %>%
   geom_col()
 
 ```
+
+
+# Stanifying DiD model
+
+So after some thought, it seems like STAN is a much better fit for running the DiD part of the model, allowing you to much more efficiently make the regression hierarchichal in nature. The question then is how to actually do that. The point is not to poke endlessly at various model configurations but to come up with some distinct hypotheses to take a look at. 
+
+The clearest ones that you already have are what the "DiD" estimator actually is: time, generations protected, recruits protected, etc. 
+
+So, it seems like one class of model to run is an absolute bare-bones DiD estimator with these things in there. treatment, control, interaction. That model should in theory control for time-invariant differences. Take two cities that want to see the affect of a policy on health outcomes, one treated one untreated. If you just look at the pre-post for the treated city, any observed changes might be do to broader regional trends. If you look at the post difference between the treated and untreated the difference might be a characteristic of the city itself (wealthier in the first place). So, you look at the change in the difference between the two cities, and that nocks out both the trend and the inherent differences. So, takes care of omittied variable bias such as "city wealth", assuming that city wealth doesn't change over time. i.e. it doesn't help you if the control city gets magically richer after the control period. So what's the point of including things specifically? Relaxes that specific assumption for that one trait, but you'll never control for everything, so knocks out things that you can't control for under the assumption that they stay constant. So, let's think about something like ENSO. ENSO affects densities, as does the MPA. If you just compared densities pre and post MPA,  the affect of ENSO might be screwing things up. So, if we take the assumption that ENSO affects fished and unfished species equally, then the unfished species serves as a trajectory control for where the fished species would have been given ENSO but without the MPAs. So what's the logic of explicitly controlling for ENSO? Looking back at mostly harmless page 236 provides an example. They just do pre and post, and also include adult employment. So, under the assumption of the DiD without including adult employment, both treatment and control cities have the same trend in adult employment, and so it's knocked out. Suppose though that the have marginally different trends in adult employment, including it in the model now accounts for that. Now, there's a problem with including covariates that also respond to the treatment, which clearly isn't a problem for environmental drivers.But, let's ONE MORE DAMN TIME think through the logical of regional-level drivers like ENSO. The goal is parallel trends in species. If you had controls in different places, ENSO makes sense. But, since ENSO is the same every year for every species in the database, then it doens't actually do anything for you here that the fixed effects don't do. In other words, if your goal is to compare the difference in each year between the fished and unfished species, and the fished and unfished species both internalize ENSO the same, then there should be no usefulness of explicitly incorporating ENSO (and in fact it won't work in a fixed effects framework). 
+
+So, including annual level drivers is only useful for two reasons. The first is from a hierarchical modeling framework, in that it helps you obtain better estimates of the year effects. This is similar to the county-wide radon effect thing from Gelman. Assuming you have repeated measurements per county, then the radon essentially serves as a prior on the county level effect (higher radon = higher health effects), so helps pull the estimate of a specific county up. So, in the same way here. If on average high ENSO makes density higher, then including ENSO in a hierarchical model would help improve estimates of the year effects in a given year. 
+
+Or, in your case, it helps improve estimates of the fished and unfished year terms. 
+
+The other reason that it's potentially useful is if ENSO/other environmental drivers have different affects on different species. This is somewhat analogous to the region-specific trends from mostly harmless 238. 
+
+That's more similar to how you're doing things now, where you allow the effects of annual environmental drivers to vary by species. 
+
+What about including targeted? If you include species specific intercepts, then targeted should just work to help refine those intercepts a little bit. Those are the big drivers that you need to think about then....
+
+So, let's write out hypotheses
+
+## Perfect DiD
+
+This is a useful one to run just by comparison. So in this one, you assume that simple DiD is perfectly satisfied, and so you just fit a model of 
+
+targeted + post_mpa + targeted:post_mpa (double check that this works the same as the manual interaction)
+
+This assumes that environment affects the fished and unfished species the same and there are no divergent trends in other variables for these species
+
+## Effects evolve
+
+So now, rather than assuming a pre and post, you want to allow the DiD estimator to evolve over time. So now it's
+
+targeted + (1|factor_year:targeted)
+
+This is mostly equivalent to the above, but now instead of just controlling for treated not treated pre and post, you control for treated-not-treated over time. So, in a perfect world, suppose that the evolution of the common trend is just a little lumpy, takes time to evolve, etc. If the policy effect was 0 for the first few years then huge, the net measured effect would be small, but you want to see that deviation. So, by estimating fixed effects for each year by targeted/not targeted, the year:targeted interaction should be the divergence between the fished and unfished species. So what we'd like to see is that given an intercept for targeted species, we get significant year effects for the unfished species and intercept, but zero effect for the targeted species in the early years since those terms should be unfished + intercept. But, in the later years, the fished term should start to be important, and so you'll see a divergence. 
+
+Now the problem with that. AHA, no you're not doing that right. At the moment, you're not really doing the DiD part of all this if you do it as factor_year:targeted. The problem with how you have it now, dumbass, is that the unfished years are always off for the fished species and vice versa: this is basically the same way you were getting regional population trends. THAT'S NOT WHAT YOU WANT. what you want is year fixed effects that are turn on no matter what, and then an added bonus effect if you're a fished species in that year. So, how do you do that. 
+
+(1 + targeted|factor_year)
+
+That gives a varying intercept for every year, and a varying "slope" for targeted in each factor year. Think about it like it was the environmental stuff. You were saying that every species has a intercept and a different effect of ENSO. This is saying every year has an intercept and a different effect of targeted. So, being a targeted species in year 2000 should have no affect beyong the mean abundance trend and the targeted effect, but should take on some additional effect over time. 
+
+## Environment fine tunes year intercept
+
+environment goes in as fixed effects
+
+## Environment affects different species differently
+
+environment goes in as random effects of classcode
 
 
 

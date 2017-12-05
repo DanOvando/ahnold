@@ -59,6 +59,7 @@ small_num <-  0 # no idea
 
 use_mpa_site_effects <- F # no idea
 
+use_cfdw_fished <-  F
 # load data ---------------------------------------------------------------
 
 length_data <- read_csv('data/UCSB_FISH raw thru 2013.csv') %>%
@@ -163,6 +164,16 @@ life_history_data <- life_history_data %>%
 
 #Convert to fished species things with CDFW catches
 
+caselle_fished_species <- read_csv(file = file.path('data', 'caselle-2015-fished-species-list.csv')) %>%
+  mutate(commonname = tolower(commonname),
+         mod_commonname = tolower(mod_commonname)) %>%
+  select(mod_commonname, caselle_targeted)
+
+# make sure targeted list matches that from Caselle 2015
+life_history_data <- life_history_data %>%
+  left_join(caselle_fished_species, by = c('commonname' = 'mod_commonname')) %>%
+  mutate(targeted = ifelse(is.na(caselle_targeted),targeted, caselle_targeted))
+
 ci_catches <-
   read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
   summarise(catch = sum(pounds_caught, na.rm = T))
@@ -170,6 +181,8 @@ ci_catches <-
 fished_species <-
   data_frame(classcode = unique(ci_catches$classcode),
              fished = 1)
+
+if (use_cfdw_fished == T){
 
 life_history_data <- life_history_data %>%
   left_join(fished_species, by = 'classcode') %>%
@@ -180,6 +193,7 @@ life_history_data <- life_history_data %>%
     targeted
   )) %>%
   select(-fished)
+}
 
 # add life history data into length data
 length_data <- length_data %>%
@@ -204,13 +218,18 @@ kfm_data <- read_csv('data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
 kfm_locations <- read_csv('data/kfm_data/SBCMBON_site_geolocation_20170520.csv')
 
 conditions_data <- length_data %>%
-  group_by(site, side, year) %>%
+  group_by(site, side, classcode, year) %>%
   summarise(
     mean_temp = mean(temp, na.rm = T),
     mean_kelp = mean(pctcnpy, na.rm = T),
     mean_vis = mean(vis, na.rm = T)
-  )
-
+  ) %>%
+  group_by(year) %>%
+  mutate(mean_temp = ifelse(is.na(mean_temp), mean(mean_temp, na.rm = T), mean_temp),
+         mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)) %>%
+  ungroup() %>%
+  mutate(mean_temp = ifelse(is.na(mean_temp), mean(mean_temp, na.rm = T), mean_temp),
+         mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp))
 
 observer_experience <- length_data %>%
   group_by(year,month,observer) %>%
@@ -321,7 +340,7 @@ if (file.exists('data/pdo.csv')) {
 reg_data <- density_data %>%
   select(biomass, site, side, site_side, year, classcode) %>%
   ungroup() %>%
-  left_join(conditions_data, by = c('site', 'side', 'year')) %>%
+  left_join(conditions_data, by = c('site', 'side', 'year','classcode')) %>%
   left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
                                          commonname),
             by = 'classcode') %>%
@@ -1174,7 +1193,7 @@ save(file = paste0(run_dir, '/abundance_indices.Rdata'),
 
 annual_regional_conditions <- conditions_data %>%
   left_join(site_data %>% select(site, region), by = 'site') %>%
-  group_by(region, year) %>%
+  group_by(region, year, classcode) %>%
   summarise(
     mean_annual_temp = mean(mean_temp, na.rm = T),
     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
@@ -1187,7 +1206,7 @@ annual_regional_conditions <- conditions_data %>%
 
 annual_conditions <- conditions_data %>%
   left_join(site_data %>% select(site, region), by = 'site') %>%
-  group_by(year) %>%
+  group_by(year, classcode) %>%
   summarise(
     mean_annual_temp = mean(mean_temp, na.rm = T),
     mean_annual_kelp = mean(mean_kelp, na.rm  = T)
@@ -1222,11 +1241,11 @@ annual_conditions_foo <- function(population_structure, data, abundance_source, 
 
   if (population_structure == 'regional-pops' &  abundance_source != 'vast_abundance_index'){
     data <- data %>%
-      left_join(annual_regional_conditions, by = c('year','population_level' = 'region'))
+      left_join(annual_regional_conditions, by = c('year','population_level' = 'region', 'classcode'))
   } else{
 
     data <- data %>%
-      left_join(annual_conditions, by = 'year')
+      left_join(annual_conditions, by = c('year','classcode'))
   }
 
 return(data)

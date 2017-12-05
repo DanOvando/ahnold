@@ -37,7 +37,7 @@ seeing_data <- a
 
 # test <- lme4::lmer(log_density ~  targeted*factor_year + site_side + mean_vis +  loo + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch, data = seen_data)
 
-seen_model <- lme4::lmer(log_density ~  targeted + post_mpa + targeted:factor_year + site_side + mean_vis + mean_canopy +  (1|classcode) + (1 | factor_year) + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch, data = seen_data)
+seen_model <- rstanarm::stan_glmer('log_density ~  targeted + site_side + mean_vis + mean_canopy +  (1|classcode) + (1 | factor_year:targeted) + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch', data = seen_data, chains = 1)
 
 dids <- seen_model %>%
   broom::tidy() %>%
