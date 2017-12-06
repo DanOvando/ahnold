@@ -1978,10 +1978,32 @@ environment goes in as fixed effects
 environment goes in as random effects of classcode
 
 
+## generation time did
+
+So how do you actually want to structure the generation DiD, given what you have here....
+
+The simplest scenario is once again 
+
+targeted + at_least_one_generation_protected +  targeted:at_least_one_generation_protected
+
+What does that look like if you try and compare it over time....
+
+The counterfactual is an unfished species that has had N generations protected... So to get that you could do
 
 
+(1 + targeted)|generations_protected
 
+In that there is some baseline effect across all species of a given number of generations protected... but that affect may change for targeted species? The slight problem with this is that I'm not sure the algebra works out since that implies different "time" units... I guess the assumption is that the population trends operate at the time scale of generations, not years, in order to get to parallel trends, and so this is really a sort of transformation. 
 
+ Before you go crazy here, I really want to test whether this idea works. 
+ 
+ # 2016-12-5 Post validation update
+ 
+ OK, what you should have done a long time ago, went and created a markdown called test-did.Rmd. In there, I'm testing the ability of different estimators to nail the effect. As you suspected, you were kind of butchering the DiD estimator for a bit now. The key now seems to be only having random effects on species (e.g. ENSO), and making sure that you include a fixed effect for targeted. That zeros things our properly, otherwise you get better estimates but it's not the "causal" effect. 
+ 
+ So, running that now. THat clears up the "where should the environment go" think so puts you in a world of simple vs + environment effects, and then the generational DiD idea. 
+ 
+ Definitely need to test that one out a bit to make sure it actually works
 
 
 

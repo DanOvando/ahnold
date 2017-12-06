@@ -1,17 +1,7 @@
-# set this up to run 3-4 candidate models made up ot
-# yes/no kitchen sink environment
-# defition of effect
-
 did_data <- abundance_indices %>%
-  select(
-    classcode,
-    population_filtering,
-    population_structure,
-    data_source,
-    contains('_index')
-  ) %>%
+  select(classcode, population_filtering, population_structure, data_source, contains('_index')) %>%
   select(-abundance_index) %>%
-  gather('abundance_source', 'abundance_index', contains('_index')) %>%
+  gather('abundance_source','abundance_index',contains('_index')) %>%
   mutate(abundance_index_passed = !map_lgl(abundance_index, is.null)) %>%
   filter(abundance_index_passed == T) %>%
   unnest() %>%
@@ -20,53 +10,42 @@ did_data <- abundance_indices %>%
   left_join(pdo, by = 'year') %>%
   left_join(ci_catches, by = c('classcode', 'year')) %>%
   left_join(species_distributions, by = 'classcode') %>%
-  ungroup() %>%
   mutate(catch = ifelse(is.na(catch), 0, catch)) %>%
   mutate(targeted = as.numeric(targeted == 'Targeted'),
          post_mpa = as.numeric(year >= 2003),
-         factor_year = as.factor(year)) %>%
-  mutate(abundance_index = abundance_index) %>%
+         factor_year = as.factor(year),
+         generations_protected = round(pmax(0, (year - year_mpa - 1) / tm)) %>% as.factor()) %>%
+  mutate(abundance_index = abundance_index + 1e-6) %>%
   filter(population_filtering == 'all',
          data_source == 'length_to_density',
-         population_structure == 'one-pop' ,
+         population_structure == 'one-pop',
          abundance_source == 'glm_abundance_index')
 
 
-annual_conditions_foo <-
-  function(population_structure,
-           data,
-           abundance_source,
-           annual_conditions,
-           annual_regional_conditions) {
-    if (population_structure == 'regional-pops' &
-        abundance_source != 'vast_abundance_index') {
-      data <- data %>%
-        left_join(annual_regional_conditions,
-                  by = c('year', 'population_level' = 'region'))
-    } else{
-      data <- data %>%
-        left_join(annual_conditions, by = 'year')
-    }
 
-    return(data)
+annual_conditions_foo <- function(population_structure, data, abundance_source, annual_conditions,annual_regional_conditions){
+
+  if (population_structure == 'regional-pops' &  abundance_source != 'vast_abundance_index'){
+    data <- data %>%
+      left_join(annual_regional_conditions, by = c('year','population_level' = 'region', 'classcode'))
+  } else{
+
+    data <- data %>%
+      left_join(annual_conditions, by = c('year','classcode'))
   }
 
+  return(data)
+}
+
 did_data <- did_data %>%
-  nest(-population_structure,-abundance_source) %>%
-  mutate(
-    data = pmap(
-      list(
-        population_structure = population_structure,
-        data = data,
-        abundance_source = abundance_source
-      ),
-      annual_conditions_foo,
-      annual_conditions,
-      annual_regional_conditions
-    )
-  ) %>%
+  nest(-population_structure, -abundance_source) %>%
+  mutate(data = pmap(list(population_structure = population_structure,
+                          data = data,
+                          abundance_source = abundance_source), annual_conditions_foo, annual_conditions,
+                     annual_regional_conditions)) %>%
   unnest() %>%
   mutate(temp_deviation = abs(mean_annual_temp - temperature))
+
 
 
 
@@ -160,8 +139,6 @@ recruitment_did_terms <- did_data %>%
   set_names(., paste0('did_', colnames(.))) %>%
   select(-did_0)
 
-# did_terms <- generation_did_terms
-
 
 did_models <-
   data_frame(
@@ -198,33 +175,44 @@ fit_did <- function(did_data, did_terms) {
 
   # fit DiD estimator on abundance indicies ---------------------------------
 
-
-
   did_reg <-
     paste0('log(abundance_index) ~', paste(
       c(
-        '(1 + mean_enso + lag1_enso + lag2_enso + mean_pdo + lag1_pdo + lag2_pdo |classcode)',
-        'temp_deviation',
-        'catch',
-        '((1 + targeted) |factor_year)'
-
+        'targeted',
+        'factor_year',
+        'generations_protected',
+        'targeted:generations_protected',
+        '(1 +mean_enso + mean_annual_kelp + temp_deviation +mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo | classcode)'
       ),
       collapse = '+'
     ))
+
 
   # did_reg <-
   #   paste0('log(abundance_index) ~', paste(
   #     c(
   #       'targeted',
-  #       'mean_annual_kelp',
-  #       '(1|factor_year)',
-  #       'mean_pdo',
-  #       # 'lag1_pdo',
-  #       # 'lag2_pdo',
-  #       '(1 + temp_deviation|classcode)',
-  #       colnames(did_terms)),
+  #       'factor_year',
+  #       'targeted:factor_year',
+  #       '(1 +mean_enso + mean_annual_kelp + temp_deviation +mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo | classcode)'
+  #     ),
   #     collapse = '+'
   #   ))
+
+  # did_reg <-
+  #   paste0('log(abundance_index) ~', paste(
+  #     c(
+  #       '(1 + mean_enso + lag1_enso + lag2_enso + mean_pdo + lag1_pdo + lag2_pdo |classcode)',
+  #       'temp_deviation',
+  #       'mean_annual_kelp',
+  #       'catch',
+  #       '((1 + targeted) |factor_year)'
+  #
+  #     ),
+  #     collapse = '+'
+  #   ))
+  #
+
 
   did_models <- did_data %>%
     mutate(did_reg = did_reg) %>%
@@ -290,23 +278,17 @@ did_models$data[[1]] %>%
   geom_point() +
   geom_line()
 
-extract_year <- function(term) {
-  term <- str_split(term, ':')
-browser()
-  year <- term[[1]][3] %>% as.numeric()
-}
-
 did_terms <- a$stan_summary %>%
   as.data.frame() %>%
   mutate(term = rownames(.)) %>%
-  filter(str_detect(term, 'b\\[targeted')) %>%
+  filter(str_detect(term, 'targeted')) %>%
   mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
   filter(!is.na(year))
 
 did_terms %>%
   ggplot() +
   geom_hline(aes(yintercept = 0), color = 'red') +
-  geom_vline(aes(xintercept = 2003), color = 'blue') +
+  # geom_vline(aes(xintercept = 2003), color = 'blue') +
   geom_pointrange(aes(
     x = year,
     y = mean,
