@@ -10,7 +10,8 @@ check_ahnold <- function(length_to_density_data, abundance_indices, did_models,m
   did_data <- did_models %>%
     filter(data_source == 'length_to_density', population_filtering == 'all',
            population_structure == 'one-pop',
-           did_term_names == 'years-protected', abundance_source == 'glm_abundance_index') %>%
+           timing == 'years', abundance_source == 'glm_abundance_index',
+           complexity == 'kitchen_sink') %>%
     select(data) %>%
     unnest()
 

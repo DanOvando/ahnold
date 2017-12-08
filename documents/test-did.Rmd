@@ -1,0 +1,332 @@
+---
+title: "test-did"
+author: "Dan Ovando"
+date: "12/5/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rstanarm)
+```
+
+The idea here is to simulate the concept behind the ahnold regression before you go crazy coding new things to make sure that it actually works. So, your goal is to simulate two populations with a shared trend, one of which gets a treatment that phases in/shocks in, and use DiD to estimate the effect
+
+
+```{r}
+
+
+
+common_noise <- data_frame(year = 0:10) %>% 
+  mutate(enso = sin(year) * 50)
+
+common_slope = 1.1
+
+mpa_effect <- 10
+
+mpa_slope <- 20
+
+mean_noise <- 20
+
+mpa_year <- 5
+
+sigma_pop <- 5
+
+n_species <- 30
+
+life_history <-
+  data_frame(
+  species = 1:n_species,
+  slope_effect = rlnorm(n_species),
+  enso_effect = sample(c(-1, 1), n_species, replace = T),
+  targeted = sample(c(0, 1), n_species, replace = T),
+  shared_slope = common_slope,
+  intercept = runif(n_species, 10,200) + 75*targeted
+  )
+  
+populations <- cross_df(list(species = 1:n_species, year = 0:10)) %>% 
+  left_join(life_history, by = 'species') %>% 
+  left_join(common_noise, by = 'year') 
+
+
+populations <- populations %>% 
+  mutate(population = intercept + year * (shared_slope * slope_effect) + (targeted * mpa_effect) * (year >= mpa_year) + (targeted * mpa_slope) * pmax(0,year - mpa_year) + rnorm(nrow(.),0,sigma_pop) + enso * enso_effect) %>% 
+  mutate(targeted = targeted == 1,
+         post_mpa = year >= mpa_year,
+         factor_year = as.factor(year),
+         mpa_bump = mpa_effect * (year >= mpa_year),
+         mpa_trend = mpa_slope * pmax(0,year - mpa_year),
+         mpa_net = mpa_bump + mpa_trend,
+         numeric_targeted = as.numeric(targeted),
+         species = as.factor(species))
+
+populations %>% 
+  ggplot(aes(year,population, color = targeted)) + 
+  geom_line(aes(group = interaction(species,targeted))) + 
+  geom_point() +
+  geom_vline(aes(xintercept = mpa_year))
+
+```
+
+Now, convince yourself that the classic DiD can do this... yes it can hooray
+
+```{r}
+simple_did <- lm(population ~ targeted + post_mpa + targeted:post_mpa, data = populations)
+
+summary(simple_did)
+
+```
+
+
+```{r}
+
+simple_stan_did <- rstanarm::stan_glm(population ~ targeted + post_mpa + targeted:post_mpa, data = populations, chains = 1)
+
+summary(simple_stan_did)
+
+```
+
+
+Now, let's try it with the time effects
+
+```{r}
+
+time_did <- lm(population ~ factor_year + targeted + targeted:factor_year, data = populations)
+
+summary(time_did)
+
+broom::tidy(time_did) %>%
+  filter(str_detect(term, 'targetedTRUE')) %>%
+  mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+  filter(!is.na(year)) %>% 
+  ggplot(aes(year, estimate)) + 
+  geom_point()
+
+populations %>% 
+  filter(targeted == T) %>% 
+  ggplot(aes(year, mpa_net)) + 
+  geom_point()
+```
+
+
+
+```{r wi-enso}
+
+
+time_did <- rstanarm::stan_glm(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year + enso:species, data = populations, chains = 1)
+
+summary(time_did)
+
+did_terms <- time_did$stan_summary %>%
+  as.data.frame() %>%
+  mutate(term = rownames(.)) %>%
+  filter(str_detect(term, 'numeric_targeted')) %>%
+  mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+  filter(!is.na(year))
+
+did_terms %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0), color = 'red') +
+  geom_vline(aes(xintercept = mpa_year), color = 'blue') +
+  geom_pointrange(aes(
+    x = year,
+    y = mean,
+    ymin = `2.5%`,
+    ymax = `97.5%`
+  ))
+
+
+```
+
+
+```{r wo-enso}
+
+
+time_did <- rstanarm::stan_glm(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year, data = populations, chains = 1)
+
+summary(time_did)
+
+did_terms <- time_did$stan_summary %>%
+  as.data.frame() %>%
+  mutate(term = rownames(.)) %>%
+  filter(str_detect(term, 'numeric_targeted')) %>%
+  mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+  filter(!is.na(year))
+
+did_terms %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0), color = 'red') +
+  geom_vline(aes(xintercept = mpa_year), color = 'blue') +
+  geom_pointrange(aes(
+    x = year,
+    y = mean,
+    ymin = `2.5%`,
+    ymax = `97.5%`
+  ))
+
+
+```
+
+```{r wi-enso-species}
+
+
+time_did <- rstanarm::stan_glmer(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year + (1 + enso|species), data = populations, chains = 1)
+
+summary(time_did)
+
+did_terms <- time_did$stan_summary %>%
+  as.data.frame() %>%
+  mutate(term = rownames(.)) %>%
+  filter(str_detect(term, 'numeric_targeted')) %>%
+  mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+  filter(!is.na(year))
+
+did_terms %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0), color = 'red') +
+  geom_vline(aes(xintercept = mpa_year), color = 'blue') +
+  geom_pointrange(aes(
+    x = year,
+    y = mean,
+    ymin = `2.5%`,
+    ymax = `97.5%`
+  ))
+
+
+```
+
+
+
+# Generation DiD
+
+Cool, now try it again with generational DiD and make sure that it works like you think it does
+
+```{r}
+
+
+
+common_noise <- data_frame(year = 0:10) %>% 
+  mutate(enso = sin(year) * 50)
+
+common_slope = 1.1
+
+mpa_effect <- 10
+
+mpa_slope <- 20
+
+mean_noise <- 20
+
+mpa_year <- 5
+
+sigma_pop <- 5
+
+n_species <- 30
+
+life_history <-
+  data_frame(
+  species = 1:n_species,
+  slope_effect = rlnorm(n_species),
+  enso_effect = sample(c(-1, 1), n_species, replace = T),
+  targeted = sample(c(0, 1), n_species, replace = T),
+  shared_slope = common_slope,
+  intercept = runif(n_species, 10,200) + 75*targeted,
+  age_mature = runif(n_species,1,3 + 2*targeted)
+  )
+  
+populations <- cross_df(list(species = 1:n_species, year = 0:10)) %>% 
+  left_join(life_history, by = 'species') %>% 
+  left_join(common_noise, by = 'year') 
+
+
+populations <- populations %>% 
+  mutate(population = intercept + year * (shared_slope * slope_effect) + (targeted * mpa_effect) * (year >= mpa_year) + (targeted * mpa_slope) * pmax(0,round((year - mpa_year) / age_mature)) + rnorm(nrow(.),0,sigma_pop) + enso * enso_effect) %>% 
+  mutate(generations_protected = pmax(0,round((year - mpa_year)/age_mature)),
+    targeted = targeted == 1,
+         post_mpa = year >= mpa_year,
+         factor_year = as.factor(year),
+         mpa_bump = mpa_effect * (year >= mpa_year),
+         mpa_trend = mpa_slope * generations_protected,
+         mpa_net = mpa_bump + mpa_trend,
+         numeric_targeted = as.numeric(targeted),
+         species = as.factor(species)) %>% 
+  mutate(generations_protected = as.factor(generations_protected))
+
+populations %>% 
+  ggplot(aes(year,population, color = targeted)) + 
+  geom_line(aes(group = interaction(species,targeted))) + 
+  geom_point() +
+  geom_vline(aes(xintercept = mpa_year))
+
+populations %>% 
+  ggplot(aes(year,mpa_net)) + 
+  geom_point()
+
+populations %>% 
+  ggplot(aes(generations_protected,mpa_net)) + 
+  geom_point()
+
+```
+
+
+```{r simple-generations}
+
+
+time_did <- rstanarm::stan_glm(population ~ numeric_targeted + generations_protected + factor_year + numeric_targeted:generations_protected, data = populations, chains = 1)
+
+summary(time_did)
+
+did_terms <- time_did$stan_summary %>%
+  as.data.frame() %>%
+  mutate(term = rownames(.)) %>%
+  filter(str_detect(term, 'numeric_targeted')) %>%
+  mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+  filter(!is.na(year))
+
+did_terms %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0), color = 'red') +
+  geom_vline(aes(xintercept = mpa_year), color = 'blue') +
+  geom_pointrange(aes(
+    x = year,
+    y = mean,
+    ymin = `2.5%`,
+    ymax = `97.5%`
+  ))
+
+
+```
+
+```{r wi-enso-species}
+
+
+time_did <- rstanarm::stan_glmer(population ~ factor_year +generations_protected + numeric_targeted + numeric_targeted:generations_protected + (1 + enso|species), data = populations, chains = 1)
+
+summary(time_did)
+
+did_terms <- time_did$stan_summary %>%
+  as.data.frame() %>%
+  mutate(term = rownames(.)) %>%
+  filter(str_detect(term, 'numeric_targeted')) %>%
+  mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+  filter(!is.na(year))
+
+did_terms %>%
+  ggplot() +
+  geom_hline(aes(yintercept = 0), color = 'red') +
+  geom_vline(aes(xintercept = mpa_year), color = 'blue') +
+  geom_pointrange(aes(
+    x = year,
+    y = mean,
+    ymin = `2.5%`,
+    ymax = `97.5%`
+  ))
+
+
+
+populations %>% 
+  ggplot(aes(generations_protected,mpa_net)) + 
+  geom_point()
+
+```
+
