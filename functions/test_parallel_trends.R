@@ -1,4 +1,8 @@
 test_parallel_trends <- function(data, mpa_year = 2003){
+
+  data <- data %>%
+    mutate(targeted = as.numeric(targeted > 0))
+
   pre_species_correlations <- data %>%
     select(year,population_level,classcode, abundance_index) %>%
     spread(classcode, abundance_index) %>%

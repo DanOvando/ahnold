@@ -1,10 +1,9 @@
-rm(list = ls())
-set.seed(123)
+set.seed(666)
 library(tidyverse)
 library(rstan)
 library(stringr)
 library(purrr)
-rstan_options(auto_write = TRUE)
+# rstan_options(auto_write = TRUE)
 
 run_name <- 'Working'
 
@@ -14,22 +13,19 @@ load(file = paste0(run_dir, '/abundance_indices.Rdata'))
 
 subspecies <- abundance_indices %>%
   select(classcode, targeted) %>%
+  mutate(targeted = as.numeric(targeted > 0)) %>%
   mutate(a = 1:nrow(.)) %>%
   group_by(targeted) %>%
-  top_n(3,a)
+  top_n(1,a)
 
 data <- abundance_indices %>%
   filter(population_structure == 'one-pop',
          population_filtering == 'all',
          data_source == 'length_to_density') %>%
   select(classcode, data) %>%
-  unnest() #%>%
-  # filter(classcode %in% subspecies$classcode)
-
-wtf <- data %>%
-  filter(any_seen == T)
-
-# View(data$data[[1]] %>% filter(any_seen == T))
+  unnest() %>%
+  # filter(classcode %in% subspecies$classcode) %>%
+  mutate(targeted = as.numeric(targeted > 0))
 
 seen_data <- data %>%
   filter(any_seen == T) %>%
@@ -49,56 +45,80 @@ seen_data <- data %>%
          surge) %>%
   na.omit()
 
+
+
 arm_data <- seen_data %>%
   mutate(factor_year = as.factor(year),
          factor_month = as.factor(month))
 
-test <- rstanarm::stan_glm(
-  'log_density ~
-  factor_year:classcode  + mean_vis + factor_month + trunc_observer + cumulative_n_obs + method + level + surge',
-  data = arm_data,
-  refresh = 1,
-  chains = 1
-)
+
+seeing_data <- data %>%
+  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
+  mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
+  mutate(classcode = as.factor(classcode)) %>%
+  select(any_seen,
+         classcode,
+         year,
+         month,
+         mean_vis,
+         region,
+         trunc_observer,
+         cumulative_n_obs,
+         method,
+         level,
+         surge) %>%
+  na.omit()
+
+seeing_arm_data <- seeing_data %>%
+  mutate(factor_year = as.factor(year),
+         factor_month = as.factor(month))
 
 
-year_effects <- test$stan_summary %>%
-  as.data.frame() %>%
-  mutate(variable = rownames(.)) %>%
-  as_data_frame() %>%
-  filter(str_detect(variable,'factor_year')) %>%
-  mutate(year = str_replace_all(variable,'\\D','') %>% as.numeric(),
-         species = str_replace_all(variable,'.*(?=classcode)','')) %>%
-  mutate(species = str_replace_all(species, 'classcode',''))
-
-year_effects %>%
-  ggplot() +
-  geom_line(aes(year, exp(mean + se_mean^2/2), color = species)) +
-  facet_wrap(~species, scales = 'free_y') +
-  theme_classic()
-
-save(file = 'rstanarm-test.Rdata', test)
+# test <- rstanarm::stan_glmer(log_density ~ (1|factor_year) + trunc_observer + mean_vis + factor_month,
+#                                              data = arm_data, cores = 1, chains = 1)
+#
+# test_binom <- rstanarm::stan_glmer(any_seen ~ (1|factor_year) + factor_month +  trunc_observer + mean_vis,
+#                              data = seeing_arm_data, cores = 1, chains = 1, family = binomial)
+#
 
 
-abundance_comparison <-did_models %>%
-  filter(data_source == 'length_to_density',
-         population_structure == 'one-pop',
-         abundance_source == 'glm_abundance_index' |abundance_source == 'raw_abundance_index' ,
-         population_filtering == 'all',
-         did_term_names == 'years-protected') %>%
-  select(abundance_source, data) %>%
-  unnest()
+# year_effects <- test$stan_summary %>%
+#   as.data.frame() %>%
+#   mutate(variable = rownames(.)) %>%
+#   as_data_frame() %>%
+#   filter(str_detect(variable,'factor_year')) %>%
+#   mutate(year = str_replace_all(variable,'\\D','') %>% as.numeric(),
+#          species = str_replace_all(variable,'.*(?=classcode)','')) %>%
+#   mutate(species = str_replace_all(species, 'classcode',''))
+#
+# year_effects %>%
+#   ggplot() +
+#   geom_line(aes(year, exp(mean + se_mean^2/2), color = species)) +
+#   facet_wrap(~species, scales = 'free_y') +
+#   theme_classic()
+#
+# save(file = 'rstanarm-test.Rdata', test)
 
 
-abundance_comparison %>%
-  group_by(commonname, abundance_source) %>%
-  mutate(abundance_index = abundance_index / max(abundance_index)) %>%
-  ungroup() %>%
-  ggplot(aes(year, abundance_index, color = abundance_source)) +
-  geom_line() +
-  facet_wrap(~classcode) +
-  theme_classic() +
-  theme(strip.text = element_text(size = 8))
+# abundance_comparison <-did_models %>%
+#   filter(data_source == 'length_to_density',
+#          population_structure == 'one-pop',
+#          abundance_source == 'glm_abundance_index' |abundance_source == 'raw_abundance_index' ,
+#          population_filtering == 'all',
+#          did_term_names == 'years-protected') %>%
+#   select(abundance_source, data) %>%
+#   unnest()
+#
+#
+# abundance_comparison %>%
+#   group_by(commonname, abundance_source) %>%
+#   mutate(abundance_index = abundance_index / max(abundance_index)) %>%
+#   ungroup() %>%
+#   ggplot(aes(year, abundance_index, color = abundance_source)) +
+#   geom_line() +
+#   facet_wrap(~classcode) +
+#   theme_classic() +
+#   theme(strip.text = element_text(size = 8))
 
 
 # lme4::glmer('log_density ~ (factor_year|classcode) + mean_canopy + mean_vis', data = seen_data)
@@ -304,10 +324,7 @@ standard_matrix <- species_data %>%
   unnest() %>%
   select(-mean_canopy)
 
-# a <- standard_matrix %>%
-#   select(contains('intercept')) %>%
-#   gather(variable, value)
-#
+
 
 # prep did data -----------------------------------------------------------
 
@@ -412,14 +429,14 @@ stan_data <- list(
 # Sys.time() - a
 
 
-
+set.seed(666)
 a <- Sys.time()
 ahnold_stan_fit <- stan(
   file = 'scripts/fit-ahnold-abundance.stan',
   data = stan_data,
   chains = 1,
   warmup = 100,
-  iter = 200,
+  iter = 201,
   cores = 1,
   refresh = 1
 )

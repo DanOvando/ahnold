@@ -7,13 +7,12 @@ fit_did <- function(did_data, timing, complexity, dirty_dishes,chains = 4, cores
          -abundance_source)
 
   # test correlations inspect abundance trends ---------------------------------------
-
-  did_data <- did_data %>%
-    mutate(correlation_tests = map(data, test_parallel_trends)) %>%
-    mutate(
-      pre_correlation = map_dbl(correlation_tests, ~ .x$overall_correlation_test$estimate),
-      pre_correlation_signif = map_dbl(correlation_tests, ~ .x$overall_correlation_test$p.value)
-    )
+  # did_data <- did_data %>%
+  #   mutate(correlation_tests = map(data, test_parallel_trends)) %>%
+  #   mutate(
+  #     pre_correlation = map_dbl(correlation_tests, ~ .x$overall_correlation_test$estimate),
+  #     pre_correlation_signif = map_dbl(correlation_tests, ~ .x$overall_correlation_test$p.value)
+  #   )
 
 
   # fit DiD estimator on abundance indicies ---------------------------------
@@ -62,28 +61,39 @@ fit_did <- function(did_data, timing, complexity, dirty_dishes,chains = 4, cores
         collapse = '+'
       ))
   }
-
   if (str_detect(did_reg,'\\|')){ # if there are random effects
 
-    fitfoo <- rstanarm::stan_glmer
+    # fitfoo <- rstanarm::stan_glmer
+
+    did_models <- did_data %>%
+      mutate(did_reg = did_reg) %>%
+      mutate(did_model = map2(
+        data,
+        did_reg,
+        ~ rstanarm::stan_glmer(
+          .y,
+          data = .x,
+          chains = chains,
+          cores = cores
+        )
+      ))
   } else {
 
-    fitfoo <- rstanarm::stan_glm
+    # fitfoo <- rstanarm::stan_glm
 
+    did_models <- did_data %>%
+      mutate(did_reg = did_reg) %>%
+      mutate(did_model = map2(
+        data,
+        did_reg,
+        ~  rstanarm::stan_glm(
+          .y,
+          data = .x,
+          chains = chains,
+          cores = cores
+        )
+      ))
   }
 
-
-  did_models <- did_data %>%
-    mutate(did_reg = did_reg) %>%
-    mutate(did_model = map2(
-      data,
-      did_reg,
-      ~ fitfoo(
-        .y,
-        data = .x,
-        chains = chains,
-        cores = cores
-      )
-    ))
 
 } # close fit_did

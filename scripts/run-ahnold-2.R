@@ -1282,11 +1282,11 @@ did_data <- abundance_indices %>%
     log_abundance_index = log(abundance_index),
     generations_protected = as.factor(generations_protected),
     targeted = targeted / max(targeted)
-  ) %>%
-  filter(population_filtering == 'all',
-         data_source == 'length_to_density',
-         population_structure == 'one-pop',
-         abundance_source == 'glm_abundance_index')
+  ) #%>%
+  # filter(population_filtering == 'all',
+  #        data_source == 'length_to_density',
+  #        population_structure == 'one-pop',
+  #        abundance_source == 'glm_abundance_index')
 
 
 annual_conditions_foo <- function(population_structure, data, abundance_source, annual_conditions,annual_regional_conditions){
@@ -1360,32 +1360,46 @@ pwalk(
   run_dir = run_dir
 )
 
+best_dish <- select_dishes(did_data = did_data, run_dir = run_dir)
+
 did_models <-
   cross_df(
     list(
       did_data = list(did_data),
       timing = c('years', 'generations'),
       complexity = c('bare_bones', 'kitchen_sink'),
-      dirty_dishes = 'loo + (mean_enso + mean_annual_kelp + temp_deviation +mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo |classcode)'
+      dirty_dishes =  best_dish
     )
   )
 
 
 did_models <- did_models %>%
-  slice(3) %>%
+  # slice(3) %>%
   mutate(did_model = pmap(list(did_data = did_data,
                                timing = timing,
                                complexity = complexity,
-                               dirty_dishes = dirty_dishes), fit_did,
+                               dirty_dishes = dirty_dishes), safely(fit_did),
                           cores = 1,
                           chains = 1)) %>%
-  select(-did_data) %>%
-  unnest()
+  select(-did_data) #%>%
+  #unnest()
 
+dids_failed <- any(map(did_models$did_model,'error') %>% map_lgl(~!is.null(.x)))
+
+if (dids_failed == T){
+
+  stop('some did models failed')
+
+}
+
+did_models$did_model <- map(did_models$did_model,'result')
 
 did_models <- did_models %>%
+  unnest() %>%
   mutate(did_plot = map(did_model, plot_did),
          did_diagnostics = map(did_model, diagnostic_plots))
+#
+# did_models$did_model[[1]]$stan_summary %>% View()
 
 
 did_plot_foo <-

@@ -159,7 +159,6 @@ vector[n_standard] standardized_abundance; // year effects
 // observed model- hierarchichal structure of year effects
 counter = 1;
 
-
 for (i in 1:n_species){ // hierarchical priors on year effects by species
 
 // if (n_species >1){

@@ -2,6 +2,8 @@ diagnostic_plots <- function(model){
 
   loo_model <- rstanarm::loo(model)
 
+  # loo_model <- rstanarm::kfold(model, K = 10)
+
   r2 <- rstanarm::bayes_R2(model)
 
   r2_hist_plot <- data_frame(r2 = r2) %>%
@@ -67,7 +69,6 @@ diagnostic_plots <- function(model){
   factor_coef_v_resid <- augmod %>%
     select(ind_vars[ind_vars %in% factor_vars], .resid) %>%
     gather(variable, value, -.resid)
-
 
   numeric_coef_v_resid_plot <- numeric_coef_v_resid %>%
     ggplot(aes(value, .resid)) +

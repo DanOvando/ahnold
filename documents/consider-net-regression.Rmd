@@ -15,16 +15,19 @@ a <- abundance_indices %>%
   filter(data_source == 'length_to_density',
          population_structure == 'one-pop',
          population_filtering == 'all'
-         ) %>%
+  ) %>%
   select(classcode,data) %>%
   unnest() %>% 
-  left_join(annual_regional_conditions, by = c('year','region')) %>% 
-    left_join(enso, by = 'year') %>%
+  left_join(annual_conditions, by = c('year','classcode')) %>% 
+  left_join(enso, by = 'year') %>%
   left_join(pdo, by = 'year') %>%
   left_join(ci_catches, by = c('classcode', 'year')) %>% 
-    mutate(targeted = (targeted == 'Targeted') %>% as.numeric()) %>%
   mutate(catch = ifelse(is.na(catch), 0, catch),
-         post_mpa = year >=2003)
+         post_mpa = year >=2003,
+         temp_dev = abs(mean_temp - temperature) ) %>% 
+  mutate(temp_dev = center_scale(temp_dev),
+         mean_vis = center_scale(mean_vis),
+         mean_canopy = as.factor(mean_canopy))
 
 
 
@@ -35,9 +38,7 @@ seeing_data <- a
 
 
 
-# test <- lme4::lmer(log_density ~  targeted*factor_year + site_side + mean_vis +  loo + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch, data = seen_data)
-
-seen_model <- rstanarm::stan_glmer('log_density ~  targeted + site_side + mean_vis + mean_canopy +  (1|classcode) + (1 | factor_year:targeted) + mean_enso + mean_pdo + lag1_enso + lag2_enso + lag1_pdo + lag2_pdo + catch', data = seen_data, chains = 1)
+seen_model <- rstanarm::stan_glm('log_density ~  targeted + factor_year + targeted:factor_year + mean_enso + temp_dev + mean_vis + trunc_observer + site_side', data = seen_data, chains = 1, cores = 1)
 
 dids <- seen_model %>%
   broom::tidy() %>%
