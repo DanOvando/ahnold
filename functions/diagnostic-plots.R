@@ -1,8 +1,13 @@
 diagnostic_plots <- function(model){
 
-  loo_model <- rstanarm::loo(model)
-
   # loo_model <- rstanarm::kfold(model, K = 10)
+  safe_bayes <- safely(rstanarm::bayes_R2)
+
+  a <- safe_bayes(model)
+
+  if (is.null(a$error)){
+
+  loo_model <- rstanarm::loo(model)
 
   r2 <- rstanarm::bayes_R2(model)
 
@@ -11,6 +16,19 @@ diagnostic_plots <- function(model){
     geom_histogram(color = 'black', fill = 'grey')
 
   poster_predictive_plot <- rstanarm::pp_check(model)
+
+  } else{
+
+    loo_model <- NA
+
+    r2 <- NA
+
+    r2_hist_plot <- ggplot()
+
+    poster_predictive_plot <- ggplot()
+
+  }
+
 
   augmod <- broom::augment(model)
 

@@ -16,7 +16,7 @@ subspecies <- abundance_indices %>%
   mutate(targeted = as.numeric(targeted > 0)) %>%
   mutate(a = 1:nrow(.)) %>%
   group_by(targeted) %>%
-  top_n(1,a)
+  top_n(2,a)
 
 data <- abundance_indices %>%
   filter(population_structure == 'one-pop',
@@ -25,15 +25,18 @@ data <- abundance_indices %>%
   select(classcode, data) %>%
   unnest() %>%
   # filter(classcode %in% subspecies$classcode) %>%
-  mutate(targeted = as.numeric(targeted > 0))
+  mutate(targeted = as.numeric(targeted > 0)) %>%
+  group_by(classcode) %>%
+  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
+  mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
+  ungroup()
 
 seen_data <- data %>%
   filter(any_seen == T) %>%
-  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
-  mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
   mutate(classcode = as.factor(classcode)) %>%
   select(log_density,
          classcode,
+         geographic_cluster,
          year,
          month,
          mean_vis,
@@ -46,6 +49,15 @@ seen_data <- data %>%
   na.omit()
 
 
+seen_data %>%
+  filter(classcode == 'opic') %>%
+  group_by(year) %>%
+  summarise(sd_ld = sd(log_density))
+  ggplot(aes(factor(year), log_density)) +
+  geom_boxplot()
+
+  group_by(year) %>%
+  summarise(nobs = length(log_density))
 
 arm_data <- seen_data %>%
   mutate(factor_year = as.factor(year),
@@ -53,11 +65,12 @@ arm_data <- seen_data %>%
 
 
 seeing_data <- data %>%
-  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
-  mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
+  # mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
+  # mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
   mutate(classcode = as.factor(classcode)) %>%
   select(any_seen,
          classcode,
+         geographic_cluster,
          year,
          month,
          mean_vis,
@@ -74,9 +87,12 @@ seeing_arm_data <- seeing_data %>%
          factor_month = as.factor(month))
 
 
-# test <- rstanarm::stan_glmer(log_density ~ (1|factor_year) + trunc_observer + mean_vis + factor_month,
-#                                              data = arm_data, cores = 1, chains = 1)
-#
+test <- rstanarm::stan_glm(log_density ~ factor_year:classcode + region:geographic_cluster + mean_vis,
+                             data = arm_data, cores = 1, chains = 1)
+
+# test <- rstanarm::stan_glmer(log_density ~ (factor_year - 1|classcode) + (region - 1|geographic_cluster) + mean_vis,
+#                                            data = arm_data, cores = 1, chains = 1)
+
 # test_binom <- rstanarm::stan_glmer(any_seen ~ (1|factor_year) + factor_month +  trunc_observer + mean_vis,
 #                              data = seeing_arm_data, cores = 1, chains = 1, family = binomial)
 #
@@ -124,13 +140,20 @@ seeing_arm_data <- seeing_data %>%
 # lme4::glmer('log_density ~ (factor_year|classcode) + mean_canopy + mean_vis', data = seen_data)
 
 year_species_data <- seen_data %>%
-  # filter(classcode %in% c('hcar','hros')) %>%
   mutate(year_classcode = paste(classcode, year, sep = '-')) %>%
   select(year_classcode) %>%
   mutate(marker = 1,
          index = 1:nrow(.)) %>%
   spread(year_classcode, marker, fill = 0) %>%
   select(-index)
+
+year_fixed_effects <- seen_data %>%
+  select(year) %>%
+  mutate(marker = 1,
+         index = 1:nrow(.)) %>%
+  spread(year, marker, fill = 0) %>%
+  select(-index) %>%
+  select(-1)
 
 observer_data <- seen_data %>%
   select(trunc_observer) %>%
@@ -160,8 +183,23 @@ region_species_data <- seen_data %>%
   spread(region_classcode, marker, fill = 0) %>%
   select(-index)
 
+region_geographic_cluster_data <- seen_data %>%
+  select(region, geographic_cluster) %>%
+  mutate(region_cluster = paste(geographic_cluster, region, sep = '-')) %>%
+  select(region_cluster) %>%
+  mutate(marker = 1,
+         index = 1:nrow(.)) %>%
+  spread(region_cluster, marker, fill = 0) %>%
+  select(-index)
+
 regions_per_species <- seen_data %>%
   group_by(classcode) %>%
+  summarise(nr = length(unique(region))) %>% {
+    .$nr
+  }
+
+regions_per_cluster <- seen_data %>%
+  group_by(geographic_cluster) %>%
   summarise(nr = length(unique(region))) %>% {
     .$nr
   }
@@ -184,24 +222,26 @@ intercept_data <- seen_data %>%
   mutate(seen = 1, id = 1:nrow(.)) %>%
   spread(classcode, seen, fill = 0) %>%
   select(-id) %>%
-  set_names(glue::glue('{colnames(.)}_intercept'))
+  set_names(glue::glue('{colnames(.)}_intercept')) %>%
+  select(-1)
 
 x_seen <-
   bind_cols(
-    intercept_data,
     visibility_data,
     year_species_data,
-    region_species_data
-  )
+    region_geographic_cluster_data
+  ) %>%
+  mutate(shared_intercept = 1)
 
 # seeing data -------
 #
 seeing_data <- data %>%
-  mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
-  mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
+  # mutate(mean_vis = (mean_vis - mean(mean_vis)) / (2 * sd(mean_vis))) %>%
+  # mutate(mean_canopy = (mean_canopy - mean(mean_canopy, na.rm = T)) / (2 * sd(mean_canopy, na.rm = T))) %>%
   mutate(classcode = as.factor(classcode)) %>%
   select(any_seen,
          classcode,
+         geographic_cluster,
          year,
          mean_canopy,
          mean_vis,
@@ -229,6 +269,14 @@ years_per_species <-
   summarise(nyears = length(year)) %>% {
     .$nyears
   }
+
+year_fixed_effects <- seeing_data %>%
+  select(year) %>%
+  mutate(marker = 1,
+         index = 1:nrow(.)) %>%
+  spread(year, marker, fill = 0) %>%
+  select(-index) %>%
+  select(-1)
 
 region_species_data <- seeing_data %>%
   select(region, classcode) %>%
@@ -263,15 +311,16 @@ intercept_data <- seeing_data %>%
   mutate(seen = 1, id = 1:nrow(.)) %>%
   spread(classcode, seen, fill = 0) %>%
   select(-id) %>%
-  set_names(glue::glue('{colnames(.)}_intercept'))
+  set_names(glue::glue('{colnames(.)}_intercept')) %>%
+  select(-1)
 
 x_seeing <-
   bind_cols(
-    intercept_data,
     visibility_data,
     year_species_data,
     region_species_data
-  )
+  ) %>%
+  mutate(shared_intercept = 1)
 
 
 # check <- rstanarm::stan_glmer('log_density ~ (1|factor_year) + (1|region) + mean_canopy + mean_vis', data = seen_data)
@@ -299,7 +348,11 @@ create_standard_mat <- function(classcode, species_data, x) {
 
   sframe$mean_canopy <- environment$mean_canopy
 
+  intercepts <- colnames(x)[str_detect(colnames(x),'intercept')]
+  if (any(str_detect(intercepts,classcode %>% as.character()))){
+
   sframe[, paste0(classcode, '_intercept')] <- 1
+  }
 
   sframe[, paste0(classcode, '-', common_region)] <- 1
 
@@ -379,100 +432,68 @@ pdo_locations <- which(str_detect(did_names, 'pdo'))
 
 did_positions <- which(str_detect(did_names, '20'))
 
+
+log_density_species_index <- seen_data %>%
+  select(classcode) %>%
+  mutate(index = 1:nrow(.)) %>%
+  group_by(classcode) %>%
+  summarise(start_position = min(index),
+            end_position = max(index)) %>%
+  arrange(start_position) %>%
+  select(-classcode) %>%
+  as.matrix()
+
 stan_data <- list(
   n_parameters = ncol(x_seen),
   n_did_parameters = ncol(x_did),
   n_observations_seen = nrow(x_seen),
-  n_observations_seeing = nrow(x_seeing),
   n_observations_did = nrow(x_did),
   n_species = length(years_per_species),
+  n_clusters = length(regions_per_cluster),
   n_year_species = ncol(year_species_data),
-  n_region_species = ncol(region_species_data),
+  n_region_clusters = ncol(region_geographic_cluster_data),
   n_standard = nrow(standard_matrix),
   years_per_species = years_per_species,
-  regions_per_species = regions_per_species,
-  year_species_positions = which(str_detect(colnames(x_seen), '\\d')),
-  region_species_positions = which(str_detect(
+  regions_per_cluster = regions_per_cluster,
+  year_species_positions = which(str_detect(colnames(x_seen), '20') & str_detect(colnames(x_seen),'-')),
+  region_cluster_positions = which(str_detect(
     colnames(x_seen), paste(unique(data$region), collapse = '|')
   )),
-  # species_intercepts_positions = which(str_detect(colnames(x_seen), 'intercept')),
-  # species_intercept_position = which(colnames(x_seen) == 'species_intercept'),
-  non_nested_positions = which(!str_detect(colnames(x_seen), '\\d') & !str_detect(
+  # species_intercept_positions = which(str_detect(colnames(x_seen), 'intercept') & !str_detect(colnames(x_seen), 'shared')),
+  non_nested_positions = which(!str_detect(colnames(x_seen), '-') & !str_detect(
     colnames(x_seen), paste(unique(data$region), collapse = '|')
   )),
-  n_non_nested = length(which(!str_detect(colnames(x_seen), '\\d') & !str_detect(
+  n_non_nested = length(which(!str_detect(colnames(x_seen), '-') & !str_detect(
     colnames(x_seen), paste(unique(data$region), collapse = '|')
   ))),
   did_positions = did_positions,
   n_did = length(did_positions),
   x_seen = x_seen,
-  x_seeing = x_seeing,
   x_did = x_did,
   log_density = seen_data$log_density,
-  observed = seeing_data$any_seen %>% as.numeric(),
-  standard_matrix = standard_matrix,
-  cauchy_2 = 2.5
+  log_density_species_index = log_density_species_index,
+  cauchy_2 = 0.5
 )
-
-
-# a <- Sys.time()
-# ahnold_stan_fit <- stan(
-#   file = 'scripts/fit-ahnold-allspecies-joint.stan',
-#   data = stan_data,
-#   chains = 1,
-#   warmup = 100,
-#   iter = 200,
-#   cores = 1,
-#   refresh = 1
-# )
-#
-# Sys.time() - a
-
 
 set.seed(666)
 a <- Sys.time()
 ahnold_stan_fit <- stan(
-  file = 'scripts/fit-ahnold-abundance.stan',
+  file = 'scripts/fit-ahnold-cluster-seen.stan',
   data = stan_data,
   chains = 1,
-  warmup = 100,
-  iter = 201,
+  warmup = 1000,
+  iter = 2000,
   cores = 1,
-  refresh = 1
-)
+  refresh = 25,
+  control = list(max_treedepth = 9))
 
 Sys.time() - a
 
-save(file = 'woop.Rdata', ahnold_stan_fit)
-
-# abundance_names <- colnames(standard_matrix)[ str_detect(colnames(standard_matrix), '\\d')]
-#
-#
-# abundance_indicies <- ahnold_stan_fit %>%
-#   as.data.frame() %>%
-#   as_data_frame() %>%
-#   select(contains('standardized_abundance_index')) %>%
-#   set_names(abundance_names) %>%
-#   gather(name, abundance) %>%
-#   mutate(species = str_replace_all(name,'\\d|-',''),
-#          year = str_replace_all(name,'\\D|-','') %>% as.numeric())
-#
-# abundance_indicies %>%
-#   ggplot(aes(year, abundance, color = species)) +
-#   geom_point() +
-#   geom_smooth() +
-#   facet_wrap(~species)
-#
-# abundance_indicies %>%
-#   group_by(species) %>%
-#   mutate(abundance = abundance / max(abundance)) %>%
-#   ggplot(aes(factor(year), abundance, fill = species)) +
-# geom_violin() +
-#   facet_wrap(~species)
+# ,
+# control = list(max_treedepth = 7))
+save(file = 'cluster-seen-only.Rdata', ahnold_stan_fit)
 
 
-# check2 <-
-#   rstanarm::stan_glmer(log_density ~ (1 |classcode) + mean_canopy + mean_vis,
-#                        data = seen_data,chains = 1)
 
-# control = list(adapt_delta = 0.8)
+
+
