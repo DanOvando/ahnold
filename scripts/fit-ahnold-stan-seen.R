@@ -49,15 +49,15 @@ seen_data <- data %>%
   na.omit()
 
 
-seen_data %>%
-  filter(classcode == 'opic') %>%
-  group_by(year) %>%
-  summarise(sd_ld = sd(log_density))
-  ggplot(aes(factor(year), log_density)) +
-  geom_boxplot()
-
-  group_by(year) %>%
-  summarise(nobs = length(log_density))
+# seen_data %>%
+#   filter(classcode == 'opic') %>%
+#   group_by(year) %>%
+#   summarise(sd_ld = sd(log_density))
+#   ggplot(aes(factor(year), log_density)) +
+#   geom_boxplot()
+#
+#   group_by(year) %>%
+#   summarise(nobs = length(log_density))
 
 arm_data <- seen_data %>%
   mutate(factor_year = as.factor(year),
@@ -87,8 +87,8 @@ seeing_arm_data <- seeing_data %>%
          factor_month = as.factor(month))
 
 
-test <- rstanarm::stan_glm(log_density ~ factor_year:classcode + region:geographic_cluster + mean_vis,
-                             data = arm_data, cores = 1, chains = 1)
+# test <- rstanarm::stan_glm(log_density ~ factor_year:classcode + region:geographic_cluster + mean_vis,
+#                              data = arm_data, cores = 1, chains = 1)
 
 # test <- rstanarm::stan_glmer(log_density ~ (factor_year - 1|classcode) + (region - 1|geographic_cluster) + mean_vis,
 #                                            data = arm_data, cores = 1, chains = 1)

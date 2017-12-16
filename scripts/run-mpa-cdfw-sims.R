@@ -73,11 +73,12 @@ run_name <- 'Working'
 
 run_dir <- file.path('results', run_name)
 
-load(file = file.path(run_dir, "/data.Rdata"))
+load(file = file.path(run_dir, "/rawish_ahnold_data.Rdata"))
+
+load(file = file.path(run_dir, "/abundance_indices.Rdata"))
 
 
 cdfw_data <- read_csv(file = file.path('data','cfdw-catches.csv'))
-
 
 
 has_timeseries <- cdfw_data %>%
@@ -107,23 +108,9 @@ cdfw_catches <- cdfw_data %>%
   nest(-sci_name, .key = 'catches') %>%
   filter(is.na(sci_name) == F) %>%
   mutate(catches = map(catches, fill_catches, min_year = 2000, max_year = 2015))
-#
-# sfc <- safely(fill_catches)
-#
-# arg <- map(cdfw_catches$catches, sfc, min_year = 2000, max_year = 2015)
-#
 
-life_history_data <-
-  read_csv('data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
-  rename(classcode = pisco_classcode) %>%
-  mutate(classcode = tolower(classcode)) %>%
-  # rename(description_2 = Description) %>%
-  magrittr::set_colnames(., tolower(colnames(.)))
-
-seen_species <- seen_reg_data %>%
-  select(commonname, classcode) %>%
-  unique() %>%
-  left_join(life_history_data %>% select(classcode, taxa, vbgf.linf), by = 'classcode') %>%
+seen_species <- life_history_data %>%
+  filter(classcode %in% (abundance_indices$classcode %>% unique())) %>%
   rename(sci_name = taxa,
          linf = vbgf.linf,
          common_name = commonname) %>%
@@ -138,7 +125,6 @@ sim_grid <- expand.grid(
   larval_movement = c(.1,10),
   density_dependence_form = 1:5,
   steepness = c(0.4,0.9),
-
   stringsAsFactors = F
 ) %>%
   left_join(seen_species, by = 'common_name') %>%
@@ -222,6 +208,7 @@ tune_f <-
       alpha * (log(depletion) - log(target_depletion)) ^ 2 + (1 - alpha) * (log(fish_caught) - log(target_catch)) ^
       2
 
+    print(ss)
     return(ss)
   }
 
@@ -252,7 +239,7 @@ fitfoo <- function(target_depletion, target_catch, linf,sim_years,burn_years,
 }
 
 slice_grid <- sim_grid %>%
-  # slice(1:5) %>%
+  slice(1:5) %>%
   mutate(tuned_pars = pmap(
     list(
       target_depletion = depletion,

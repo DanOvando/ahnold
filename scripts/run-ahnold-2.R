@@ -837,6 +837,7 @@ density_data <- reg_data %>%
 
 save(
   file = glue::glue("{run_dir}/rawish_ahnold_data.Rdata"),
+  life_history_data,
   length_to_density_data,
   density_data,
   kfm_data

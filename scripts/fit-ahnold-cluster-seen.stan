@@ -94,7 +94,9 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on year effects by species
 
-target += normal_lpdf(segment(year_species_betas,counter,years_per_species[i]) | 0, sigma_year_species[i]);
+segment(year_species_betas,counter,years_per_species[i]) ~ normal(0, sigma_year_species[i]);
+
+// target += normal_lpdf(segment(year_species_betas,counter,years_per_species[i]) | 0, sigma_year_species[i]);
 
 counter = counter + years_per_species[i];
 
@@ -106,7 +108,9 @@ counter = 1;
 
 for (i in 1:n_clusters){ // hierarchical priors on region effects by species
 
-target += normal_lpdf(segment(region_cluster_betas,counter, regions_per_cluster[i])| 0, sigma_region_cluster[i]);
+segment(region_cluster_betas,counter, regions_per_cluster[i]) ~ normal(0, sigma_region_cluster[i]);
+
+// target += normal_lpdf(segment(region_cluster_betas,counter, regions_per_cluster[i])| 0, sigma_region_cluster[i]);
 
 counter = counter + regions_per_cluster[i];
 
@@ -118,25 +122,30 @@ log_density_hat = x_seen*betas;
 // rest of the likelihood //////////////////////////////
 
 
-target += normal_lpdf(non_nested_seen_betas | 0, 1);
+non_nested_seen_betas ~ normal(0, 1);
 
-// target += cauchy_lpdf( sigma_density_species | 0, cauchy_2);
+ sigma_density_species ~ normal(0, 1);
+
+sigma_year_species ~ normal(0, 1);
+
+sigma_region_cluster ~ normal(0, 1);
+
+// target += normal_lpdf(non_nested_seen_betas | 0, 1);
 //
-// target += cauchy_lpdf(sigma_year_species | 0, cauchy_2);
+// target += normal_lpdf( sigma_density_species | 0, 1);
+//
+// target += normal_lpdf(sigma_year_species | 0, 1);
 // //
-// target += cauchy_lpdf(sigma_region_cluster | 0, cauchy_2);
+// target += normal_lpdf(sigma_region_cluster |0, 1);
 
-target += normal_lpdf( sigma_density_species | 0, 1);
-
-target += normal_lpdf(sigma_year_species | 0, 1);
-//
-target += normal_lpdf(sigma_region_cluster |0, 1);
 
 
 for (i in 1:n_species){ // cluster sigmas by species
 // one way to do this would be ragged arrays, which are apparently complicated. For now, have to order by species abr provide indexing
 
-target += normal_lpdf(log_density[log_density_species_index[i,1]:log_density_species_index[i,2]] | log_density_hat[log_density_species_index[i,1]:log_density_species_index[i,2]], sigma_density_species[i]);
+log_density[log_density_species_index[i,1]:log_density_species_index[i,2]] ~ normal(log_density_hat[log_density_species_index[i,1]:log_density_species_index[i,2]], sigma_density_species[i]);
+
+// target += normal_lpdf(log_density[log_density_species_index[i,1]:log_density_species_index[i,2]] | log_density_hat[log_density_species_index[i,1]:log_density_species_index[i,2]], sigma_density_species[i]);
 
 }
 
