@@ -1,6 +1,5 @@
 check_ahnold <- function(length_to_density_data, abundance_indices, did_models,min_years = 10, min_year = 2000){
 
-
   reg_data <- abundance_indices %>%
     filter(data_source == 'length_to_density', population_filtering == 'all',
            population_structure == 'one-pop') %>%

@@ -1,12 +1,31 @@
 plot_did <- function(model){
 
 
-  did_terms <- model$stan_summary %>%
+ check <-  model$stan_summary %>%
     as.data.frame() %>%
     mutate(term = rownames(.)) %>%
-    filter(str_detect(term, 'targeted')) %>%
-    mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
-    filter(!is.na(year))
+    filter(str_detect(term, 'targeted'))
+
+ if (any(str_detect(check$term, 'generations'))){
+
+   did_terms <- model$stan_summary %>%
+     as.data.frame() %>%
+     mutate(term = rownames(.)) %>%
+     filter(str_detect(term, 'targeted')) %>%
+     mutate(year = map_dbl(term, ~str_extract_all(.x,'(?<=(protected)).*') %>% as.numeric())) %>%
+     filter(!is.na(year))
+
+ } else{
+
+   did_terms <- model$stan_summary %>%
+     as.data.frame() %>%
+     mutate(term = rownames(.)) %>%
+     filter(str_detect(term, 'targeted')) %>%
+     mutate(year = map_dbl(term, ~str_replace_all(.x,'\\D','') %>% as.numeric())) %>%
+     filter(!is.na(year))
+
+ }
+
 
   did_terms %>%
     ggplot() +

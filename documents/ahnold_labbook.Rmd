@@ -2004,6 +2004,97 @@ In that there is some baseline effect across all species of a given number of ge
  So, running that now. THat clears up the "where should the environment go" think so puts you in a world of simple vs + environment effects, and then the generational DiD idea. 
  
  Definitely need to test that one out a bit to make sure it actually works
+ 
+# Reformating STAN model
+
+Going to have a talk with Cole, but he already got us thinking in some good directions. First, max tree depth. Default is 10, meaning that ~2^10 is the max number of leapfrog steps, aka a lot. The reason it slows down so much in your model must mean that it's hitting this max tree depth a lot, meaing, per the stan-reference 2.17.0 on page 320, that you probably ust have an improper posterior, that you should try and fix! 
+
+Booya. 
+
+
+# Retooling stan model
+
+Part of the problem seems to be that the model is having a reaaaaaaaly hard time mixing for a lot of the species/region effects. I suspect this has to do with the extremely low sample size for some species in some regions. One solution might be to to do region effects clustered by broad traits, either by temperature, mean longitude, or by PCA... 
+
+
+```{r}
+
+seen_data %>% 
+  group_by(classcode, region) %>% 
+  summarise(obs = length(log_density)) %>% 
+  arrange(obs)
+
+data %>% 
+  group_by(classcode, commonname) %>% 
+  summarise(temp = unique(temperature)) %>% 
+  ungroup() %>% 
+  mutate(commonname = forcats::fct_reorder(commonname, temp)) %>% 
+  ggplot(aes(commonname, temp)) + 
+  geom_col() + 
+  coord_flip()
+
+```
+
+You could certainly bin things by temperature. What about a PCA by region.... or actually then something like k-means clustering, but let's look at the PCA first to see how it looks
+
+
+Let's see the PCA first 
+
+```{r}
+
+sightings <- length_to_density_data %>% 
+  filter(is.na(total_biomass_g) == F & total_biomass_g > 0,
+         classcode %in% abundance_models$classcode) %>% 
+  select(classcode, commonname, site, side) %>% 
+  left_join(site_coords, by = c('site','side')) %>% 
+  filter(is.na(latitude) == F & is.na(longitude) == F) %>% 
+  group_by(classcode, commonname) %>% 
+  summarise(mean_lat = mean(latitude),
+            mean_long = mean(longitude),
+            min_lat = min(latitude),
+            max_lat = max(latitude),
+            min_long = min(longitude),
+            max_long = max(longitude)) %>% 
+  ungroup()
+
+num_clusters <- data_frame(clusters = 1:20) %>% 
+  mutate(within_ss = map_dbl(clusters, ~sum(kmeans(sightings %>% select(contains('_')),centers = .x, nstart = 25, iter.max = 1000)$withinss)))
+
+num_clusters %>% 
+  ggplot(aes(clusters, within_ss)) + 
+  geom_point() + 
+  geom_line()
+
+sample_cluster <- kmeans(sightings %>% select(contains('_')),centers = 5, nstart = 25, iter.max = 1000)
+
+sightings <- sightings %>% 
+  mutate(cluster = sample_cluster$cluster)
+
+
+ggmap::qmplot(mean_long, mean_lat , color = cluster %>% as.factor(), data = sightings ) + theme_classic()
+
+
+length_to_density_data <- length_to_density_data %>% 
+  left_join(sightings %>% select(classcode, cluster), by = 'classcode')
+
+all_sightings <- length_to_density_data %>% 
+  filter(is.na(total_biomass_g) == F & total_biomass_g > 0) %>% 
+  select(classcode, commonname, site, side, cluster) %>% 
+  left_join(site_coords, by = c('site','side')) %>% 
+  filter(is.na(latitude) == F & is.na(longitude) == F)  %>% 
+  left_join(site_data %>% select(site, side, region), by = c('site','side'))
+
+qmplot(longitude,latitude, color = cluster %>% as.factor(), data = all_sightings) + theme_classic()
+
+all_sightings %>% 
+  group_by(cluster,region) %>% 
+  summarise(nobs = length(site)) %>% 
+  ungroup() %>% 
+  arrange(nobs)
+
+
+```
+
 
 
 

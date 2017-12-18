@@ -1,10 +1,10 @@
 fit_did <- function(did_data, timing, complexity, dirty_dishes,chains = 4, cores = 4) {
-
   did_data <- did_data %>%
     nest(-population_structure,
          -data_source,
          -population_filtering,
          -abundance_source)
+
 
   # test correlations inspect abundance trends ---------------------------------------
   # did_data <- did_data %>%

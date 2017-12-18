@@ -24,7 +24,8 @@ dishes <- c('loo + (mean_enso + mean_annual_kelp + temp_deviation +mean_pdo + la
             'loo + (mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + mean_annual_kelp + temp_deviation - 1 |classcode)',
             'loo + mean_enso + lag1_enso + lag2_enso + lag3_enso + lag4_enso + mean_annual_kelp + temp_deviation',
             'loo + mean_pdo + lag1_pdo + lag2_pdo + lag3_pdo + lag4_pdo + mean_annual_kelp + temp_deviation',
-            'loo + mean_enso + mean_annual_kelp + temp_deviation'            )
+            'loo + mean_enso + mean_annual_kelp + temp_deviation' ,
+            'loo + (mean_enso + mean_annual_kelp + temp_deviation - 1|geographic_cluster)')
 
 did_models <-
   cross_df(

@@ -8,13 +8,13 @@ data{
 
   int<lower = 0> n_did_parameters; //number of did parameters
 
-  int<lower = 0> n_observations_seen; //number of observations
+  int<lower = 0> n_observations_seen; //number of seen observations
 
   int<lower = 0> n_observations_seeing; //number of observations
 
   int<lower = 0> n_observations_did; //number of did observations
 
-  int<lower = 0> n_species; //number of observations
+  int<lower = 0> n_species; //number of species
 
   int<lower = 0> n_year_species; //number of year species combinations
 
@@ -30,13 +30,13 @@ data{
 
   int years_per_species[n_species]; // number of years for each species
 
-  int regions_per_species[n_species]; // number of years for each species
+  int regions_per_species[n_species]; // number of regions for each species
 
   int year_species_positions[n_year_species]; // the location of year-species effects
 
   int region_species_positions[n_region_species]; // the location of region-species effects
 
-  // int species_intercept_position; // the location of each species intercept
+  // int species_intercept_positions[n_species]; // the location of each species intercept
 
   int did_positions[n_did]; // the location of did effects
 
@@ -52,6 +52,8 @@ data{
 
   vector[n_observations_seen] log_density; // observed log densities
 
+  int log_density_species_index[n_species,2]; // matrix of start and end positions of observed densities
+
   int<lower=0, upper = 1> observed[n_observations_seeing]; // observed or not observed
 
 } // close data section
@@ -66,7 +68,11 @@ vector<lower = 0>[n_species] sigma_year_species; // standard deviation of the ye
 
 vector<lower = 0>[n_species] sigma_region_species; // standard deviation of the year effects
 
-real<lower = 0> sigma_density; // standard deviation of the observed densities
+// real<lower = 0> sigma_density; // standard deviation of the observed densities
+
+vector<lower = 0>[n_species] sigma_density_species; // standard deviation of the observed densities for each species
+
+vector<lower = 0>[n_species] sigma_intercept;
 
 // seeing fish parameters
 
@@ -75,6 +81,8 @@ vector[n_parameters] seeing_betas; //vector of regression coefficients for seein
 vector<lower = 0>[n_species] seeing_sigma_year_species; // standard deviation of the seeing year effects
 
 vector<lower = 0>[n_species] seeing_sigma_region_species; // standard deviation of the seeing region effects
+
+vector<lower = 0>[n_species] sigma_seeing_intercept; // standard deviation of the seeing region effects
 
 // did parameters
 
@@ -97,6 +105,8 @@ transformed parameters{
 
   // vector[n_species] species_intercepts;
 
+  // vector[n_species] seeing_species_intercepts;
+
   vector[n_year_species] seeing_year_species_betas;
 
   vector[n_region_species] seeing_region_species_betas;
@@ -111,8 +121,6 @@ transformed parameters{
 
   // vector[n_did] did_effects;
 
-  // species_intercept = betas[species_intercept_position];
-
   // print(species_intercept);
 
   year_species_betas = betas[year_species_positions];
@@ -121,8 +129,7 @@ transformed parameters{
 
   non_nested_seen_betas = betas[non_nested_positions];
 
-  // species_intercepts = betas[species_intercepts_positions];
-
+  // species_intercepts = betas[species_intercept_positions];
 
 //seeing fish
 
@@ -133,7 +140,7 @@ transformed parameters{
 
   non_nested_seeing_betas = seeing_betas[non_nested_positions];
 
-  // seeing_species_intercepts = seeing_betas[species_intercepts_positions];
+  // seeing_species_intercepts = seeing_betas[species_intercept_positions];
 
 // did model
 
@@ -167,7 +174,9 @@ for (i in 1:n_species){ // hierarchical priors on year effects by species
 
 // target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercepts[i], sigma_year_species[i]);
 
-target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, sigma_year_species[i]);
+// target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, sigma_year_species[i]);
+
+target += normal_lpdf(segment(year_species_betas,counter,years_per_species[i]) | 0, sigma_year_species[i]);
 
 // target += normal_lpdf(year_species_betas[counter:(counter + years_per_species[i] - 1)] | species_intercept, sigma_year_species[i]);
 
@@ -181,8 +190,10 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on region effects by species
 
+// target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | 0, sigma_region_species[i]);
 
-target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | 0, sigma_region_species[i]);
+target += normal_lpdf(segment(region_species_betas,counter, regions_per_species[i])| 0, sigma_region_species[i]);
+
 
 // target += normal_lpdf(region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercept, sigma_region_species[i]);
 
@@ -205,7 +216,9 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on year effects by species
 
-target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, seeing_sigma_year_species[i]);
+target += normal_lpdf(segment(seeing_year_species_betas, counter,years_per_species[i]) | 0, seeing_sigma_year_species[i]);
+
+// target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | 0, seeing_sigma_year_species[i]);
 
 // target += normal_lpdf(seeing_year_species_betas[counter:(counter + years_per_species[i] - 1)] | seeing_species_intercepts[i], seeing_sigma_year_species[i]);
 
@@ -222,8 +235,9 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on region effects by species
 
+target += normal_lpdf(segment(seeing_region_species_betas, counter, regions_per_species[i]) | 0, seeing_sigma_region_species[i]);
 
-target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | 0, seeing_sigma_region_species[i]);
+// target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | 0, seeing_sigma_region_species[i]);
 
 //
 // target += normal_lpdf(seeing_region_species_betas[counter:(counter + regions_per_species[i] - 1)] | species_intercept, seeing_sigma_region_species[i]);
@@ -245,7 +259,8 @@ prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
 
 
 // target += normal_lpdf(did_effects | 0, sigma_did);
-// rest of the likelihood
+
+// rest of the likelihood //////////////////////////////
 
 // target += cauchy_lpdf( sigma_did |0, cauchy_2);
 
@@ -255,7 +270,17 @@ target += normal_lpdf(non_nested_seeing_betas | 0, 100);
 
 target += normal_lpdf(non_nested_seen_betas | 0, 100);
 
-target += cauchy_lpdf( sigma_density | 0, cauchy_2);
+// target += normal_lpdf(seeing_species_intercepts | 0, sigma_seeing_intercept);
+
+// target += normal_lpdf(species_intercepts | 0, sigma_intercept);
+
+target += cauchy_lpdf( sigma_density_species | 0, cauchy_2);
+
+target += cauchy_lpdf( sigma_seeing_intercept | 0, cauchy_2);
+
+target += cauchy_lpdf( sigma_intercept | 0, cauchy_2);
+
+// target += cauchy_lpdf( sigma_density | 0, cauchy_2);
 
 target += cauchy_lpdf(sigma_year_species | 0, cauchy_2);
 //
@@ -265,13 +290,20 @@ target += cauchy_lpdf(seeing_sigma_year_species | 0, cauchy_2);
 //
 target += cauchy_lpdf(seeing_sigma_region_species | 0, cauchy_2);
 
-target += normal_lpdf(log_density | log_density_hat, sigma_density);
+for (i in 1:n_species){ // cluster sigmas by species
+// one way to do this would be ragged arrays, which are apparently complicated. For now, have to order by species abr provide indexing
+
+target += normal_lpdf(log_density[log_density_species_index[i,1]:log_density_species_index[i,2]] | log_density_hat[log_density_species_index[i,1]:log_density_species_index[i,2]], sigma_density_species[i]);
+
+}
 
 // target += normal_lpdf(standardized_abundance | x_did * did_betas, sigma_abundance);
 
-target += bernoulli_lpmf(observed | prob_seen);
+// target += bernoulli_lpmf(observed | prob_seen);
 
-}
+target += bernoulli_logit_lpmf(observed |(x_seeing * seeing_betas));
+
+} // close model block
 
 generated quantities{
 

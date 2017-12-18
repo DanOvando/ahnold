@@ -2,13 +2,11 @@
 .Rhistory
 .Rdata
 ~Data**/*.Rdata
-~data**/*.csv
-
+data/kfm_data/*.*
 **/*.DS_Store
 **/*.pdf
 **/*.xlsx
 **/*.xls
-**/*.csv
 **/*.xml
 **/*.Rproj
 **/*.Rdata
@@ -40,5 +38,4 @@ data/SouthCoastHumanActivitiesCommercialFisheriesEconomicandSpatialData1992to201
 libs/
 _ignore/.*
 _ignore**/*.*
-data/.*
 
