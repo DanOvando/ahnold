@@ -191,6 +191,58 @@ standard_regions <- x_seeing_region_cluster %>%
 standard_regions <- map_df(1:nrow(standard_years), function(x,sdata){sdata}, sdata = standard_regions)
 
 
+# prepare difference in difference ----------------------------------------
+
+
+load(file = here::here(run_dir,'did_models.Rdata'))
+
+did_data <- did_models %>%
+  filter(timing == 'years', complexity == 'kitchen_sink',population_structure == 'one-pop',
+         abundance_source == 'glm_abundance_index', data_source == 'length_to_density',
+         population_filtering == 'all') %>% {
+           .$data[[1]]
+         }
+
+x_did_non_nested <- did_data %>%
+  select(targeted, factor_year, loo) %>%
+  spread_factors(drop_one = T)
+
+x_did_did_term <- did_data %>%
+  select(targeted, factor_year) %>%
+  mutate(marker = 1:nrow(.)) %>%
+  spread(factor_year, targeted, fill = 0) %>%
+  select(-(1:2))
+
+x_did_non_nested <- bind_cols(x_did_non_nested,x_did_did_term) %>%
+  mutate(intercept = 1)
+
+
+species_effect_variables <- c('mean_enso','mean_annual_kelp','temp_deviation')
+
+x_did_species_effects <- as_data_frame(matrix(NA, nrow = nrow(did_data), ncol = 0))
+
+for (i in 1:length(species_effect_variables)){
+
+  temp <- did_data %>%
+    select(species_effect_variables[i], classcode) %>%
+    mutate(index = 1:nrow(.)) %>%
+    spread(classcode, species_effect_variables[i], fill = 0) %>%
+    select(-index) %>%
+    set_names(paste(colnames(.),species_effect_variables[i], sep = '-'))
+
+  x_did_species_effects <-  x_did_species_effects %>%
+    bind_cols(temp)
+
+}
+
+x_did_species_effects_index <- colnames(x_did_species_effects)
+
+x_did_species_effects_index <- str_extract_all(x_did_species_effects_index,'.*(?=-)', simplify = T)[,1]
+
+x_did_species_effects_index <- as.numeric(as.factor(x_did_species_effects_index))
+
+x_did <- bind_cols(x_did_non_nested,x_did_species_effects)
+
 # fit TMB -----------------------------------------------------------------
 
 n_species <- length(unique(seen_species_index))
@@ -214,7 +266,10 @@ ahnold_data <- list(
   seeing_region_cluster_index = seeing_region_cluster_index,
   standard_years = standard_years,
   standard_non_nested = standard_non_nested,
-  standard_regions = standard_regions
+  standard_regions = standard_regions,
+  x_did_non_nested = x_did_non_nested,
+  x_did_species_effects = x_did_species_effects,
+  x_did_species_effects_index = x_did_species_effects_index
 )
 
 ahnold_data <- map_if(ahnold_data, is.data.frame,~as.matrix(.x))
@@ -230,42 +285,104 @@ ahnold_params <- list(
   seeing_year_species_betas = rep(0, ncol(x_seeing_year_species)),
   seeing_region_cluster_betas = rep(0, ncol(x_seeing_region_cluster)),
   seeing_year_species_sigmas = rep(log(1), n_species),
-  seeing_region_cluster_sigmas = rep(log(1), n_clusters)
+  seeing_region_cluster_sigmas = rep(log(1), n_clusters),
+  did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
+  did_species_betas = rep(0, ncol(x_did_species_effects)) ,
+  did_species_sigmas = rep(log(1), n_distinct(data$classcode)),
+  did_sigma = log(1)
 )
 
+if (run_tmb == T){
 compile(here::here('scripts','fit_ahnold.cpp'),"-O0") # what is the -O0?
 
 dyn.load(dynlib(here::here('scripts','fit_ahnold')))
 
-ahnold_model <- MakeADFun(ahnold_data, ahnold_params, DLL="fit_ahnold", random = c('seen_year_species_betas','seen_region_cluster_betas','seeing_year_species_betas','seeing_region_cluster_betas'))
-
+ahnold_model <-
+  MakeADFun(
+    ahnold_data,
+    ahnold_params,
+    DLL = "fit_ahnold",
+    random = c(
+      'seen_year_species_betas',
+      'seen_region_cluster_betas',
+      'seeing_year_species_betas',
+      'seeing_region_cluster_betas',
+      'did_species_betas'
+    )
+  )
 
 ahnold_fit <- nlminb(ahnold_model$par, ahnold_model$fn, ahnold_model$gr,control = list(iter.max=1000, eval.max = 5000))
 
-# ahnold_fit <- nlminb(jitter(ahnold_fit$par), ahnold_model$fn, ahnold_model$gr,control = list(iter.max=1000, eval.max = 5000))
-#
-# ahnold_fit <- nlminb(jitter(ahnold_fit$par), ahnold_model$fn, ahnold_model$gr,control = list(iter.max=1000, eval.max = 5000))
-#
+save(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'), ahnold_model)
 
-ahnold_model$gr(ahnold_fit$par)
+save(file = here::here(run_dir, 'ahnold-tmb-fit.Rdata'), ahnold_fit)
 
-rep <- ahnold_model$report()
-sd_report <- sdreport(ahnold_model)
-save(file = paste0(run_dir, '/ahnold-tmb-model.Rdata'), ahnold_model)
-save(file = paste0(run_dir, '/ahnold-tmb-fit.Rdata'), ahnold_fit)
-save(file = paste0(run_dir, '/ahnold-tmb-report.Rdata'), sd_report)
+sd_report <- sdreport(ahnold_model,getReportCovariance = FALSE, skip.delta.method = TRUE)
 
-SD = summary(sd_report) # per millar example this should have the actual damn parameter names
+save(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'), sd_report)
 
 
+} else{
 
-ahnold_fit$par
+  load(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'))
 
-ahnold_estimates <- data_frame(variable = names(ahnold_fit$par),
-                          value = ahnold_fit$par)
+  load(file = here::here(run_dir, 'ahnold-tmb-fit.Rdata'))
 
-year_terms <- ahnold_estimates %>%
-  filter(str_detect())
+  load(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'))
+
+}
+
+ahnold_estimates <-  summary(sd_report) %>% as.data.frame() %>% mutate(variable = rownames(.))
+
+
+abundance_indices <- ahnold_estimates %>%
+  filter(str_detect(variable, 'standardized_abundance')) %>%
+  mutate(classcode_year = colnames(x_seen_year_species)) %>%
+  separate(classcode_year, c('classcode','year'), '-') %>%
+  mutate(year = as.numeric(year)) %>%
+  rename(std_error =`Std. Error` ) %>%
+  set_names(tolower)
+
+
+abundance_indices %>%
+  ggplot() +
+  geom_line(aes(year, estimate, color = classcode), show.legend = F) +
+  geom_ribbon(
+    aes(
+      x = year,
+      ymin = estimate - 1.96 * std_error,
+      ymax = estimate + 1.96 * std_error,
+      fill = classcode
+    ),
+    alpha = 0.25,
+    show.legend = F
+  ) +
+  facet_wrap( ~ classcode, scales = 'free_y')
+
+seen_abundance_indices <- ahnold_estimates %>%
+  filter(str_detect(variable, 'seen_year_species_betas')) %>%
+  mutate(classcode_year = colnames(x_seen_year_species)) %>%
+  separate(classcode_year, c('classcode','year'), '-') %>%
+  mutate(year = as.numeric(year)) %>%
+  rename(std_error =`Std. Error` ) %>%
+  set_names(tolower) #%>%
+  # mutate(estimate = exp(estimate),
+  #        std = exp(std_error) )
+
+
+seen_abundance_indices %>%
+  ggplot() +
+  geom_line(aes(year, estimate, color = classcode)) +
+  geom_ribbon(
+    aes(
+      x = year,
+      ymin = estimate - 1.96 * std_error,
+      ymax = estimate + 1.96 * std_error,
+      fill = classcode
+    ),
+    alpha = 0.25
+  ) +
+  facet_wrap( ~ classcode, scales = 'free_y')
 
 
 a <- ahnold_model$report()$log_density_hat

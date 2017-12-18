@@ -48,9 +48,6 @@ run_vast <- F # run VAST, best to leave off for now
 
 num_knots <-  10
 
-aggregate_transects <-
-  T # should transects be aggregated up (mean across observer) or left as raw
-
 channel_islands_only <- T # only include channel islands, leave T
 
 min_year <- 1999 # included years must be greater than this

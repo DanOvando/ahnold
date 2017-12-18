@@ -433,6 +433,8 @@ pdo_locations <- which(str_detect(did_names, 'pdo'))
 did_positions <- which(str_detect(did_names, '20'))
 
 
+x_seen_species_index = seen_data$classcode %>% as.numeric()
+
 log_density_species_index <- seen_data %>%
   select(classcode) %>%
   mutate(index = 1:nrow(.)) %>%
@@ -472,7 +474,8 @@ stan_data <- list(
   x_did = x_did,
   log_density = seen_data$log_density,
   log_density_species_index = log_density_species_index,
-  cauchy_2 = 0.5
+  cauchy_2 = 0.5,
+  x_seen_species_index = x_seen_species_index
 )
 
 set.seed(666)
@@ -494,6 +497,19 @@ Sys.time() - a
 save(file = 'cluster-seen-only.Rdata', ahnold_stan_fit)
 
 
+coefs <- extract(ahnold_stan_fit)
 
+betas <- coefs$betas %>%
+  as_data_frame() %>%
+  set_names(colnames(x_seen)) %>%
+  mutate(iteration = 1:nrow(.)) %>%
+  gather(variable, value,-iteration)
 
+year_effects <- betas %>%
+  filter(str_detect(variable,'-20')) %>%
+  separate(variable,c('classcode','year'), sep = '-') %>%
+  mutate(year = as.numeric(year)) %>%
+  ggplot(aes(year, exp(value), color = classcode, group = year)) +
+  geom_boxplot(show.legend = F) +
+  facet_wrap(~classcode, scales = 'free_y')
 

@@ -112,8 +112,6 @@ counter = counter + regions_per_cluster[i];
 // prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
 
 
-// did_model //////////////////////////////////////////////
-
 
 target += student_t_lpdf(non_nested_seeing_betas |6, 0, 2.5);
 

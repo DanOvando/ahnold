@@ -1,4 +1,4 @@
-spread_factors <- function(data){
+spread_factors <- function(data, drop_one = T){
 
 
   factors <- colnames(data)[map_lgl(data, ~class(.x) %in% c('character','factor'))]
@@ -9,9 +9,14 @@ spread_factors <- function(data){
 
   data <- data %>%
     mutate(dummy = 1, index = 1:nrow(.)) %>%
-    spread_(var, 'dummy', fill = 0, sep = 'dummy') %>%
-    select(-index,-contains('dummy')[1]) %>%
-    set_names(str_replace(colnames(.),'dummy',''))
+    spread_(var, 'dummy', fill = 0, sep = 'dummy') %>%{
+      if (drop_one == T) {
+        dplyr::select(.,-index,-contains('dummy')[1]) #drop the first dummy
+      } else{
+        dplyr::select(.,-index)
+      }
+    } %>%
+    set_names(str_replace(colnames(.),'dummy','-'))
 
   }
 

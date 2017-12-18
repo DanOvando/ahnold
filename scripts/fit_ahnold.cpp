@@ -6,6 +6,8 @@ Type objective_function<Type>::operator() ()
 {
   /////////load data/////////
 
+  // seen data
+
   DATA_MATRIX(x_seen_non_nested); // non nested part of data
 
   DATA_MATRIX(x_seen_year_species); // year species effects
@@ -20,6 +22,8 @@ Type objective_function<Type>::operator() ()
 
   DATA_IVECTOR(seen_region_cluster_index); // index the same length as seen_region_cluster_betas that shows what species that beta corresponds to
 
+  // seeing data
+
   DATA_MATRIX(x_seeing_non_nested); // non nested part of data
 
   DATA_MATRIX(x_seeing_year_species); // year species effects
@@ -33,6 +37,20 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR(seeing_year_species_index); // index the same length as seen_year_species_betas that shows what species that beta corresponds to
 
   DATA_IVECTOR(seeing_region_cluster_index); // index the same length as seen_region_cluster_betas that shows what species that beta corresponds to
+
+  // did data
+
+  DATA_MATRIX(standard_non_nested); // standardized non nested part of data
+
+  DATA_MATRIX(standard_years); // standardized year species effects
+
+  DATA_MATRIX(standard_regions); // standardized region cluster data
+
+  DATA_MATRIX(x_did_non_nested); // non nested did parameters
+
+  DATA_MATRIX(x_did_species_effects); // species effects for did model
+
+  DATA_IVECTOR(x_did_species_effects_index); // location of each species in random effects
 
   /////////define parameters/////////
 
@@ -60,7 +78,15 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seeing_region_cluster_sigmas);
 
-  PARAMETER_VECTOR(seeing_density_species_sigma);
+  // did parameters
+
+  PARAMETER_VECTOR(did_non_nested_betas);
+
+  PARAMETER_VECTOR(did_species_betas);
+
+  PARAMETER_VECTOR(did_species_sigmas);
+
+  PARAMETER(did_sigma);
 
   /////////process parameters and data/////////
 
@@ -144,14 +170,55 @@ Type objective_function<Type>::operator() ()
 
   nll -= sum(dbinom(any_seen,Type(1),prob_seeing, true));
 
+  vector<Type> logit_standardized_yearly_prob_seeing = standard_non_nested * seeing_non_nested_betas + standard_regions * seeing_region_cluster_betas + standard_years * seeing_year_species_betas;
+
+  vector<Type> standardized_yearly_prob_seeing = 1 / (1 + exp(-logit_standardized_yearly_prob_seeing));
+
   /////////did/////////
 
+  vector<Type> seen_abundance_index = exp(seen_year_species_betas);
+
+  vector<Type> standardized_abundance = standardized_yearly_prob_seeing * seen_abundance_index;
+
+  matrix<Type> did_non_nested_effects = x_did_non_nested * did_non_nested_betas;
+
+  matrix<Type> did_year_species_effects = x_did_species_effects * did_species_betas;
+
+  matrix<Type> standardized_abundance_hat = did_non_nested_effects + did_year_species_effects;
+
+  i_max = did_species_betas.size();
+
+  for (int i = 0; i < i_max ; i++){
+
+    nll -= dnorm(did_species_betas(i), Type(0), exp(did_species_sigmas(x_did_species_effects_index(i) - 1)), true);
+
+  } // close species hierarchical effects
+
+std::cout<< standardized_abundance_hat.size()  << "\\n";
+
+i_max = standardized_abundance.size();
+
+  for (int i = 0; i < i_max; i++){
+
+    nll -= dnorm(standardized_abundance(i),standardized_abundance_hat(i),exp(did_sigma), true);
+
+  }
 
   /////////outputs/////////
+
+  ADREPORT(standardized_abundance);
 
   REPORT(log_density_hat);
 
   REPORT(prob_seeing);
+
+  REPORT(standardized_yearly_prob_seeing);
+
+  REPORT(standardized_abundance);
+
+  REPORT(seen_abundance_index);
+
+  REPORT(standardized_abundance_hat);
 
   return nll;
 
