@@ -50,6 +50,25 @@ data{
 
     int<lower=0, upper = 1> observed[n_observations_seeing]; // observed or not observed
 
+  // did data /////////////////////
+
+  int<lower = 0> n_did; // number of did observations
+
+  int<lower = 0> n_did_parameters; // number of did observations
+
+  int<lower = 0> n_species_effects;
+
+  int<lower = 0> n_non_nested_did_betas;
+
+  matrix[n_did, n_did_parameters] x_did;
+
+  matrix[n_did, n_parameters] x_standard;
+
+  int species_effects_positions[n_species_effects];
+
+  int vars_per_species[n_species]; // number of regions for each species
+
+  int non_nested_did_beta_positions[n_non_nested_did_betas];
 
 } // close data section
 
@@ -73,7 +92,13 @@ vector<lower = 0>[n_species] seeing_sigma_year_species; // standard deviation of
 
 vector<lower = 0>[n_clusters] seeing_sigma_region_cluster; // standard deviation of the seeing region effects
 
+// did parameters ////////////////
 
+vector[n_did_parameters] did_betas;
+
+real<lower = 0> sigma_abundance_index;
+
+vector<lower = 0>[n_species] did_species_sigmas;
 
 } // close parameters
 
@@ -98,6 +123,15 @@ vector[n_region_clusters] seeing_region_cluster_betas;
 
   vector[n_non_nested] non_nested_seeing_betas;
 
+vector[n_did] annual_prob_seen;
+
+vector[n_did] abundance_index;
+
+vector[n_did] abundance_index_hat;
+
+vector[n_species_effects] did_species_effects;
+
+vector[n_non_nested_did_betas] non_nested_did_betas;
 
 // seen model //////////////////////////////////////////////
 
@@ -155,7 +189,7 @@ counter = 1;
 
 for (i in 1:n_species){ // hierarchical priors on year effects by species
 
-target += normal_lpdf(segment(seeing_year_species_betas, counter,years_per_species[i]) | 0, seeing_sigma_year_species[i]);
+segment(seeing_year_species_betas, counter,years_per_species[i]) ~ normal(0, seeing_sigma_year_species[i]);
 
 counter = counter + years_per_species[i];
 
@@ -167,13 +201,20 @@ counter = 1;
 
 for (i in 1:n_clusters){ // hierarchical priors on region effects by species
 
-target += normal_lpdf(segment(seeing_region_cluster_betas, counter, regions_per_cluster[i]) | 0, seeing_sigma_region_cluster[i]);
+segment(seeing_region_cluster_betas, counter, regions_per_cluster[i]) ~ normal(0, seeing_sigma_region_cluster[i]);
 
 counter = counter + regions_per_cluster[i];
 
 }
 
 prob_seen = 1 ./ (1 + exp(-x_seeing * seeing_betas));
+
+
+// estimate abundance index
+
+annual_prob_seen = 1 ./ (1 + exp(-x_standard * seeing_betas));
+
+abundance_index = annual_prob_seen .* exp(year_species_betas);
 
 
 // rest of the seen likelihood //////////////////////////////
@@ -206,6 +247,35 @@ log_density[log_density_species_index[i,1]:log_density_species_index[i,2]] ~ nor
  seeing_sigma_region_cluster ~normal(0, 1);
 
  observed ~ bernoulli_logit((x_seeing * seeing_betas));
+
+
+// run did model
+
+abundance_index_hat = x_did * did_betas;
+
+abundance_index ~ normal(abundance_index_hat, sigma_abundance_index);
+
+non_nested_did_betas = did_betas[non_nested_did_beta_positions];
+
+did_species_effects = did_betas[species_effects_positions];
+
+
+counter = 1;
+
+for (i in 1:n_species){ // hierarchical priors on species specific covariates
+
+segment(did_species_effects, counter, vars_per_species[i]) ~ normal(0, did_species_sigmas[i]);
+
+counter = counter + vars_per_species[i];
+
+}
+
+non_nested_did_betas ~ normal(0, 1);
+
+did_species_sigmas ~ normal(0,1);
+
+sigma_abundance_index ~ normal(0,1);
+
 
 
 } // close model block

@@ -240,6 +240,112 @@ x_seeing <-
   )
 
 
+# standard matrix ---------------------------------------------------------
+
+
+standard_non_nested <- x_seeing_non_nested %>%
+  mutate(classcode = seeing_data$classcode) %>%
+  gather(variable, value, -classcode) %>%
+  group_by(classcode, variable) %>%
+  summarise(mean_value = mean(value)) %>%
+  spread(variable, mean_value)
+
+standard_non_nested <- map_df(seq_along(unique(seeing_data$year)), function(x,sdata){sdata}, sdata = standard_non_nested) %>%
+  arrange(classcode) %>%
+  ungroup() %>%
+  select(-classcode)
+
+standard_years <- expand.grid(classcode = unique(data$classcode), year = unique(data$year), stringsAsFactors = F) %>%
+  mutate(year_classcode = paste(classcode, year, sep = '-')) %>%
+  arrange(classcode) %>%
+  select(year_classcode) %>%
+  mutate(marker = 1,
+         index = 1:nrow(.)) %>%
+  spread(year_classcode, marker, fill = 0) %>%
+  select(-index)
+
+standard_regions <- region_geographic_cluster_data %>%
+  colMeans() %>%
+  as.matrix() %>%
+  t() %>%
+  as_data_frame()
+
+standard_regions <- map_df(1:nrow(standard_years), function(x,sdata){sdata}, sdata = standard_regions)
+
+
+x_standard <-
+  bind_cols(
+    standard_non_nested,
+    standard_years,
+    standard_regions
+  )
+
+
+# did data ----------------------------------------------------------------
+
+load(file = here::here(run_dir,'did_models.Rdata'))
+
+did_data <- did_models %>%
+  filter(timing == 'years', complexity == 'kitchen_sink',population_structure == 'one-pop',
+         abundance_source == 'glm_abundance_index', data_source == 'length_to_density',
+         population_filtering == 'all') %>% {
+           .$data[[1]]
+         }
+
+x_did_non_nested <- did_data %>%
+  select(targeted, factor_year, loo) %>%
+  spread_factors(drop_one = T)
+
+x_did_did_term <- did_data %>%
+  select(targeted, factor_year) %>%
+  mutate(marker = 1:nrow(.)) %>%
+  spread(factor_year, targeted, fill = 0) %>%
+  select(-(1:2))
+
+x_did_non_nested <- bind_cols(x_did_non_nested,x_did_did_term) %>%
+  mutate(intercept = 1)
+
+
+species_effect_variables <- c('mean_enso','mean_annual_kelp','temp_deviation')
+
+x_did_species_effects <- as_data_frame(matrix(NA, nrow = nrow(did_data), ncol = 0))
+
+for (i in 1:length(species_effect_variables)){
+
+  temp <- did_data %>%
+    select(species_effect_variables[i], classcode) %>%
+    mutate(index = 1:nrow(.)) %>%
+    spread(classcode, species_effect_variables[i], fill = 0) %>%
+    select(-index) %>%
+    set_names(paste(colnames(.),species_effect_variables[i], sep = '-'))
+
+  x_did_species_effects <-  x_did_species_effects %>%
+    bind_cols(temp)
+
+}
+
+x_did_species_effects_index <- colnames(x_did_species_effects)
+
+x_did_species_effects_index <- str_extract_all(x_did_species_effects_index,'.*(?=-)', simplify = T)[,1]
+
+marker <- 1:length(x_did_species_effects_index)
+
+did_species_order <- data_frame(classcode =x_did_species_effects_index, marker = marker) %>%
+  arrange(classcode)
+
+x_did_species_effects <-  x_did_species_effects[,did_species_order$marker]
+
+vars_per_species <- did_species_order %>%
+  group_by(classcode) %>%
+  summarise(nobs = n_distinct(marker)) %>% {
+    .$nobs
+  }
+
+x_did_species_effects_index <- as.numeric(as.factor(x_did_species_effects_index))
+
+x_did <- bind_cols(x_did_non_nested,x_did_species_effects)
+
+
 # prepare data for stan ---------------------------------------------------
 
 x_seen_species_index <-  seen_data$classcode %>% as.factor() %>%  as.numeric()
@@ -283,7 +389,16 @@ stan_data <- list(
   x_seen_species_index = x_seen_species_index,
   n_observations_seeing = nrow(x_seeing),
   x_seeing = x_seeing,
-  observed = as.numeric(seeing_data$any_seen)
+  observed = as.numeric(seeing_data$any_seen),
+  x_standard = x_standard,
+  x_did = x_did,
+  n_did = nrow(x_did),
+  n_did_parameters = ncol(x_did),
+  n_species_effects = ncol(x_did_species_effects),
+  n_non_nested_did_betas = ncol(x_did_non_nested),
+  species_effects_positions = which(colnames(x_did) %in% colnames(x_did_species_effects)),
+  vars_per_species = vars_per_species,
+  non_nested_did_beta_positions =  which(!colnames(x_did) %in% colnames(x_did_species_effects))
 )
 
 stan_data <- map_if(stan_data, is.data.frame,~as.matrix(.x))
@@ -294,18 +409,20 @@ a <- Sys.time()
 ahnold_stan_fit <- stan(
   file = 'scripts/fit-ahnold-hurdle.stan',
   data = stan_data,
-  chains = 1,
+  chains = 3,
   warmup = 1000,
   iter = 2000,
-  cores = 1,
+  cores = 3,
   refresh = 25,
-  control = list(max_treedepth = 9))
+  control = list(max_treedepth = 6))
 
 Sys.time() - a
 
+save(file = here::here(run_dir, 'ahnold-stanfit.Rdata'), ahnold_stan_fit)
+
+
 # ,
 # control = list(max_treedepth = 7))
-save(file = 'cluster-seen-only.Rdata', ahnold_stan_fit)
 
 
 
