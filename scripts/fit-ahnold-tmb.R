@@ -9,6 +9,8 @@ demons::load_functions()
 
 run_name <- 'Working'
 
+run_tmb <-  T
+
 run_dir <- file.path('results', run_name)
 
 load(file = paste0(run_dir, '/abundance_indices.Rdata'))
@@ -311,7 +313,7 @@ ahnold_model <-
     )
   )
 
-ahnold_fit <- nlminb(ahnold_model$par, ahnold_model$fn, ahnold_model$gr,control = list(iter.max=1000, eval.max = 5000))
+ahnold_fit <- nlminb(ahnold_model$par, ahnold_model$fn, ahnold_model$gr,control = list(iter.max=4000, eval.max = 5000))
 
 save(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'), ahnold_model)
 
