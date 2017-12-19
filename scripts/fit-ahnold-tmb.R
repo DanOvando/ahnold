@@ -8,7 +8,9 @@ demons::load_functions()
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <-  FALSE
+run_tmb <-  TRUE
+
+tmb_to_stan <-  TRUE # fit the model in stan instead of TMB
 
 run_name <- 'Working'
 
@@ -295,16 +297,20 @@ ahnold_params <- list(
   # did_sigma = log(1)
 )
 
-if (run_tmb == T){
-compile(here::here('scripts','fit_ahnold.cpp'),"-O0") # what is the -O0?
 
-dyn.load(dynlib(here::here('scripts','fit_ahnold')))
+
+if (run_tmb == T){
+  
+  script_name <-  'fit_ahnold_hurdle_only'
+compile(here::here('scripts',paste0(script_name,'.cpp')),"-O0") # what is the -O0?
+
+dyn.load(dynlib(here::here('scripts',script_name)))
 
 ahnold_model <-
   MakeADFun(
     ahnold_data,
     ahnold_params,
-    DLL = "fit_ahnold",
+    DLL = script_name,
     random = c(
       'seen_year_species_betas',
       'seen_region_cluster_betas',
@@ -327,6 +333,7 @@ ahnold_model <-
 #     )
 #   )
 
+if (tmb_to_stan == F){
 
 ahnold_fit <- nlminb(ahnold_model$par, ahnold_model$fn, ahnold_model$gr,control = list(iter.max=1000, eval.max = 5000))
 
@@ -337,7 +344,18 @@ save(file = here::here(run_dir, 'ahnold-tmb-fit.Rdata'), ahnold_fit)
 sd_report <- sdreport(ahnold_model,getReportCovariance = TRUE, skip.delta.method = TRUE)
 
 save(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'), sd_report)
-
+} else{
+  
+browser()  
+  ahnold_fit <- tmbstan::tmbstan(ahnold_model, chains=1)
+  
+  save(file = here::here(run_dir, 'ahnold-tmbtostan-model.Rdata'), ahnold_model)
+  
+  
+  save(file = here::here(run_dir, 'ahnold-tmbtostan-fit.Rdata'), ahnold_fit)
+  
+  
+}
 
 } else{
 
@@ -349,88 +367,88 @@ save(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'), sd_report)
 
 }
 
-ahnold_estimates <-  summary(sd_report) %>% as.data.frame() %>% mutate(variable = rownames(.))
-
-
-abundance_indices <- ahnold_estimates %>%
-  filter(str_detect(variable, 'standardized_abundance')) %>%
-  mutate(classcode_year = colnames(x_seen_year_species)) %>%
-  separate(classcode_year, c('classcode','year'), '-') %>%
-  mutate(year = as.numeric(year)) %>%
-  rename(std_error =`Std. Error` ) %>%
-  set_names(tolower)
-
-
-abundance_indices %>%
-  ggplot() +
-  geom_line(aes(year, estimate, color = classcode), show.legend = F) +
-  geom_ribbon(
-    aes(
-      x = year,
-      ymin = estimate - 1.96 * std_error,
-      ymax = estimate + 1.96 * std_error,
-      fill = classcode
-    ),
-    alpha = 0.25,
-    show.legend = F
-  ) +
-  facet_wrap( ~ classcode, scales = 'free_y')
-
-seen_abundance_indices <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seen_year_species_betas')) %>%
-  mutate(classcode_year = colnames(x_seen_year_species)) %>%
-  separate(classcode_year, c('classcode','year'), '-') %>%
-  mutate(year = as.numeric(year)) %>%
-  rename(std_error =`Std. Error` ) %>%
-  set_names(tolower) #%>%
-  # mutate(estimate = exp(estimate),
-  #        std = exp(std_error) )
-
-
-seen_abundance_indices %>%
-  ggplot() +
-  geom_line(aes(year, estimate, color = classcode)) +
-  geom_ribbon(
-    aes(
-      x = year,
-      ymin = estimate - 1.96 * std_error,
-      ymax = estimate + 1.96 * std_error,
-      fill = classcode
-    ),
-    alpha = 0.25
-  ) +
-  facet_wrap( ~ classcode, scales = 'free_y')
-
-
-a <- ahnold_model$report()$log_density_hat
-
-
-ahnold_betas <- data_frame(beta = ahnold_fit$par, variable = names(ahnold_fit$par))
-
-seen_abundance_trends <- ahnold_betas %>%
-  filter(variable == 'seen_year_species_betas')
-
-seen_data$log_density_hat <- a %>% as.numeric()
-
-seen_data %>%
-  ggplot(aes(log_density,log_density_hat, color = geographic_cluster %>% factor())) +
-  geom_point()
-
-
-seen_data %>%
-  ggplot(aes(log_density_hat, log_density_hat - log_density, color = geographic_cluster %>% factor())) +
-  geom_point()
-
-a <- ahnold_model$report()$prob_seeing
-
-seeing_data$prob_seen <- a %>% as.numeric()
-
-seeing_data %>%
-  ggplot(aes(any_seen, prob_seen)) +
-  geom_boxplot()
-
-seeing_data %>%
-  group_by(any_seen) %>%
-  summarise(a =mean(prob_seen))
-
+# ahnold_estimates <-  summary(sd_report) %>% as.data.frame() %>% mutate(variable = rownames(.))
+# 
+# 
+# abundance_indices <- ahnold_estimates %>%
+#   filter(str_detect(variable, 'standardized_abundance')) %>%
+#   mutate(classcode_year = colnames(x_seen_year_species)) %>%
+#   separate(classcode_year, c('classcode','year'), '-') %>%
+#   mutate(year = as.numeric(year)) %>%
+#   rename(std_error =`Std. Error` ) %>%
+#   set_names(tolower)
+# 
+# 
+# abundance_indices %>%
+#   ggplot() +
+#   geom_line(aes(year, estimate, color = classcode), show.legend = F) +
+#   geom_ribbon(
+#     aes(
+#       x = year,
+#       ymin = estimate - 1.96 * std_error,
+#       ymax = estimate + 1.96 * std_error,
+#       fill = classcode
+#     ),
+#     alpha = 0.25,
+#     show.legend = F
+#   ) +
+#   facet_wrap( ~ classcode, scales = 'free_y')
+# 
+# seen_abundance_indices <- ahnold_estimates %>%
+#   filter(str_detect(variable, 'seen_year_species_betas')) %>%
+#   mutate(classcode_year = colnames(x_seen_year_species)) %>%
+#   separate(classcode_year, c('classcode','year'), '-') %>%
+#   mutate(year = as.numeric(year)) %>%
+#   rename(std_error =`Std. Error` ) %>%
+#   set_names(tolower) #%>%
+#   # mutate(estimate = exp(estimate),
+#   #        std = exp(std_error) )
+# 
+# 
+# seen_abundance_indices %>%
+#   ggplot() +
+#   geom_line(aes(year, estimate, color = classcode)) +
+#   geom_ribbon(
+#     aes(
+#       x = year,
+#       ymin = estimate - 1.96 * std_error,
+#       ymax = estimate + 1.96 * std_error,
+#       fill = classcode
+#     ),
+#     alpha = 0.25
+#   ) +
+#   facet_wrap( ~ classcode, scales = 'free_y')
+# 
+# 
+# a <- ahnold_model$report()$log_density_hat
+# 
+# 
+# ahnold_betas <- data_frame(beta = ahnold_fit$par, variable = names(ahnold_fit$par))
+# 
+# seen_abundance_trends <- ahnold_betas %>%
+#   filter(variable == 'seen_year_species_betas')
+# 
+# seen_data$log_density_hat <- a %>% as.numeric()
+# 
+# seen_data %>%
+#   ggplot(aes(log_density,log_density_hat, color = geographic_cluster %>% factor())) +
+#   geom_point()
+# 
+# 
+# seen_data %>%
+#   ggplot(aes(log_density_hat, log_density_hat - log_density, color = geographic_cluster %>% factor())) +
+#   geom_point()
+# 
+# a <- ahnold_model$report()$prob_seeing
+# 
+# seeing_data$prob_seen <- a %>% as.numeric()
+# 
+# seeing_data %>%
+#   ggplot(aes(any_seen, prob_seen)) +
+#   geom_boxplot()
+# 
+# seeing_data %>%
+#   group_by(any_seen) %>%
+#   summarise(a =mean(prob_seen))
+# 
 
