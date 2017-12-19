@@ -2,10 +2,13 @@ set.seed(666)
 library(TMB)
 library(stringr)
 library(purrr)
+library(rstan)
 library(tidyverse)
 demons::load_functions()
 
-# rstan_options(auto_write = TRUE)
+rstan_options(auto_write = TRUE)
+
+run_tmb <-  FALSE
 
 run_name <- 'Working'
 
@@ -285,11 +288,11 @@ ahnold_params <- list(
   seeing_year_species_betas = rep(0, ncol(x_seeing_year_species)),
   seeing_region_cluster_betas = rep(0, ncol(x_seeing_region_cluster)),
   seeing_year_species_sigmas = rep(log(1), n_species),
-  seeing_region_cluster_sigmas = rep(log(1), n_clusters),
-  did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
-  did_species_betas = rep(0, ncol(x_did_species_effects)) ,
-  did_species_sigmas = rep(log(1), n_distinct(data$classcode)),
-  did_sigma = log(1)
+  seeing_region_cluster_sigmas = rep(log(1), n_clusters)#,
+  # did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
+  # did_species_betas = rep(0, ncol(x_did_species_effects)) ,
+  # did_species_sigmas = rep(log(1), n_distinct(data$classcode)),
+  # did_sigma = log(1)
 )
 
 if (run_tmb == T){
@@ -306,10 +309,24 @@ ahnold_model <-
       'seen_year_species_betas',
       'seen_region_cluster_betas',
       'seeing_year_species_betas',
-      'seeing_region_cluster_betas',
-      'did_species_betas'
+      'seeing_region_cluster_betas'
     )
   )
+
+# ahnold_model <-
+#   MakeADFun(
+#     ahnold_data,
+#     ahnold_params,
+#     DLL = "fit_ahnold",
+#     random = c(
+#       'seen_year_species_betas',
+#       'seen_region_cluster_betas',
+#       'seeing_year_species_betas',
+#       'seeing_region_cluster_betas',
+#       'did_species_betas'
+#     )
+#   )
+
 
 ahnold_fit <- nlminb(ahnold_model$par, ahnold_model$fn, ahnold_model$gr,control = list(iter.max=1000, eval.max = 5000))
 
@@ -317,7 +334,7 @@ save(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'), ahnold_model)
 
 save(file = here::here(run_dir, 'ahnold-tmb-fit.Rdata'), ahnold_fit)
 
-sd_report <- sdreport(ahnold_model,getReportCovariance = FALSE, skip.delta.method = TRUE)
+sd_report <- sdreport(ahnold_model,getReportCovariance = TRUE, skip.delta.method = TRUE)
 
 save(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'), sd_report)
 
