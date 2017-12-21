@@ -8,15 +8,15 @@ demons::load_functions()
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <-  TRUE
+run_tmb <- FALSE
 
-tmb_to_stan <-  FALSE # fit the model in stan instead of TMB
+tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
-run_name <- 'Working'
+run_name <- "Working"
 
-run_dir <- file.path('results', run_name)
+run_dir <- file.path("results", run_name)
 
-load(file = paste0(run_dir, '/abundance_indices.Rdata'))
+load(file = paste0(run_dir, "/abundance_indices.Rdata"))
 
 subspecies <- abundance_indices %>%
   select(classcode, targeted) %>%
@@ -27,9 +27,9 @@ subspecies <- abundance_indices %>%
 
 data <- abundance_indices %>%
   filter(
-    population_structure == 'one-pop',
-    population_filtering == 'all',
-    data_source == 'length_to_density'
+    population_structure == "one-pop",
+    population_filtering == "all",
+    data_source == "length_to_density"
   ) %>%
   select(classcode, data) %>%
   unnest() %>%
@@ -50,37 +50,38 @@ numeric_species_key <-
 
 raw_length_covars <-
   c(
-    'classcode',
-    'factor_year',
-    'region',
-    'targeted',
-    'zone',
-    'site_side',
-    'level',
-    'mean_vis',
-    'surge',
-    'factor_month',
-    'trunc_observer',
-    'cumulative_n_obs',
-    'cumulative_n_obs_2'
+    "classcode",
+    "factor_year",
+    "region",
+    "targeted",
+    "zone",
+    "site_side",
+    "level",
+    "mean_vis",
+    "surge",
+    "factor_month",
+    "trunc_observer",
+    "cumulative_n_obs",
+    "cumulative_n_obs_2"
   )
 
-non_nested_variables <- c(# 'zone',
+non_nested_variables <- c( # 'zone',
   # 'site_side',
-  'level',
-  'mean_vis',
-  'surge',
-  'factor_month',
-  'trunc_observer',
-  'cumulative_n_obs')
+  "level",
+  "mean_vis",
+  "surge",
+  "factor_month",
+  "trunc_observer",
+  "cumulative_n_obs"
+)
 
 
 seen_data <- data %>%
   filter(any_seen == T) %>%
-  left_join(numeric_species_key, by = 'classcode')
+  left_join(numeric_species_key, by = "classcode")
 
 seeing_data <- data %>%
-  left_join(numeric_species_key, by = 'classcode')
+  left_join(numeric_species_key, by = "classcode")
 
 
 x_seen_non_nested <- seen_data %>%
@@ -91,31 +92,33 @@ x_seen_non_nested <- seen_data %>%
   mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2)
 
 x_seen_year_species <- seen_data %>%
-  mutate(year_classcode = paste(classcode, year, sep = '-')) %>%
+  mutate(year_classcode = paste(classcode, year, sep = "-")) %>%
   select(year_classcode) %>%
   spread_factors(drop_one = F)
 
 x_seen_region_cluster <- seen_data %>%
   select(region, geographic_cluster) %>%
-  mutate(region_cluster = paste(geographic_cluster, region, sep = '-')) %>%
+  mutate(region_cluster = paste(geographic_cluster, region, sep = "-")) %>%
   select(region_cluster) %>%
   spread_factors(drop_one = T)
 
 
-log_density <-  seen_data$log_density
+log_density <- seen_data$log_density
 
 seen_species_index <- seen_data$numeric_classcode
 
 seen_year_species_index <-
   data_frame(classcode = colnames(x_seen_year_species)) %>%
-  mutate(classcode = str_extract_all(classcode, '(?<=-).*(?=-)', '')) %>%
-  left_join(numeric_species_key, by = 'classcode') %>% {
+  mutate(classcode = str_extract_all(classcode, "(?<=-).*(?=-)", "")) %>%
+  left_join(numeric_species_key, by = "classcode") %>%
+  {
     .$numeric_classcode
   }
 
 seen_region_cluster_index <-
   data_frame(region = colnames(x_seen_region_cluster)) %>%
-  mutate(region = str_replace_all(region, '(\\D)', '') %>% as.factor() %>% as.numeric()) %>% {
+  mutate(region = str_replace_all(region, "(\\D)", "") %>% as.factor() %>% as.numeric()) %>%
+  {
     .$region
   }
 
@@ -131,30 +134,32 @@ x_seeing_non_nested <- seeing_data %>%
   mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2)
 
 x_seeing_year_species <- seeing_data %>%
-  mutate(year_classcode = paste(classcode, year, sep = '-')) %>%
+  mutate(year_classcode = paste(classcode, year, sep = "-")) %>%
   select(year_classcode) %>%
   spread_factors(drop_one = F)
 
 x_seeing_region_cluster <- seeing_data %>%
   select(region, geographic_cluster) %>%
-  mutate(region_cluster = paste(geographic_cluster, region, sep = '-')) %>%
+  mutate(region_cluster = paste(geographic_cluster, region, sep = "-")) %>%
   select(region_cluster) %>%
   spread_factors(drop_one = T)
 
-any_seen <-  seeing_data$any_seen %>% as.numeric()
+any_seen <- seeing_data$any_seen %>% as.numeric()
 
 seeing_species_index <- seeing_data$numeric_classcode
 
 seeing_year_species_index <-
   data_frame(classcode = colnames(x_seeing_year_species)) %>%
-  mutate(classcode = str_extract(classcode, '(?<=-).*(?=-)')) %>%
-  left_join(numeric_species_key, by = 'classcode') %>% {
+  mutate(classcode = str_extract(classcode, "(?<=-).*(?=-)")) %>%
+  left_join(numeric_species_key, by = "classcode") %>%
+  {
     .$numeric_classcode
   }
 
 seeing_region_cluster_index <-
   data_frame(region = colnames(x_seeing_region_cluster)) %>%
-  mutate(region = str_replace_all(region, '(\\D)', '') %>% as.factor() %>% as.numeric()) %>% {
+  mutate(region = str_replace_all(region, "(\\D)", "") %>% as.factor() %>% as.numeric()) %>%
+  {
     .$region
   }
 
@@ -184,7 +189,7 @@ standard_years <-
     year = unique(data$year),
     stringsAsFactors = F
   ) %>%
-  mutate(year_classcode = paste(classcode, year, sep = '-')) %>%
+  mutate(year_classcode = paste(classcode, year, sep = "-")) %>%
   arrange(classcode) %>%
   select(year_classcode) %>%
   spread_factors(drop_one = F)
@@ -205,17 +210,18 @@ standard_regions <-
 # prepare difference in difference ----------------------------------------
 
 
-load(file = here::here(run_dir, 'did_models.Rdata'))
+load(file = here::here(run_dir, "did_models.Rdata"))
 
 did_data <- did_models %>%
   filter(
-    timing == 'years',
-    complexity == 'kitchen_sink',
-    population_structure == 'one-pop',
-    abundance_source == 'glm_abundance_index',
-    data_source == 'length_to_density',
-    population_filtering == 'all'
-  ) %>% {
+    timing == "years",
+    complexity == "kitchen_sink",
+    population_structure == "one-pop",
+    abundance_source == "glm_abundance_index",
+    data_source == "length_to_density",
+    population_filtering == "all"
+  ) %>%
+  {
     .$data[[1]]
   }
 
@@ -228,14 +234,14 @@ x_did_did_term <- did_data %>%
   mutate(index = 1:nrow(.)) %>%
   spread(factor_year, targeted, fill = 0) %>%
   arrange(index) %>%
-  select(-(1:2)) #drop index and one factor level
+  select(-(1:2)) # drop index and one factor level
 
 x_did_non_nested <- bind_cols(x_did_non_nested, x_did_did_term) %>%
   mutate(intercept = 1)
 
 
 species_effect_variables <-
-  c('mean_annual_kelp', 'temp_deviation')
+  c("mean_annual_kelp", "temp_deviation")
 
 x_did_species_effects <-
   as_data_frame(matrix(NA, nrow = nrow(did_data), ncol = 0))
@@ -247,20 +253,24 @@ for (i in 1:length(species_effect_variables)) {
     spread(classcode, species_effect_variables[i], fill = 0) %>%
     arrange(index) %>%
     select(-index) %>%
-    set_names(paste(colnames(.), species_effect_variables[i], sep = '-'))
+    set_names(paste(colnames(.), species_effect_variables[i], sep = "-"))
 
-  x_did_species_effects <-  x_did_species_effects %>%
+  x_did_species_effects <- x_did_species_effects %>%
     bind_cols(temp)
-
 }
 
 x_did_species_effects_index <- colnames(x_did_species_effects)
 
 x_did_species_effects_index <-
-  str_extract_all(x_did_species_effects_index, '.*(?=-)', simplify = T)[, 1]
+  str_extract_all(x_did_species_effects_index, ".*(?=-)", simplify = T)[, 1]
 
 x_did_species_effects_index <-
   as.numeric(as.factor(x_did_species_effects_index))
+
+
+x_did_species_intercepts <- did_data %>%
+  select(classcode) %>%
+  spread_factors(drop_one = F)
 
 x_did <- bind_cols(x_did_non_nested, x_did_species_effects)
 
@@ -290,12 +300,13 @@ ahnold_data <- list(
   standard_regions = standard_regions,
   x_did_non_nested = x_did_non_nested,
   x_did_species_effects = x_did_species_effects,
-  x_did_species_effects_index = x_did_species_effects_index
+  x_did_species_effects_index = x_did_species_effects_index,
+  x_did_species_intercepts = x_did_species_intercepts
 )
 
-ahnold_data <- map_if(ahnold_data, is.data.frame,  ~ as.matrix(.x))
+ahnold_data <- map_if(ahnold_data, is.data.frame, ~ as.matrix(.x))
 
-any_na <- map_lgl(ahnold_data,  ~ any(is.na(.x))) %>% any()
+any_na <- map_lgl(ahnold_data, ~ any(is.na(.x))) %>% any()
 
 if (any_na) {
   stop("NAs in ahnold_data")
@@ -312,11 +323,13 @@ ahnold_params <- list(
   seeing_region_cluster_betas = rep(0, ncol(x_seeing_region_cluster)),
   seeing_year_species_sigmas = rep(log(1), n_species),
   did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
-  did_species_betas = rep(0, ncol(x_did_species_effects)) ,
-   did_sigma = log(1)
+  did_species_betas = rep(0, ncol(x_did_species_effects)),
+  did_species_intercept_betas = rep(0, ncol(x_did_species_intercepts)),
+  species_intercept_sigma = log(1),
+  did_sigma = log(1)
 )
 
-any_na <- map_lgl(ahnold_params,  ~ any(is.na(.x))) %>% any()
+any_na <- map_lgl(ahnold_params, ~ any(is.na(.x))) %>% any()
 
 if (any_na) {
   stop("NAs in ahnold_data")
@@ -325,22 +338,25 @@ if (any_na) {
 
 
 if (run_tmb == T) {
-  script_name <-  'fit_ahnold_hurdle'
-  compile(here::here('scripts', paste0(script_name, '.cpp')), "-O0") # what is the -O0?
+  script_name <- "fit_ahnold_hurdle"
+  compile(here::here("scripts", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
 
-  dyn.load(dynlib(here::here('scripts', script_name)))
+  dyn.load(dynlib(here::here("scripts", script_name)))
 
   ahnold_model <-
     MakeADFun(
       ahnold_data,
       ahnold_params,
       DLL = script_name,
-      random = c('seen_year_species_betas',
-                 'seeing_year_species_betas')
+      random = c(
+        "seen_year_species_betas",
+        "seeing_year_species_betas",
+        "did_species_intercept_betas"
+      )
     )
 
   if (tmb_to_stan == F) {
-     a <- Sys.time()
+    a <- Sys.time()
     set.seed(42)
     ahnold_fit <-
       nlminb(
@@ -349,38 +365,50 @@ if (run_tmb == T) {
         ahnold_model$gr,
         control = list(iter.max = 4000, eval.max = 5000)
       )
-Sys.time() - a
+    Sys.time() - a
 
-    save(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'),
-         ahnold_model)
+    save(
+      file = here::here(run_dir, "ahnold-tmb-model.Rdata"),
+      ahnold_model
+    )
 
-    save(file = here::here(run_dir, 'ahnold-tmb-fit.Rdata'), ahnold_fit)
-    print('made it here')
+    save(file = here::here(run_dir, "ahnold-tmb-fit.Rdata"), ahnold_fit)
+    print("made it here")
+
+    ahnold_report <- ahnold_model$report()
+
     sd_report <- sdreport(ahnold_model)
 
     # sd_report <- sdreport(ahnold_model,getReportCovariance = TRUE, skip.delta.method = TRUE)
 
-    save(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'),
-         sd_report)
-  } else{
-    ahnold_fit <- tmbstan::tmbstan(ahnold_model, chains = 1)
+    save(
+      file = here::here(run_dir, "ahnold-tmb-sdreport.Rdata"),
+      sd_report
+    )
 
-    save(file = here::here(run_dir, 'ahnold-tmbtostan-model.Rdata'),
-         ahnold_model)
+    save(
+      file = here::here(run_dir, "ahnold-tmb-report.Rdata"),
+      ahnold_report
+    )
+  } else {
+    ahnold_fit_stan <- tmbstan::tmbstan(ahnold_model, chains = 1)
 
-    save(file = here::here(run_dir, 'ahnold-tmbtostan-fit.Rdata'),
-         ahnold_fit)
+    save(
+      file = here::here(run_dir, "ahnold-tmbtostan-model.Rdata"),
+      ahnold_model
+    )
 
-
+    save(
+      file = here::here(run_dir, "ahnold-tmbtostan-fit.Rdata"),
+      ahnold_fit
+    )
   }
+} else {
+  load(file = here::here(run_dir, "ahnold-tmb-model.Rdata"))
 
-} else{
-  load(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'))
+  load(file = here::here(run_dir, "ahnold-tmb-fit.Rdata"))
 
-  load(file = here::here(run_dir, 'ahnold-tmb-fit.Rdata'))
-
-  load(file = here::here(run_dir, 'ahnold-tmb-report.Rdata'))
-
+  load(file = here::here(run_dir, "ahnold-tmb-report.Rdata"))
 }
 
 
@@ -393,41 +421,43 @@ ahnold_estimates <-
   mutate(variable = rownames(.)) %>%
   set_names(tolower) %>%
   rename(std_error = `std. error`) %>%
-  mutate(lower = estimate - 1.96 * std_error,
-         upper = estimate + 1.96 * std_error)
+  mutate(
+    lower = estimate - 1.96 * std_error,
+    upper = estimate + 1.96 * std_error
+  )
 
 seen_non_nested_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seen_non_nested_betas')) %>%
+  filter(str_detect(variable, "seen_non_nested_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seen_non_nested))
 
 seeing_non_nested_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seeing_non_nested_betas')) %>%
+  filter(str_detect(variable, "seeing_non_nested_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seeing_non_nested))
 
 seen_region_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seen_region_cluster_betas')) %>%
+  filter(str_detect(variable, "seen_region_cluster_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seen_region_cluster))
 
 seeing_region_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seeing_region_cluster_betas')) %>%
+  filter(str_detect(variable, "seeing_region_cluster_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seeing_region_cluster))
 
 seen_year_species_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seen_year_species_betas')) %>%
+  filter(str_detect(variable, "seen_year_species_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seen_year_species))
 
 seeing_year_species_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'seeing_year_species_betas')) %>%
+  filter(str_detect(variable, "seeing_year_species_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seeing_year_species))
 
 did_non_nested_betas <- ahnold_estimates %>%
-  filter(str_detect(variable, 'did_non_nested_betas')) %>%
+  filter(str_detect(variable, "did_non_nested_betas")) %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_did_non_nested))
 
@@ -454,14 +484,14 @@ betas %>%
   )) +
   geom_hline(aes(yintercept = 0)) +
   coord_flip() +
-  facet_wrap(~ group, scales = 'free')
+  facet_wrap(~ group, scales = "free")
 
 
 abundance_indices <- ahnold_estimates %>%
-  filter(str_detect(variable, 'standardized_abundance')) %>%
+  filter(str_detect(variable, "standardized_abundance")) %>%
   mutate(classcode_year = colnames(x_seen_year_species)) %>%
-  mutate(classcode_year = str_replace(classcode_year, 'year_classcode-','')) %>%
-  separate(classcode_year, c('classcode', 'year'), '-') %>%
+  mutate(classcode_year = str_replace(classcode_year, "year_classcode-", "")) %>%
+  separate(classcode_year, c("classcode", "year"), "-") %>%
   mutate(year = as.numeric(year))
 
 
@@ -478,7 +508,7 @@ abundance_indices %>%
     alpha = 0.25,
     show.legend = F
   ) +
-  facet_wrap( ~ classcode, scales = 'free_y')
+  facet_wrap(~ classcode, scales = "free_y")
 
 
 
@@ -486,7 +516,7 @@ abundance_indices %>%
 
 
 did_terms <- did_non_nested_betas %>%
-  filter(!str_detect(variable, 'factor_year') & str_detect(variable,'\\d'))
+  filter(!str_detect(variable, "factor_year") & str_detect(variable, "\\d"))
 
 did_terms %>%
   ggplot() +
@@ -501,14 +531,12 @@ did_terms %>%
 # diagnostics -------------------------------------------------------------
 
 
-a <- ahnold_model$report()$log_density_hat
-
 
 ahnold_betas <-
   data_frame(beta = ahnold_fit$par, variable = names(ahnold_fit$par))
 
 seen_abundance_trends <- ahnold_betas %>%
-  filter(variable == 'seen_year_species_betas')
+  filter(variable == "seen_year_species_betas")
 
 seen_data$log_density_hat <- a %>% as.numeric()
 

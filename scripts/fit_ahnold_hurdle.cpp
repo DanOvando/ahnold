@@ -50,6 +50,8 @@ Type objective_function<Type>::operator() ()
 
   DATA_MATRIX(x_did_species_effects); // species effects for did model
 
+  DATA_MATRIX(x_did_species_intercepts); // intercepts for each species
+
   DATA_IVECTOR(x_did_species_effects_index); // location of each species in random effects
 
   /////////define parameters/////////
@@ -84,9 +86,12 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(did_species_betas);
 
-  // PARAMETER_VECTOR(did_species_sigmas);
+  PARAMETER_VECTOR(did_species_intercept_betas);
+
+  PARAMETER(species_intercept_sigma);
 
   PARAMETER(did_sigma);
+
 
   /////////process parameters and data/////////
 
@@ -182,17 +187,19 @@ Type objective_function<Type>::operator() ()
 
   matrix<Type> did_year_species_effects = x_did_species_effects * did_species_betas;
 
-  matrix<Type> log_standardized_abundance_hat = did_non_nested_effects + did_year_species_effects;
+  matrix<Type> did_intercept_effects = x_did_species_intercepts * did_species_intercept_betas;
+
+  matrix<Type> log_standardized_abundance_hat = did_non_nested_effects + did_year_species_effects +did_intercept_effects;
 
   // std::cout << log_standardized_abundance_hat << "\\n";
 
-  // i_max = did_species_betas.size();
+   i_max = did_species_intercept_betas.size();
   //
-  // for (int i = 0; i < i_max ; i++){
-  //
-  //   nll -= dnorm(did_species_betas(i), Type(0), exp(did_species_sigmas(x_did_species_effects_index(i) - 1)), true);
-  //
-  // } // close species hierarchical effects
+   for (int i = 0; i < i_max ; i++){
+
+     nll -= dnorm(did_species_intercept_betas(i), Type(0), exp(species_intercept_sigma), true);
+
+   } // close species hierarchical effects
 
 i_max = standardized_abundance.size();
 
