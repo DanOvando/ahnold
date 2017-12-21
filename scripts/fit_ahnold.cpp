@@ -62,7 +62,7 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seen_year_species_sigmas);
 
-  PARAMETER_VECTOR(seen_region_cluster_sigmas);
+  // PARAMETER_VECTOR(seen_region_cluster_sigmas);
 
   PARAMETER_VECTOR(seen_density_species_sigma);
 
@@ -76,7 +76,7 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seeing_year_species_sigmas);
 
-  PARAMETER_VECTOR(seeing_region_cluster_sigmas);
+  // PARAMETER_VECTOR(seeing_region_cluster_sigmas);
 
   // did parameters
 
@@ -84,7 +84,7 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(did_species_betas);
 
-  PARAMETER_VECTOR(did_species_sigmas);
+  // PARAMETER_VECTOR(did_species_sigmas);
 
   PARAMETER(did_sigma);
 
@@ -111,24 +111,20 @@ Type objective_function<Type>::operator() ()
 
   for (int i = 0; i < i_max; i++){
 
-    // std::cout << seen_year_species_sigmas(seen_year_species_index(i) - 1) << "\\n";
-
-    // nll -= dnorm(seen_year_species_betas(i), Type(0), Type(1), true);
-
     nll -= dnorm(seen_year_species_betas(i), Type(0), exp(seen_year_species_sigmas(seen_year_species_index(i) - 1)), true);
 
 
   } // close year species effects
   //
-  i_max = seen_region_cluster_betas.size();
+  // i_max = seen_region_cluster_betas.size();
+  // //
+  // for (int i = 0; i < i_max ; i++){
   //
-  for (int i = 0; i < i_max ; i++){
-
-    nll -= dnorm(seen_region_cluster_betas(i), Type(0), exp(seen_region_cluster_sigmas(seen_region_cluster_index(i) - 1)), true);
-
-
-  } // close region cluster effects
+  //   nll -= dnorm(seen_region_cluster_betas(i), Type(0), exp(seen_region_cluster_sigmas(seen_region_cluster_index(i) - 1)), true);
   //
+  //
+  // } // close region cluster effects
+  // //
   //
   i_max = log_density.size();
 
@@ -157,14 +153,14 @@ Type objective_function<Type>::operator() ()
 
   } // close year species effects
 
-  i_max = seeing_region_cluster_betas.size();
-
-  for (int i = 0; i < i_max ; i++){
-
-    nll -= dnorm(seeing_region_cluster_betas(i), Type(0), exp(seeing_region_cluster_sigmas(seeing_region_cluster_index(i) - 1)), true);
-
-  } // close region cluster effects
+  // i_max = seeing_region_cluster_betas.size();
   //
+  // for (int i = 0; i < i_max ; i++){
+  //
+  //   nll -= dnorm(seeing_region_cluster_betas(i), Type(0), exp(seeing_region_cluster_sigmas(seeing_region_cluster_index(i) - 1)), true);
+  //
+  // } // close region cluster effects
+  // //
 
   vector<Type> prob_seeing =  1/ (1 + exp(-logit_scale_prob_seeing.array()));
 
@@ -186,15 +182,13 @@ Type objective_function<Type>::operator() ()
 
   matrix<Type> standardized_abundance_hat = did_non_nested_effects + did_year_species_effects;
 
-  i_max = did_species_betas.size();
-
-  for (int i = 0; i < i_max ; i++){
-
-    nll -= dnorm(did_species_betas(i), Type(0), exp(did_species_sigmas(x_did_species_effects_index(i) - 1)), true);
-
-  } // close species hierarchical effects
-
-std::cout<< standardized_abundance_hat.size()  << "\\n";
+  // i_max = did_species_betas.size();
+  //
+  // for (int i = 0; i < i_max ; i++){
+  //
+  //   nll -= dnorm(did_species_betas(i), Type(0), exp(did_species_sigmas(x_did_species_effects_index(i) - 1)), true);
+  //
+  // } // close species hierarchical effects
 
 i_max = standardized_abundance.size();
 

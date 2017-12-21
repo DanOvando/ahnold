@@ -62,7 +62,7 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seen_year_species_sigmas);
 
-  PARAMETER_VECTOR(seen_region_cluster_sigmas);
+  // PARAMETER_VECTOR(seen_region_cluster_sigmas);
 
   PARAMETER_VECTOR(seen_density_species_sigma);
 
@@ -76,7 +76,7 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seeing_year_species_sigmas);
 
-  PARAMETER_VECTOR(seeing_region_cluster_sigmas);
+  // PARAMETER_VECTOR(seeing_region_cluster_sigmas);
 
   // did parameters
 
@@ -120,16 +120,16 @@ Type objective_function<Type>::operator() ()
 
   } // close year species effects
   //
-  i_max = seen_region_cluster_betas.size();
+  // i_max = seen_region_cluster_betas.size();
+  // //
+  // for (int i = 0; i < i_max ; i++){
   //
-  for (int i = 0; i < i_max ; i++){
-
-    nll -= dnorm(seen_region_cluster_betas(i), Type(0), exp(seen_region_cluster_sigmas(seen_region_cluster_index(i) - 1)), true);
-
-
-  } // close region cluster effects
+  //   nll -= dnorm(seen_region_cluster_betas(i), Type(0), exp(seen_region_cluster_sigmas(seen_region_cluster_index(i) - 1)), true);
   //
   //
+  // } // close region cluster effects
+  // //
+  // //
   i_max = log_density.size();
 
   for (int i = 0; i < i_max; i++){
@@ -157,14 +157,14 @@ Type objective_function<Type>::operator() ()
 
   } // close year species effects
 
-  i_max = seeing_region_cluster_betas.size();
-
-  for (int i = 0; i < i_max ; i++){
-
-    nll -= dnorm(seeing_region_cluster_betas(i), Type(0), exp(seeing_region_cluster_sigmas(seeing_region_cluster_index(i) - 1)), true);
-
-  } // close region cluster effects
+  // i_max = seeing_region_cluster_betas.size();
   //
+  // for (int i = 0; i < i_max ; i++){
+  //
+  //   nll -= dnorm(seeing_region_cluster_betas(i), Type(0), exp(seeing_region_cluster_sigmas(seeing_region_cluster_index(i) - 1)), true);
+  //
+  // } // close region cluster effects
+  // //
 
   vector<Type> prob_seeing =  1/ (1 + exp(-logit_scale_prob_seeing.array()));
 
@@ -206,6 +206,8 @@ Type objective_function<Type>::operator() ()
   /////////outputs/////////
 
   ADREPORT(standardized_abundance);
+
+  ADREPORT(standardized_yearly_prob_seeing);
 
   REPORT(log_density_hat);
 

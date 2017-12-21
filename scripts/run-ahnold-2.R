@@ -166,8 +166,10 @@ get_fish_life <- function(genus, species) {
   out <- Predict[[1]]$Mean_pred %>%
     as.matrix() %>%
     as.data.frame() %>%
-    mutate(variable = row.names(.)) %>%
-    spread(variable, V1)
+    mutate(variable = row.names(.),
+           index = 1:nrow(.)) %>%
+    spread(variable, V1) %>%
+    select(-index)
 
   out[colnames(out) != 'Temperature'] <-
     exp(out[colnames(out) != 'Temperature'])
@@ -418,9 +420,12 @@ density_data <- read_csv('data/ci_reserve_data_final3 txt.csv') %>%
     data.type = gsub('\\_.*', '', concat.name),
     classcode = gsub('.*\\_', '', concat.name)
   ) %>%
-  mutate(value = as.numeric(value)) %>%
+  mutate(value = as.numeric(value),
+         index = 1:nrow(.)) %>%
   spread(data.type, value) %>%
-  rename(site_side = site.side)
+  rename(site_side = site.side) %>%
+  arrange(index) %>%
+  select(-index)
 
 
 
