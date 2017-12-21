@@ -235,7 +235,7 @@ x_did_non_nested <- bind_cols(x_did_non_nested, x_did_did_term) %>%
 
 
 species_effect_variables <-
-  c('mean_enso', 'mean_annual_kelp', 'temp_deviation')
+  c('mean_annual_kelp', 'temp_deviation')
 
 x_did_species_effects <-
   as_data_frame(matrix(NA, nrow = nrow(did_data), ncol = 0))
@@ -311,8 +311,8 @@ ahnold_params <- list(
   seeing_year_species_betas = rep(0, ncol(x_seeing_year_species)),
   seeing_region_cluster_betas = rep(0, ncol(x_seeing_region_cluster)),
   seeing_year_species_sigmas = rep(log(1), n_species),
-   did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
-  # did_species_betas = rep(0, ncol(x_did_species_effects)) ,
+  did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
+  did_species_betas = rep(0, ncol(x_did_species_effects)) ,
    did_sigma = log(1)
 )
 
@@ -340,6 +340,7 @@ if (run_tmb == T) {
     )
 
   if (tmb_to_stan == F) {
+     a <- Sys.time()
     set.seed(42)
     ahnold_fit <-
       nlminb(
@@ -348,7 +349,7 @@ if (run_tmb == T) {
         ahnold_model$gr,
         control = list(iter.max = 4000, eval.max = 5000)
       )
-
+Sys.time() - a
 
     save(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'),
          ahnold_model)
@@ -425,13 +426,19 @@ seeing_year_species_betas <- ahnold_estimates %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seeing_year_species))
 
+did_non_nested_betas <- ahnold_estimates %>%
+  filter(str_detect(variable, 'did_non_nested_betas')) %>%
+  mutate(group = variable) %>%
+  mutate(variable = colnames(x_did_non_nested))
+
 betas <- bind_rows(
   seen_non_nested_betas,
   seeing_non_nested_betas,
   seen_region_betas,
   seeing_region_betas,
   seen_year_species_betas,
-  seeing_year_species_betas
+  seeing_year_species_betas,
+  did_non_nested_betas
 ) %>%
   as_data_frame()
 
@@ -473,6 +480,23 @@ abundance_indices %>%
   ) +
   facet_wrap( ~ classcode, scales = 'free_y')
 
+
+
+# did ---------------------------------------------------------------------
+
+
+did_terms <- did_non_nested_betas %>%
+  filter(!str_detect(variable, 'factor_year') & str_detect(variable,'\\d'))
+
+did_terms %>%
+  ggplot() +
+  geom_pointrange(aes(
+    variable,
+    y = estimate,
+    ymin = lower,
+    ymax = upper
+  )) +
+  geom_hline(aes(yintercept = 0))
 
 # diagnostics -------------------------------------------------------------
 

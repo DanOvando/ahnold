@@ -82,7 +82,7 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(did_non_nested_betas);
 
-  // PARAMETER_VECTOR(did_species_betas);
+  PARAMETER_VECTOR(did_species_betas);
 
   // PARAMETER_VECTOR(did_species_sigmas);
 
@@ -176,13 +176,15 @@ Type objective_function<Type>::operator() ()
 
   vector<Type> standardized_abundance = standardized_yearly_prob_seeing * seen_abundance_index;
 
+  vector<Type> log_standardized_abundance = log(standardized_abundance);
+
   matrix<Type> did_non_nested_effects = x_did_non_nested * did_non_nested_betas;
 
-  // matrix<Type> did_year_species_effects = x_did_species_effects * did_species_betas;
+  matrix<Type> did_year_species_effects = x_did_species_effects * did_species_betas;
 
-  matrix<Type> standardized_abundance_hat = did_non_nested_effects; //+ did_year_species_effects;
+  matrix<Type> log_standardized_abundance_hat = did_non_nested_effects + did_year_species_effects;
 
-  std::cout << standardized_abundance_hat << "\\n";
+  // std::cout << log_standardized_abundance_hat << "\\n";
 
   // i_max = did_species_betas.size();
   //
@@ -196,7 +198,7 @@ i_max = standardized_abundance.size();
 
   for (int i = 0; i < i_max; i++){
 
-    nll -= dnorm(standardized_abundance(i),standardized_abundance_hat(i),exp(did_sigma), true);
+    nll -= dnorm(log_standardized_abundance(i),log_standardized_abundance_hat(i),exp(did_sigma), true);
 
   }
 
@@ -212,9 +214,11 @@ i_max = standardized_abundance.size();
 
   REPORT(standardized_abundance);
 
+  REPORT(log_standardized_abundance);
+
   REPORT(seen_abundance_index);
 
-  // REPORT(standardized_abundance_hat);
+  REPORT(log_standardized_abundance_hat);
 
   return nll;
 
