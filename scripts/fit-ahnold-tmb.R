@@ -164,7 +164,7 @@ seeing_region_cluster_index <-
 
 standard_non_nested <- x_seeing_non_nested %>%
   mutate(classcode = seeing_data$classcode) %>%
-  gather(variable, value,-classcode) %>%
+  gather(variable, value, -classcode) %>%
   group_by(classcode, variable) %>%
   summarise(mean_value = mean(value)) %>%
   spread(variable, mean_value)
@@ -311,9 +311,9 @@ ahnold_params <- list(
   seeing_year_species_betas = rep(0, ncol(x_seeing_year_species)),
   seeing_region_cluster_betas = rep(0, ncol(x_seeing_region_cluster)),
   seeing_year_species_sigmas = rep(log(1), n_species),
-  did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
-  did_species_betas = rep(0, ncol(x_did_species_effects)) ,
-  did_sigma = log(1)
+   did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
+  # did_species_betas = rep(0, ncol(x_did_species_effects)) ,
+   did_sigma = log(1)
 )
 
 any_na <- map_lgl(ahnold_params,  ~ any(is.na(.x))) %>% any()
@@ -325,7 +325,7 @@ if (any_na) {
 
 
 if (run_tmb == T) {
-  script_name <-  'fit_ahnold'
+  script_name <-  'fit_ahnold_hurdle'
   compile(here::here('scripts', paste0(script_name, '.cpp')), "-O0") # what is the -O0?
 
   dyn.load(dynlib(here::here('scripts', script_name)))
@@ -340,6 +340,7 @@ if (run_tmb == T) {
     )
 
   if (tmb_to_stan == F) {
+    set.seed(42)
     ahnold_fit <-
       nlminb(
         ahnold_model$par,
@@ -348,13 +349,6 @@ if (run_tmb == T) {
         control = list(iter.max = 4000, eval.max = 5000)
       )
 
-    ahnold_fit <-
-      nlminb(
-        ahnold_fit$par,
-        ahnold_model$fn,
-        ahnold_model$gr,
-        control = list(iter.max = 4000, eval.max = 5000)
-      )
 
     save(file = here::here(run_dir, 'ahnold-tmb-model.Rdata'),
          ahnold_model)
@@ -453,12 +447,13 @@ betas %>%
   )) +
   geom_hline(aes(yintercept = 0)) +
   coord_flip() +
-  facet_wrap( ~ group, scales = 'free')
+  facet_wrap(~ group, scales = 'free')
 
 
 abundance_indices <- ahnold_estimates %>%
   filter(str_detect(variable, 'standardized_abundance')) %>%
   mutate(classcode_year = colnames(x_seen_year_species)) %>%
+  mutate(classcode_year = str_replace(classcode_year, 'year_classcode-','')) %>%
   separate(classcode_year, c('classcode', 'year'), '-') %>%
   mutate(year = as.numeric(year))
 
@@ -476,7 +471,7 @@ abundance_indices %>%
     alpha = 0.25,
     show.legend = F
   ) +
-  facet_wrap(~ classcode, scales = 'free_y')
+  facet_wrap( ~ classcode, scales = 'free_y')
 
 
 # diagnostics -------------------------------------------------------------
