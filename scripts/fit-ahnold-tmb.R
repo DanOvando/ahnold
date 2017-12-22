@@ -330,18 +330,13 @@ did_betas %>%
 
 # diagnostics -------------------------------------------------------------
 
-
-
 ahnold_betas <-
   data_frame(beta = ahnold_fit$par, variable = names(ahnold_fit$par))
 
-seen_abundance_trends <- ahnold_betas %>%
-  filter(variable == "seen_year_species_betas")
-
-seen_data$log_density_hat <- a %>% as.numeric()
+seen_data$log_density_hat <- ahnold_report$log_density_hat %>% as.numeric()
 
 seen_data %>%
-  ggplot(aes(log_density, log_density_hat, color = geographic_cluster %>% factor())) +
+  ggplot(aes(log_density, log_density_hat)) +
   geom_point()
 
 
@@ -351,9 +346,7 @@ seen_data %>%
   ggplot(
     aes(
       log_density_hat,
-      log_density_hat - log_density,
-      color = geographic_cluster %>% factor()
-    )
+      log_density_hat - log_density    )
   ) +
   geom_point()
 
@@ -365,6 +358,3 @@ seeing_data %>%
   ggplot(aes(any_seen, prob_seen)) +
   geom_boxplot()
 
-seeing_data %>%
-  group_by(any_seen) %>%
-  summarise(a = mean(prob_seen))
