@@ -23,6 +23,10 @@ library(TMB)
 library(FishLife)
 library(patchwork)
 library(tidyverse)
+if (("demons" %in% installed.packages()) == F){
+  devtools::install_github('danovando/demons')
+}
+
 demons::load_functions('functions')
 
 run_name <- 'Working'
@@ -33,7 +37,7 @@ run_description <-
   'Model selection process, testing STAN selection'
 
 if (dir.exists(run_dir) == F) {
-  dir.create(run_dir)
+  dir.create(run_dir, recursive = T)
 }
 
 write(run_description,
@@ -44,7 +48,7 @@ write(run_description,
 
 run_length_to_density <-  F
 
-run_vast <- F # run VAST, best to leave off for now
+run_vast <- T # run VAST, best to leave off for now
 
 num_knots <-  10
 
@@ -162,8 +166,10 @@ get_fish_life <- function(genus, species) {
   out <- Predict[[1]]$Mean_pred %>%
     as.matrix() %>%
     as.data.frame() %>%
-    mutate(variable = row.names(.)) %>%
-    spread(variable, V1)
+    mutate(variable = row.names(.),
+           index = 1:nrow(.)) %>%
+    spread(variable, V1) %>%
+    select(-index)
 
   out[colnames(out) != 'Temperature'] <-
     exp(out[colnames(out) != 'Temperature'])
@@ -414,9 +420,12 @@ density_data <- read_csv('data/ci_reserve_data_final3 txt.csv') %>%
     data.type = gsub('\\_.*', '', concat.name),
     classcode = gsub('.*\\_', '', concat.name)
   ) %>%
-  mutate(value = as.numeric(value)) %>%
+  mutate(value = as.numeric(value),
+         index = 1:nrow(.)) %>%
   spread(data.type, value) %>%
-  rename(site_side = site.side)
+  rename(site_side = site.side) %>%
+  arrange(index) %>%
+  select(-index)
 
 
 

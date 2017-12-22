@@ -2097,4 +2097,18 @@ all_sightings %>%
 
 
 
+# 2017-12-21 chat with brandon
+
+OK, so a important thigns came out of that conversation with Brandon. The core is: you should try and just back out the net MPA effect directly from the model, instead of in this hierarchichal way. It should give you way more power to detect the MPA effect. You're already extracting the "net" year effect, so just do the EXACT SAME DAMN THING except hold year constant and change the MPA/targeted effect as needed. 
+
+That a) gives you waaaaay more data points to estimate that thing, holding other crap constant, and b) would allow you to estimate the effect by species, which degrees of freedom don't allow you to do as it currently stands with targeted and non-targeted... but it's something to think about. 
+
+So, the next step is to 1) finish what you were doing on the current method (add in species intercepts) and run that thing.
+
+Then, build a new model in TMB for speeds sake that does this step, being careful to make sure that it's still the MPA effect that you're estimating. 
+
+Compare and see what happens. 
+
+Part of the reason for the hierarchihcal stuff normally is that you're trying to estiamte things you can't really observe, and so you're imposing structure to get at that. i.e. priors on random effects in a state space sense that otherwise wouldn't be identifiable. 
+
 
