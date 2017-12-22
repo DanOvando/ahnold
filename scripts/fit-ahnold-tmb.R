@@ -12,6 +12,10 @@ run_tmb <- FALSE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
+run_tmb <-  T
+
+run_dir <- file.path('results', run_name)
+
 run_name <- "Working"
 
 run_dir <- file.path("results", run_name)
