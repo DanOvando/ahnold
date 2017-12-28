@@ -8,13 +8,13 @@ demons::load_functions()
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- FALSE
+run_tmb <- TRUE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
 run_tmb <-  T
 
-run_dir <- file.path('results', run_name)
+max_generations <- 4
 
 run_name <- "Working"
 
@@ -22,7 +22,7 @@ run_dir <- file.path("results", run_name)
 
 load(file = paste0(run_dir, "/abundance_indices.Rdata"))
 
-
+mpa_year <-  2003
 data <- abundance_indices %>%
   filter(
     population_structure == "one-pop",
@@ -34,7 +34,10 @@ data <- abundance_indices %>%
   ungroup() %>%
   mutate(
          mean_temp = ifelse(is.na(mean_temp), mean(mean_temp, na.rm = T), mean_temp)) %>%
-  mutate(temp_deviation = (mean_temp - temperature)^2)
+  mutate(temp_deviation = (mean_temp - temperature)^2) %>%
+  mutate(generations_protected = pmin(round((year - mpa_year - 1) / tm), max_generations)) %>%
+  filter(year > 2000)
+
 
 numeric_species_key <-
   data_frame(classcode = unique(data$classcode)) %>%
@@ -56,6 +59,18 @@ non_nested_variables <- c(
   'mean_depth'
 )
 
+seen_has_important <- data %>%
+  filter(any_seen == T) %>%
+  select(non_nested_variables) %>%
+  mutate(index = 1:nrow(.)) %>%
+  na.omit()
+
+seeing_has_important <- data %>%
+  select(non_nested_variables) %>%
+  mutate(index = 1:nrow(.)) %>%
+  na.omit()
+
+
 
 
 numeric_species_key <-
@@ -66,8 +81,7 @@ numeric_species_key <-
 seen_data <- data %>%
   filter(any_seen == T) %>%
   left_join(numeric_species_key, by = "classcode") %>%
-  select(non_nested_variables, log_density) %>%
-  na.omit()
+  slice(seen_has_important$index)
 
 log_density <- seen_data$log_density
 
@@ -76,8 +90,7 @@ seen_data <- seen_data %>%
 
 seeing_data <- data %>%
   left_join(numeric_species_key, by = "classcode") %>%
-  select(non_nested_variables, any_seen) %>%
-  na.omit()
+  slice(seeing_has_important$index)
 
 any_seen <- seeing_data$any_seen
 
@@ -86,6 +99,7 @@ seeing_data <- seeing_data %>%
 
 
 x_seen_non_nested <- seen_data %>%
+  select(non_nested_variables) %>%
   mutate(intercept = 1) %>%
   spread_factors(drop_one = T) %>%
   purrrlyr::dmap(center_scale) %>%
@@ -108,6 +122,7 @@ x_seen_did <- seen_data %>%
 # prepare seeing ----------------------------------------------------------
 
 x_seeing_non_nested <- seeing_data %>%
+  select(non_nested_variables) %>%
   mutate(intercept = 1) %>%
   spread_factors(drop_one = T) %>%
   purrrlyr::dmap(center_scale) %>%
@@ -145,10 +160,13 @@ standard_non_nested <-
   select(colnames(x_seeing_non_nested)) %>%
   slice(-1) # make sure things are in the same column order as they used to be
 
-standard_did <- data_frame(year = unique(seeing_data$factor_year)) %>%
+standard_did_with_mpa <- data_frame(year = unique(seeing_data$factor_year)) %>%
   spread_factors(drop_one = T) %>%
   slice(-1)
 
+standard_did_without_mpa <- standard_did_with_mpa
+
+standard_did_without_mpa[standard_did_without_mpa > 0] = 0
 
 # fit TMB -----------------------------------------------------------------
 
@@ -171,7 +189,8 @@ ahnold_data <- list(
   log_density = log_density,
   any_seen = any_seen,
   standard_non_nested = standard_non_nested,
-  standard_did = standard_did,
+  standard_did_with_mpa = standard_did_with_mpa,
+  standard_did_without_mpa = standard_did_without_mpa,
   seen_species_index = seen_species_index
 )
 
@@ -239,12 +258,12 @@ if (run_tmb == T) {
     # sd_report <- sdreport(ahnold_model,getReportCovariance = TRUE, skip.delta.method = TRUE)
 
     save(
-      file = here::here(run_dir, "ahnold-tmb-sdreport.Rdata"),
+      file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
       sd_report
     )
 
     save(
-      file = here::here(run_dir, "ahnold-tmb-report.Rdata"),
+      file = here::here(run_dir, "ahnold-tmb-onestage-report.Rdata"),
       ahnold_report
     )
   } else {
@@ -296,7 +315,7 @@ seeing_non_nested_betas <- ahnold_estimates %>%
 did_betas <- ahnold_estimates %>%
   filter(str_detect(variable, "net_did")) %>%
   mutate(group = variable) %>%
-  mutate(variable = colnames(standard_did))
+  mutate(variable = colnames(standard_did_with_mpa))
 
 
 betas <- bind_rows(
