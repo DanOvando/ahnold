@@ -171,7 +171,7 @@ did_terms %>%
 ```{r wi-enso-species}
 
 
-time_did <- rstanarm::stan_glmer(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year + (1 + enso|species), data = populations, chains = 1)
+time_did <- rstanarm::stan_glmer(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year + (factor_year + enso|species), data = populations, chains = 1)
 
 summary(time_did)
 

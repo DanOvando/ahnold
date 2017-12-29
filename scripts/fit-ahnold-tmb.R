@@ -35,9 +35,7 @@ data <- abundance_indices %>%
   mutate(
          mean_temp = ifelse(is.na(mean_temp), mean(mean_temp, na.rm = T), mean_temp)) %>%
   mutate(temp_deviation = (mean_temp - temperature)^2) %>%
-  mutate(generations_protected = pmin(round((year - mpa_year - 1) / tm), max_generations)) %>%
-  filter(year > 2000)
-
+  mutate(generations_protected = pmin(round((year - mpa_year - 1) / tm), max_generations))
 
 numeric_species_key <-
   data_frame(classcode = unique(data$classcode)) %>%
@@ -48,6 +46,7 @@ numeric_species_key <-
 # prepare seen ------------------------------------------------------------
 
 non_nested_variables <- c(
+  'region',
   'targeted',
   'factor_year',
   'level',
@@ -113,6 +112,22 @@ x_seen_did <- seen_data %>%
   arrange(index) %>%
   select(-(1:2)) # drop index and one factor level
 
+x_seen_year_species <- seen_data %>%
+  mutate(year_classcode = paste(classcode, year, sep = "-")) %>%
+  select(year_classcode) %>%
+  spread_factors(drop_one = F)
+
+seen_species_index <- seen_data$numeric_classcode
+
+seen_year_species_index <-
+  data_frame(classcode = colnames(x_seen_year_species)) %>%
+  mutate(classcode = str_extract_all(classcode, "(?<=-).*(?=-)", "")) %>%
+  left_join(numeric_species_key, by = "classcode") %>%
+  {
+    .$numeric_classcode
+  }
+
+
 # x_seen <-
 #   bind_cols(seen_data %>% select(log_density),
 #             x_seen_non_nested, x_seen_did) #,
@@ -134,6 +149,22 @@ x_seeing_did <- seeing_data %>%
   spread(factor_year, targeted, fill = 0) %>%
   arrange(index) %>%
   select(-(1:2)) # drop index and one factor level
+
+x_seeing_year_species <- seeing_data %>%
+  mutate(year_classcode = paste(classcode, year, sep = "-")) %>%
+  select(year_classcode) %>%
+  spread_factors(drop_one = F)
+
+seeing_species_index <- seeing_data$numeric_classcode
+
+year_species_index <-
+  data_frame(classcode = colnames(x_seeing_year_species)) %>%
+  mutate(classcode = str_extract_all(classcode, "(?<=-).*(?=-)", "")) %>%
+  left_join(numeric_species_key, by = "classcode") %>%
+  {
+    .$numeric_classcode
+  }
+
 
 # x_seeing <-
 #   bind_cols(
@@ -157,12 +188,25 @@ standard_non_nested <-
     sdata
   }, sdata = standard_non_nested) %>%
   ungroup() %>%
-  select(colnames(x_seeing_non_nested)) %>%
-  slice(-1) # make sure things are in the same column order as they used to be
+  select(colnames(x_seeing_non_nested))
+
+standard_year_species <- x_seeing_year_species %>%
+  gather(variable, value) %>%
+  group_by(variable) %>%
+  summarise(mean_value = mean(value, na.rm = T)) %>%
+  spread(variable, mean_value)
+
+
+standard_year_species <-
+  map_df(seq_along(unique(seeing_data$factor_year)), function(x, sdata) {
+    sdata
+  }, sdata = standard_year_species) %>%
+  ungroup() %>%
+  select(colnames(x_seeing_year_species))
+
 
 standard_did_with_mpa <- data_frame(year = unique(seeing_data$factor_year)) %>%
-  spread_factors(drop_one = T) %>%
-  slice(-1)
+  spread_factors(drop_one = T)
 
 standard_did_without_mpa <- standard_did_with_mpa
 
@@ -184,14 +228,18 @@ n_species <- length(unique(seen_species_index))
 ahnold_data <- list(
   x_seen_non_nested = x_seen_non_nested,
   x_seen_did = x_seen_did,
+  x_seen_year_species = x_seen_year_species,
   x_seeing_non_nested = x_seeing_non_nested,
   x_seeing_did = x_seeing_did,
+  x_seeing_year_species = x_seeing_year_species,
   log_density = log_density,
   any_seen = any_seen,
   standard_non_nested = standard_non_nested,
+  standard_year_species = standard_year_species,
   standard_did_with_mpa = standard_did_with_mpa,
   standard_did_without_mpa = standard_did_without_mpa,
-  seen_species_index = seen_species_index
+  seen_species_index = seen_species_index,
+  year_species_index =year_species_index
 )
 
 ahnold_data <- map_if(ahnold_data, is.data.frame, ~ as.matrix(.x))
@@ -205,9 +253,13 @@ if (any_na) {
 ahnold_params <- list(
   seen_non_nested_betas = rep(0, ncol(x_seen_non_nested)),
   seen_did_betas = rep(0, ncol(x_seen_did)),
+  seen_year_species_betas = rep(0, ncol(x_seen_year_species)),
+  seen_year_species_sigmas = rep(log(1), n_species),
   seen_density_species_sigma = rep(log(1), n_species),
   seeing_non_nested_betas = rep(0, ncol(x_seeing_non_nested)),
-  seeing_did_betas = rep(0, ncol(x_seeing_did))
+  seeing_did_betas = rep(0, ncol(x_seeing_did)),
+  seeing_year_species_betas = rep(0, ncol(x_seen_year_species)),
+  seeing_year_species_sigmas = rep(log(1), n_species)
 )
 
 any_na <- map_lgl(ahnold_params, ~ any(is.na(.x))) %>% any()
@@ -228,8 +280,11 @@ if (run_tmb == T) {
     MakeADFun(
       ahnold_data,
       ahnold_params,
-      DLL = script_name
-    )
+      DLL = script_name,
+      random = c(
+        "seen_year_species_betas",
+        "seeing_year_species_betas"
+      ))
 
   if (tmb_to_stan == F) {
     a <- Sys.time()
@@ -315,7 +370,8 @@ seeing_non_nested_betas <- ahnold_estimates %>%
 did_betas <- ahnold_estimates %>%
   filter(str_detect(variable, "net_did")) %>%
   mutate(group = variable) %>%
-  mutate(variable = colnames(standard_did_with_mpa))
+  mutate(variable = unique(data$year) %>% as.character()) %>%
+  ungroup()
 
 
 betas <- bind_rows(

@@ -12,6 +12,10 @@ Type objective_function<Type>::operator() ()
 
   DATA_MATRIX(x_seen_did); // difference in difference terms
 
+  DATA_MATRIX(x_seen_year_species); // year random effects
+
+  DATA_IVECTOR(year_species_index); // index the same rows as x_seen showing what species is in that row
+
   DATA_IVECTOR(seen_species_index); // index the same rows as x_seen showing what species is in that row
 
   DATA_VECTOR(log_density); // observed log densities
@@ -21,6 +25,8 @@ Type objective_function<Type>::operator() ()
   DATA_MATRIX(x_seeing_non_nested); // non nested part of data
 
   DATA_MATRIX(x_seeing_did); // difference in difference terms
+
+  DATA_MATRIX(x_seeing_year_species); // year random effects
 
   DATA_VECTOR(any_seen); // observed log densities
 
@@ -34,6 +40,8 @@ Type objective_function<Type>::operator() ()
 
   DATA_MATRIX(standard_did_without_mpa); // standardized did estimators without mpa
 
+  DATA_MATRIX(standard_year_species); // standardized did estimators without mpa
+
   /////////define parameters/////////
 
   PARAMETER_VECTOR(seen_non_nested_betas); // NON DID BETAS
@@ -42,11 +50,19 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seen_density_species_sigma);
 
+  PARAMETER_VECTOR(seen_year_species_betas);
+
+  PARAMETER_VECTOR(seen_year_species_sigmas);
+
   // seeing parameters
 
   PARAMETER_VECTOR(seeing_non_nested_betas);
 
   PARAMETER_VECTOR(seeing_did_betas);
+
+  PARAMETER_VECTOR(seeing_year_species_betas);
+
+  PARAMETER_VECTOR(seeing_year_species_sigmas);
 
   /////////process parameters and data/////////
 
@@ -61,7 +77,21 @@ Type objective_function<Type>::operator() ()
 
   matrix<Type> did_effects = x_seen_did * seen_did_betas;
 
-  matrix<Type> log_density_hat = non_nested_effects + did_effects; // + year_species_effects + region_cluster_effects;
+  matrix<Type> year_species_effects = x_seen_year_species * seen_year_species_betas;
+
+  matrix<Type> log_density_hat = non_nested_effects + did_effects + year_species_effects ; // + year_species_effects + region_cluster_effects;
+
+  i_max = seen_year_species_betas.size();
+
+  // std::cout << i_max << "\\n";
+
+  for (int i = 0; i < i_max; i++){
+
+    nll -= dnorm(seen_year_species_betas(i), Type(0), exp(seen_year_species_sigmas(year_species_index(i) - 1)), true);
+
+
+  } // close year species effects
+
 
   i_max = log_density.size();
 
@@ -78,27 +108,37 @@ Type objective_function<Type>::operator() ()
 
   matrix<Type> seeing_did_effects = x_seeing_did * seeing_did_betas;
 
-  matrix<Type> logit_scale_prob_seeing = seeing_non_nested_effects + seeing_did_effects; //+ seeing_year_species_effects + seeing_region_cluster_effects;
+  matrix<Type> seeing_year_species_effects = x_seeing_year_species * seeing_year_species_betas;
+
+  matrix<Type> logit_scale_prob_seeing = seeing_non_nested_effects + seeing_did_effects + seeing_year_species_effects; //+ seeing_year_species_effects + seeing_region_cluster_effects;
 
   vector<Type> prob_seeing =  1/ (1 + exp(-logit_scale_prob_seeing.array()));
+
+  i_max = seeing_year_species_betas.size();
+
+  for (int i = 0; i < i_max; i++){
+
+    nll -= dnorm(seeing_year_species_betas(i), Type(0), exp(seeing_year_species_sigmas(year_species_index(i) - 1)), true);
+
+  } // close year species effects
 
   nll -= sum(dbinom(any_seen,Type(1),prob_seeing, true));
 
   // predict with mpa
-  vector<Type> with_mpa_logit_standardized_yearly_prob_seeing = standard_non_nested * seeing_non_nested_betas + standard_did_with_mpa * seeing_did_betas; // + standard_years * seeing_year_species_betas;
+  vector<Type> with_mpa_logit_standardized_yearly_prob_seeing = standard_non_nested * seeing_non_nested_betas + standard_year_species * seeing_year_species_betas +  standard_did_with_mpa * seeing_did_betas; // + standard_years * seeing_year_species_betas;
 
   vector<Type> standardized_yearly_prob_seeing = 1 / (1 + exp(-with_mpa_logit_standardized_yearly_prob_seeing));
 
-  vector<Type> with_mpa_standardized_abundance = standard_non_nested * seen_non_nested_betas + standard_did_with_mpa * seen_did_betas; // + standard_years * seeing_year_species_betas;
+  vector<Type> with_mpa_standardized_abundance = standard_non_nested * seen_non_nested_betas + standard_year_species * seeing_year_species_betas +standard_did_with_mpa * seen_did_betas; // + standard_years * seeing_year_species_betas;
 
   vector<Type> log_abundance_with_mpa = standardized_yearly_prob_seeing * with_mpa_standardized_abundance;
 
   // predict without mpa
-  vector<Type> without_mpa_logit_standardized_yearly_prob_seeing = standard_non_nested * seeing_non_nested_betas + standard_did_without_mpa * seeing_did_betas; // + standard_years * seeing_year_species_betas;
+  vector<Type> without_mpa_logit_standardized_yearly_prob_seeing = standard_non_nested * seeing_non_nested_betas +standard_year_species * seeing_year_species_betas +  standard_did_without_mpa * seeing_did_betas; // + standard_years * seeing_year_species_betas;
 
   standardized_yearly_prob_seeing = 1 / (1 + exp(-without_mpa_logit_standardized_yearly_prob_seeing));
 
-  vector<Type> without_mpa_standardized_abundance = standard_non_nested * seen_non_nested_betas + standard_did_without_mpa * seen_did_betas; // + standard_years * seeing_year_species_betas;
+  vector<Type> without_mpa_standardized_abundance = standard_non_nested * seen_non_nested_betas + standard_year_species * seen_year_species_betas + standard_did_without_mpa * seen_did_betas; // + standard_years * seeing_year_species_betas;
 
   vector<Type> log_abundance_without_mpa = standardized_yearly_prob_seeing * without_mpa_standardized_abundance;
 
