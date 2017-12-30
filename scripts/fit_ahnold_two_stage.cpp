@@ -48,11 +48,13 @@ Type objective_function<Type>::operator() ()
 
   DATA_MATRIX(x_did_non_nested); // non nested did parameters
 
-  DATA_MATRIX(x_did_species_effects); // species effects for did model
+  DATA_MATRIX(x_did_species_enviro); // species effects for did model
 
   DATA_MATRIX(x_did_species_intercepts); // intercepts for each species
 
   DATA_IVECTOR(x_did_species_effects_index); // location of each species in random effects
+
+  DATA_INTEGER(species_enviro); // LOGICAL INDICATING WHETHER TO USE SPECIES EFFECTS
 
   /////////define parameters/////////
 
@@ -84,9 +86,15 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(did_non_nested_betas);
 
-  PARAMETER_VECTOR(did_species_betas);
-
   PARAMETER_VECTOR(did_species_intercept_betas);
+
+  // if (species_enviro == 1){
+
+  PARAMETER_VECTOR(did_species_environment_betas);
+
+  PARAMETER(species_enviro_sigma);
+
+  // }
 
   PARAMETER(species_intercept_sigma);
 
@@ -185,12 +193,18 @@ Type objective_function<Type>::operator() ()
 
   matrix<Type> did_non_nested_effects = x_did_non_nested * did_non_nested_betas;
 
-  matrix<Type> did_year_species_effects = x_did_species_effects * did_species_betas;
-
   matrix<Type> did_intercept_effects = x_did_species_intercepts * did_species_intercept_betas;
 
-  matrix<Type> log_standardized_abundance_hat = did_non_nested_effects + did_year_species_effects +did_intercept_effects;
+  // if (species_enviro == 0){
+  // matrix<Type> log_standardized_abundance_hat = did_non_nested_effects +did_intercept_effects;
+  // }
+  // if (species_enviro == 1){
 
+    matrix<Type> did_enviro_effects = x_did_species_enviro * did_species_environment_betas;
+
+    matrix<Type> log_standardized_abundance_hat = did_non_nested_effects +did_intercept_effects + did_enviro_effects;
+
+  // }
   // std::cout << log_standardized_abundance_hat << "\\n";
 
    i_max = did_species_intercept_betas.size();
@@ -208,6 +222,18 @@ i_max = standardized_abundance.size();
     nll -= dnorm(log_standardized_abundance(i),log_standardized_abundance_hat(i),exp(did_sigma), true);
 
   }
+
+  // if (species_enviro == 1){
+
+    i_max = did_species_environment_betas.size();
+    //
+    for (int i = 0; i < i_max ; i++){
+
+      nll -= dnorm(did_species_environment_betas(i), Type(0), exp(species_enviro_sigma), true);
+
+    } // close species hierarchical effects
+
+  //}
 
   /////////outputs/////////
 

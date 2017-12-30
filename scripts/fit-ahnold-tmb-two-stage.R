@@ -8,11 +8,15 @@ demons::load_functions()
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- FALSE
+run_tmb <- TRUE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
 run_name <- "Working"
+
+binary_targeted <-  TRUE
+
+script_name <- "fit_ahnold_two_stage"
 
 run_dir <- file.path("results", run_name)
 
@@ -225,8 +229,15 @@ did_data <- did_models %>%
     .$data[[1]]
   }
 
+if (binary_targeted == T){
+
+  did_data$targeted <- (did_data$targeted > 0) %>% as.numeric()
+
+}
+
 x_did_non_nested <- did_data %>%
-  select(targeted, factor_year, loo) %>%
+  select(targeted, factor_year, loo, temp_deviation, mean_annual_kelp) %>%
+  map2_df(., colnames(.),center_scale,omit_names = 'targeted') %>%
   spread_factors(drop_one = T)
 
 x_did_did_term <- did_data %>%
@@ -241,7 +252,7 @@ x_did_non_nested <- bind_cols(x_did_non_nested, x_did_did_term) %>%
 
 
 species_effect_variables <-
-  c("mean_annual_kelp", "temp_deviation")
+  c("mean_enso")
 
 x_did_species_effects <-
   as_data_frame(matrix(NA, nrow = nrow(did_data), ncol = 0))
@@ -268,12 +279,45 @@ x_did_species_effects_index <-
   as.numeric(as.factor(x_did_species_effects_index))
 
 
+x_did_non_nested <- bind_cols(x_did_non_nested, x_did_species_effects)
+
 x_did_species_intercepts <- did_data %>%
   select(classcode) %>%
   spread_factors(drop_one = F)
 
-x_did <- bind_cols(x_did_non_nested, x_did_species_effects)
+indicies <- abundance_indices %>%
+  filter(
+    population_structure == "one-pop",
+    population_filtering == "all",
+    data_source == "length_to_density"
+  ) %>%
+  select(glm_abundance_index) %>%
+  unnest()
 
+
+x_did <- bind_cols(x_did_non_nested, x_did_species_intercepts)
+
+
+test <-  did_data %>%
+  mutate(abundance_index = log(indicies$abundance_index))
+
+
+check <-
+  rstanarm::stan_glmer(
+    abundance_index ~ targeted * factor_year + loo + temp_deviation + mean_annual_kelp + (mean_enso|
+                                                                                            classcode),
+    data = test,
+    chains = 1,
+    cores = 1
+  )
+
+
+check2 <-
+  lme4::lmer(
+    abundance_index ~ targeted * factor_year + loo + temp_deviation + mean_annual_kelp + (mean_enso|
+                                                                                            classcode),
+    data = test
+  )
 # fit TMB -----------------------------------------------------------------
 
 n_species <- length(unique(seen_species_index))
@@ -299,9 +343,10 @@ ahnold_data <- list(
   standard_non_nested = standard_non_nested,
   standard_regions = standard_regions,
   x_did_non_nested = x_did_non_nested,
-  x_did_species_effects = x_did_species_effects,
+  x_did_species_enviro = x_did_species_effects,
   x_did_species_effects_index = x_did_species_effects_index,
-  x_did_species_intercepts = x_did_species_intercepts
+  x_did_species_intercepts = x_did_species_intercepts,
+  species_enviro = 1
 )
 
 ahnold_data <- map_if(ahnold_data, is.data.frame, ~ as.matrix(.x))
@@ -323,9 +368,10 @@ ahnold_params <- list(
   seeing_region_cluster_betas = rep(0, ncol(x_seeing_region_cluster)),
   seeing_year_species_sigmas = rep(log(1), n_species),
   did_non_nested_betas = rep(0, ncol(x_did_non_nested)),
-  did_species_betas = rep(0, ncol(x_did_species_effects)),
+  did_species_environment_betas = rep(0, ncol(x_did_species_effects)),
   did_species_intercept_betas = rep(0, ncol(x_did_species_intercepts)),
   species_intercept_sigma = log(1),
+  species_enviro_sigma = log(1),
   did_sigma = log(1)
 )
 
@@ -338,7 +384,6 @@ if (any_na) {
 
 
 if (run_tmb == T) {
-  script_name <- "fit_ahnold_hurdle"
   compile(here::here("scripts", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
 
   dyn.load(dynlib(here::here("scripts", script_name)))
@@ -351,7 +396,8 @@ if (run_tmb == T) {
       random = c(
         "seen_year_species_betas",
         "seeing_year_species_betas",
-        "did_species_intercept_betas"
+        "did_species_intercept_betas",
+        "did_species_environment_betas"
       )
     )
 
@@ -368,11 +414,11 @@ if (run_tmb == T) {
     Sys.time() - a
 
     save(
-      file = here::here(run_dir, "ahnold-tmb-model.Rdata"),
+      file = here::here(run_dir, "ahnold-tmb-twostage-model.Rdata"),
       ahnold_model
     )
 
-    save(file = here::here(run_dir, "ahnold-tmb-fit.Rdata"), ahnold_fit)
+    save(file = here::here(run_dir, "ahnold-tmb-twostage-fit.Rdata"), ahnold_fit)
     print("made it here")
 
     ahnold_report <- ahnold_model$report()
@@ -382,12 +428,12 @@ if (run_tmb == T) {
     # sd_report <- sdreport(ahnold_model,getReportCovariance = TRUE, skip.delta.method = TRUE)
 
     save(
-      file = here::here(run_dir, "ahnold-tmb-sdreport.Rdata"),
+      file = here::here(run_dir, "ahnold-tmb-twostage-sdreport.Rdata"),
       sd_report
     )
 
     save(
-      file = here::here(run_dir, "ahnold-tmb-report.Rdata"),
+      file = here::here(run_dir, "ahnold-tmb-twostage-report.Rdata"),
       ahnold_report
     )
   } else {
@@ -474,7 +520,8 @@ betas <- bind_rows(
   seeing_region_betas,
   seen_year_species_betas,
   seeing_year_species_betas,
-  did_non_nested_betas
+  did_non_nested_betas,
+  did_species_intercept_betas
 ) %>%
   as_data_frame()
 
@@ -494,6 +541,19 @@ betas %>%
 
 
 did_species_intercept_betas  %>%
+  ggplot() +
+  geom_pointrange(aes(
+    variable,
+    y = estimate,
+    ymin = lower,
+    ymax = upper
+  )) +
+  geom_hline(aes(yintercept = 0)) +
+  coord_flip() +
+  facet_wrap(~ group, scales = "free")
+
+
+did_non_nested_betas  %>%
   ggplot() +
   geom_pointrange(aes(
     variable,
@@ -547,8 +607,22 @@ did_terms %>%
   )) +
   geom_hline(aes(yintercept = 0))
 
+
+
 # diagnostics -------------------------------------------------------------
 
+
+did_fit <- data_frame(log_standardized_abundance = ahnold_report$log_standardized_abundance,
+                      log_standardized_abundance_hat = ahnold_report$log_standardized_abundance_hat %>% as.numeric())
+
+
+did_fit %>%
+  ggplot(aes(log_standardized_abundance, log_standardized_abundance_hat)) +
+  geom_point()
+
+did_fit %>%
+  ggplot(aes(log_standardized_abundance_hat, log_standardized_abundance_hat - log_standardized_abundance)) +
+  geom_point()
 
 
 ahnold_betas <-
@@ -557,7 +631,7 @@ ahnold_betas <-
 seen_abundance_trends <- ahnold_betas %>%
   filter(variable == "seen_year_species_betas")
 
-seen_data$log_density_hat <- a %>% as.numeric()
+seen_data$log_density_hat <- ahnold_report$log_density_hat %>% as.numeric()
 
 seen_data %>%
   ggplot(aes(log_density, log_density_hat, color = geographic_cluster %>% factor())) +
@@ -571,10 +645,10 @@ seen_data %>%
     aes(
       log_density_hat,
       log_density_hat - log_density,
-      color = geographic_cluster %>% factor()
+      color = geographic_cluster
     )
   ) +
-  geom_point()
+  geom_point(show.legend = F)
 
 a <- ahnold_model$report()$prob_seeing
 
@@ -582,7 +656,7 @@ seeing_data$prob_seen <- a %>% as.numeric()
 
 seeing_data %>%
   ggplot(aes(any_seen, prob_seen)) +
-  geom_boxplot()
+  geom_violin()
 
 seeing_data %>%
   group_by(any_seen) %>%

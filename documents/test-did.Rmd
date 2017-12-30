@@ -171,7 +171,7 @@ did_terms %>%
 ```{r wi-enso-species}
 
 
-time_did <- rstanarm::stan_glmer(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year + (1 + enso|species), data = populations, chains = 1)
+time_did <- rstanarm::stan_glmer(population ~ factor_year + numeric_targeted + numeric_targeted:factor_year + (factor_year + enso|species), data = populations, chains = 1)
 
 summary(time_did)
 
@@ -219,7 +219,7 @@ mean_noise <- 20
 
 mpa_year <- 5
 
-sigma_pop <- 5
+sigma_pop <-10
 
 n_species <- 30
 
@@ -230,8 +230,10 @@ life_history <-
   enso_effect = sample(c(-1, 1), n_species, replace = T),
   targeted = sample(c(0, 1), n_species, replace = T),
   shared_slope = common_slope,
-  intercept = runif(n_species, 10,200) + 75*targeted,
-  age_mature = runif(n_species,1,3 + 2*targeted)
+  intercept = runif(n_species, 100,400) + 75*targeted,
+    age_mature = runif(n_species,1,1)
+
+  # age_mature = runif(n_species,1,3 + 2*targeted)
   )
   
 populations <- cross_df(list(species = 1:n_species, year = 0:10)) %>% 
@@ -267,6 +269,197 @@ populations %>%
   geom_point()
 
 ```
+
+
+Now, try sampling from that population. The idea here is to generate a bunch of sampling events. At each event, you have some probability of detecting the species, based on environmental covariates and the relative abundance of that species. If you detect it, you draw an estimate of the populatoin in that year with mean true and sigma something. 
+
+That will leave you with a database of observations, that you can then plug into your delta GLM approach to see if it actually works, throwing in a covariate that helps with detection, aka visibility, that is unrelated to other things. So, in theory then the probability of detection should reflect abundance resulting from the MPA as well as the other covariate. 
+
+```{r}
+
+
+go_sample <- function(pops, events){
+  
+sampling_events <- data_frame(event = 1:events, vis = rnorm(events, 0,4)) %>% 
+  mutate(vis = center_scale(vis))
+
+sample_foo <- function(vis, pops, vis_beta = 1, pop_beta = 1, obs_cv = .25){
+  pops <- pops %>% 
+    ungroup() %>% 
+    mutate(prob_seen = 1 / (1 + exp(-(0 + vis * vis_beta + pop_beta * cs_population)))) %>% 
+    mutate(seen = rbinom(nrow(pops), 1, prob_seen)) %>% 
+    mutate(pop_hat = seen * rnorm(nrow(pops), population, obs_cv * population))
+           
+           # sqrt(log(obs_cv^2 +1)))
+}
+
+sampling_events <- sampling_events %>% 
+  mutate(samples = map(vis, sample_foo, pops = pops)) %>% 
+  unnest()
+  
+} # close go sample
+
+events <- 200
+
+set.seed(42)
+
+samples <- populations %>% 
+  mutate(cs_population = center_scale(population)) %>% 
+  nest(-year) %>% 
+  mutate(samples = map(data, go_sample, events = 200)) %>% 
+  select(year,samples) %>% 
+  unnest()
+
+
+ samples %>% 
+   ggplot() +
+   geom_smooth(aes(year, pop_hat, color = species))
+ 
+ 
+ samples %>% 
+   ggplot(aes(cs_population, prob_seen)) + 
+   geom_point()
+ 
+  samples %>% 
+   ggplot(aes(vis, prob_seen)) + 
+   geom_point()
+
+
+
+```
+
+
+OK! That all works nicely... now the annoying part is that you'll need to pass this all to TMB somehow to to fit the model really... ugh. 
+
+
+```{r}
+data <- samples %>% 
+  mutate(any_seen = pop_hat > 0) %>% 
+  mutate(classcode = species) %>% 
+  mutate(log_density  = (population))
+
+non_nested_variables <- c(
+  'vis',
+  'factor_year',
+  'targeted'
+)
+
+seen_has_important <- data %>%
+  filter(any_seen == T) %>%
+  select(non_nested_variables) %>%
+  mutate(index = 1:nrow(.)) %>%
+  na.omit()
+
+seeing_has_important <- data %>%
+  select(non_nested_variables) %>%
+  mutate(index = 1:nrow(.)) %>%
+  na.omit()
+
+numeric_species_key <-
+  data_frame(classcode = unique(data$classcode)) %>%
+  arrange(classcode) %>%
+  mutate(numeric_classcode = 1:nrow(.))
+
+seen_data <- data %>%
+  filter(any_seen == T) %>%
+  left_join(numeric_species_key, by = "classcode") %>%
+  slice(seen_has_important$index)
+
+log_density <- (seen_data$population)
+
+
+seeing_data <- data %>%
+  left_join(numeric_species_key, by = "classcode") %>%
+  slice(seeing_has_important$index)
+
+any_seen <- seeing_data$any_seen
+
+x_seen_non_nested <- seen_data %>%
+  select(non_nested_variables) %>%
+  mutate(intercept = 1) %>%
+  demons::spread_factors(drop_one = T) %>%
+  purrrlyr::dmap(center_scale) %>%
+  mutate(targeted = seen_data$targeted)
+
+x_seen_did <- seen_data %>%
+  select(targeted, factor_year) %>%
+  mutate(index = 1:nrow(.)) %>%
+  spread(factor_year, targeted, fill = 0) %>%
+  arrange(index) %>%
+  select(-(1:2)) # drop index and one factor level
+
+x_seen <- bind_cols(x_seen_non_nested, x_seen_did) %>% 
+  mutate(log_density = log_density, 
+         targeted = as.numeric(targeted)) 
+
+check_seen <- lm(log_density ~ . - 1, data = x_seen)
+
+
+# prepare seeing ----------------------------------------------------------
+
+x_seeing_non_nested <- seeing_data %>%
+  select(non_nested_variables) %>%
+  mutate(intercept = 1) %>%
+  demons::spread_factors(drop_one = T) %>%
+  purrrlyr::dmap(center_scale) 
+
+x_seeing_did <- seeing_data %>%
+  select(targeted, factor_year) %>%
+  mutate(index = 1:nrow(.)) %>%
+  spread(factor_year, targeted, fill = 0) %>%
+  arrange(index) %>%
+  select(-(1:2)) # drop index and one factor level
+
+x_seeing <- bind_cols(x_seeing_non_nested, x_seeing_did) %>% 
+  mutate(any_seen = any_seen %>% as.numeric(), 
+         targeted = as.numeric(targeted)) 
+
+check_seeing <- glm(any_seen ~ . - 1, data = x_seeing, family = binomial)
+
+# create standard matrix --------------------------------------------------
+
+standard_non_nested <- x_seeing_non_nested %>%
+  gather(variable, value) %>%
+  group_by(variable) %>%
+  summarise(mean_value = mean(value, na.rm = T)) %>%
+  spread(variable, mean_value)
+
+standard_non_nested <-
+  map_df(seq_along(unique(seeing_data$factor_year)), function(x, sdata) {
+    sdata
+  }, sdata = standard_non_nested) %>%
+  ungroup() %>%
+  select(colnames(x_seeing_non_nested)) %>%
+  slice(-1) # make sure things are in the same column order as they used to be
+
+standard_did <- data_frame(year = unique(seeing_data$factor_year)) %>%
+  spread_factors(drop_one = T) %>%
+  slice(-1)
+
+standard <- bind_cols(standard_non_nested, standard_did)
+
+
+# check_did
+
+did_seen <- check_seen %>% broom::tidy() %>% 
+  mutate(term = str_replace_all(term, "`", "")) %>% 
+  filter(str_detect(term,"\\d") & !str_detect(term,"factor_year"))
+ 
+
+did_seeing <- check_seeing %>% broom::tidy()
+
+prob_seeing <- 1 / (1 + exp(-(as.matrix(standard) %*% did_seeing$estimate)))
+
+
+plot(did_seen$estimate)
+
+plot(prob_seeing)
+
+plot(did_seen$estimate * prob_seeing)
+
+
+```
+
 
 
 ```{r simple-generations}
@@ -327,6 +520,15 @@ did_terms %>%
 populations %>% 
   ggplot(aes(generations_protected,mpa_net)) + 
   geom_point()
+
+```
+
+
+
+
+
+
+```{r}
 
 ```
 
