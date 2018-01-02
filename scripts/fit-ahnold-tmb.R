@@ -369,7 +369,7 @@ if (run_tmb == T) {
       ahnold_report
     )
   } else {
-    ahnold_fit_stan <- tmbstan::tmbstan(ahnold_model, chains = 1)
+    ahnold_fit_stan <- tmbstan::tmbstan(ahnold_model, chains = 1,refresh = 25)
 
     save(
       file = here::here(run_dir, "ahnold-tmbtostan-model.Rdata"),
@@ -378,7 +378,7 @@ if (run_tmb == T) {
 
     save(
       file = here::here(run_dir, "ahnold-tmbtostan-fit.Rdata"),
-      ahnold_fit
+      ahnold_fit_stan
     )
   }
 } else {
@@ -435,6 +435,29 @@ seeing_year_species_betas <- ahnold_estimates %>%
   mutate(group = variable) %>%
   mutate(variable = colnames(x_seeing_year_species))
 
+
+seen_trend <- seen_year_species_betas %>%
+  mutate(classcode = str_replace_all(variable, "(year_classcode-)|(-)|(\\d)",'')) %>%
+  mutate(type = 'expected abundance')
+
+seeing_trend <- seeing_year_species_betas %>%
+  mutate(classcode = str_replace_all(variable, "(year_classcode-)|(-)|(\\d)",'')) %>%
+  mutate(type = 'probability seen')
+
+seen_trend %>%
+  filter(classcode == 'hsem') %>%
+  mutate(year = str_replace_all(variable,'\\D','') %>% as.numeric()) %>%
+  ggplot() +
+  geom_line(aes(year, estimate, color = classcode), show.legend = F) +
+  facet_wrap(~classcode)
+
+  geom_pointrange(aes(
+    year,
+    y = estimate,
+    ymin = lower,
+    ymax = upper
+  )) +
+  facet_grid(classcode ~ type, scales = "free")
 
 
 did_betas <- ahnold_estimates %>%

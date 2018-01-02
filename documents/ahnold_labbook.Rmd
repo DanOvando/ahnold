@@ -2111,4 +2111,59 @@ Compare and see what happens.
 
 Part of the reason for the hierarchihcal stuff normally is that you're trying to estiamte things you can't really observe, and so you're imposing structure to get at that. i.e. priors on random effects in a state space sense that otherwise wouldn't be identifiable. 
 
+# 2018-1-2 Diagnosing problem variables
+
+The damn stan version of the TMB file finally ran.... Took absolutely forever and not entirely clear if you even got the same results. So, let's do a few things. Let's try and see if you actually got the same results first. If you did, then let's try and figure out what the problem variables are
+
+Results look pretty damn similar so that's good. 
+
+Problem variables 
+
+- 2002_seen (sort of)
+
+- 2004_seen 
+
+- 2006_seen
+
+- 2008 seen
+
+-2009_seen
+
+- 2010_seen
+
+- 2011_seen
+
+-2012_seen
+
+Basically, a whole bunch of the did parameters had a really hard time mixing
+
+- factor_year-2002_seen
+
+- factor_year-2004_seen
+
+- factor_year-2003_seen
+
+Basically all of the year fixed effects cause major problems
+
+intercept seen
+
+targeted_seen
+
+THe year-species effects have problems too
+
+cpri classcode in particular.. cpri is a nigthmare actually... huh. That's ocean whitefish. Aha, which is also the least actually observed of the species that make it in... only 300 observations in total. 
+
+cpun is the same, reallly bad. though interestingl that's one of the most observed species. What the hell? yeah cpun is a disaster. 
+
+Almost all the other covariates are great. It's really just trying to estimate all these year effects by species that is really fucking stuff up. 
+
+So, the options. 1 is that you just need to give up on stan for this sort of thing, maybe it just doesn't work all that well for complex ecological problems. So, you go with TMB. 
+
+THe other though is that maybe you should take this as a warning. There's a reason that the model is having a really hard time fitting all these things, and so even in TMB works, you are maybe really underestimating the uncertainty. So, solutions there. 
+
+You can get rid of the year-species effects, and instead try and add in more species-environment interactions , like enso and pdo by month, and see if getting rid of those helps you out with the problem of getting all these years dialed in. That has the advantage of making life a little better at interpreting the variables. 
+
+The other thing I want to check is the effective sample size
+
+
 
