@@ -1012,6 +1012,9 @@ abundance_models <- length_to_density_models %>%
   bind_rows(kfm_to_density_models) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
+  mutate(data = map(data, ~ left_join(.x, enso, by = c('year', 'month')))) %>%
+  mutate(data = map(data, ~ left_join(.x, pdo, by = c('year', 'month')))) %>%
+
   mutate(
     data = map2(
       data,

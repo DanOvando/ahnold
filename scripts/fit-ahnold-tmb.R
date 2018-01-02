@@ -18,6 +18,8 @@ max_generations <- 4
 
 run_name <- "Working"
 
+script_name <- "fit_ahnold_no_year_species"
+
 run_dir <- file.path("results", run_name)
 
 load(file = paste0(run_dir, "/abundance_indices.Rdata"))
@@ -315,8 +317,6 @@ if (any_na) {
 
 if (run_tmb == T) {
 
-  script_name <- "fit_ahnold"
-
   compile(here::here("scripts", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
 
   dyn.load(dynlib(here::here("scripts", script_name)))
@@ -327,11 +327,21 @@ if (run_tmb == T) {
       ahnold_params,
       DLL = script_name,
       random = c(
-        "seen_year_species_betas",
-        "seeing_year_species_betas",
         "seen_region_cluster_betas",
         "seeing_region_cluster_betas"
       ))
+
+  # ahnold_model <-
+  #   MakeADFun(
+  #     ahnold_data,
+  #     ahnold_params,
+  #     DLL = script_name,
+  #     random = c(
+  #       "seen_year_species_betas",
+  #       "seeing_year_species_betas",
+  #       "seen_region_cluster_betas",
+  #       "seeing_region_cluster_betas"
+  #     ))
 
   if (tmb_to_stan == F) {
     a <- Sys.time()

@@ -9,35 +9,17 @@
 #' scrape_enso(outdir = '../data/')
 scrape_enso <- function(outdir = '../data/'){
 
-  library(tidyverse)
 
-    enso <- readr::read_lines('https://www.esrl.noaa.gov/psd/enso/mei/table.html')
+    # enso <- readr::read_lines('https://www.esrl.noaa.gov/psd/gcos_wgsp/Timeseries/Data/nino34.long.anom.data')
 
-  enso <- enso[stringr::str_detect(enso,'\t|(YEAR)')] %>%
-    write('enso.txt')
+    enso <- readr::read_table('https://www.esrl.noaa.gov/psd/gcos_wgsp/Timeseries/Data/nino34.long.anom.data',
+                              col_names = F, skip = 1,n_max = 2017-1870 + 1) %>%
+      set_names(c('year',1:12)) %>%
+      gather(month, enso,-year) %>%
+      mutate(month =  as.numeric(month)) %>%
+      mutate(date = lubridate::ymd(paste(year,month,1, sep = '-'))) %>%
+      mutate(enso = ifelse(enso == -99.99, NA, enso))
 
-  enso <-  read.csv('enso.txt', sep = '\t', header = F)
-
-  table_names <- enso$V1[1] %>%
-    as.character() %>%
-    stringr::str_split(stringr::boundary('word'), simplify = T) %>%
-    as.character() %>%
-    tolower()
-
-  enso <- enso %>%
-    slice(-1) %>%
-    as_data_frame()
-
-  colnames(enso) <-  table_names
-
-  enso <- enso %>%
-    gather('bimonth','enso',-year)
-
-  # enso <- read_table("http://www.esrl.noaa.gov/psd/gcos_wgsp/Timeseries/Data/nino34.long.anom.data",
-  #                    na = c("-99.99", "99.99",'-99'), skip = 1, n_max = lubridate::year(Sys.time()) - 1870 + 1,
-  #                    col_names = c("year", 1:12)) %>%
-  #   gather(month, enso, -year) %>%
-  #   mutate(month = as.double(month))
 
 readr::write_csv(enso, path = paste0(outdir,'enso.csv'))
 
