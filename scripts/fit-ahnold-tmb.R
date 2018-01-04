@@ -18,15 +18,15 @@ max_generations <- 4
 
 run_name <- "Working"
 
-script_name <- "fit_ahnold_no_year_species"
+script_name <- "fit_ahnold"
 
 run_dir <- file.path("results", run_name)
 
-load(file = paste0(run_dir, "/abundance_indices.Rdata"))
+load(file = paste0(run_dir, "/ahnold_model_data.Rdata"))
 
 mpa_year <-  2003
 
-data <- abundance_indices %>%
+data <- abundance_models %>%
   filter(
     population_structure == "one-pop",
     population_filtering == "all",
@@ -48,6 +48,12 @@ numeric_species_key <-
   mutate(numeric_classcode = 1:nrow(.))
 
 
+# data %>%
+#   filter(any_seen == T) %>%
+#   ggplot(aes(enso, log_density)) +
+#   geom_point() +
+#   geom_smooth(method = 'lm') +
+#   facet_wrap(~classcode)
 # prepare seen ------------------------------------------------------------
 
 non_nested_variables <- c(
@@ -72,8 +78,6 @@ seeing_has_important <- data %>%
   select(non_nested_variables) %>%
   mutate(index = 1:nrow(.)) %>%
   na.omit()
-
-
 
 
 numeric_species_key <-
@@ -108,6 +112,27 @@ x_seen_non_nested <- seen_data %>%
   purrrlyr::dmap(center_scale) %>%
   mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2) %>%
   mutate(targeted = seen_data$targeted)
+
+
+x_seen_enso <- seen_data %>%
+  select(classcode, enso) %>%
+  mutate(index = 1:nrow(.)) %>%
+  spread(classcode, enso, fill = 0) %>%
+  arrange(index) %>%
+  select(-index) %>%
+  set_names(paste0("enso_",colnames(.)))
+
+x_seen_pdo <- seen_data %>%
+  select(classcode, pdo) %>%
+  mutate(index = 1:nrow(.)) %>%
+  spread(classcode, pdo, fill = 0) %>%
+  arrange(index) %>%
+  select(-index) %>%
+  set_names(paste0("pdo_",colnames(.)))
+
+x_seen_non_nested <- x_seen_non_nested %>%
+  bind_cols(x_seen_enso,
+            x_seen_pdo)
 
 x_seen_did <- seen_data %>%
   select(targeted, factor_year) %>%
@@ -158,6 +183,27 @@ x_seeing_non_nested <- seeing_data %>%
   spread_factors(drop_one = T) %>%
   purrrlyr::dmap(center_scale) %>%
   mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2)
+
+
+x_seeing_enso <- seeing_data %>%
+  select(classcode, enso) %>%
+  mutate(index = 1:nrow(.)) %>%
+  spread(classcode, enso, fill = 0) %>%
+  arrange(index) %>%
+  select(-index) %>%
+  set_names(paste0("enso_",colnames(.)))
+
+x_seeing_pdo <- seeing_data %>%
+  select(classcode, pdo) %>%
+  mutate(index = 1:nrow(.)) %>%
+  spread(classcode, pdo, fill = 0) %>%
+  arrange(index) %>%
+  select(-index) %>%
+  set_names(paste0("pdo_",colnames(.)))
+
+x_seeing_non_nested <- x_seeing_non_nested %>%
+  bind_cols(x_seeing_enso,
+            x_seeing_pdo)
 
 x_seeing_did <- seeing_data %>%
   select(targeted, factor_year) %>%
@@ -280,7 +326,9 @@ ahnold_data <- list(
   standard_did_without_mpa = standard_did_without_mpa,
   standard_region_cluster = standard_region_cluster,
   seen_species_index = seen_species_index,
-  year_species_index =year_species_index
+  year_species_index = year_species_index,
+  seen_weights = rep(1, nrow(x_seen_non_nested)),
+  seeing_weights = rep(1, nrow(x_seeing_non_nested))
 )
 
 ahnold_data <- map_if(ahnold_data, is.data.frame, ~ as.matrix(.x))
@@ -321,27 +369,27 @@ if (run_tmb == T) {
 
   dyn.load(dynlib(here::here("scripts", script_name)))
 
-  ahnold_model <-
-    MakeADFun(
-      ahnold_data,
-      ahnold_params,
-      DLL = script_name,
-      random = c(
-        "seen_region_cluster_betas",
-        "seeing_region_cluster_betas"
-      ))
-
   # ahnold_model <-
   #   MakeADFun(
   #     ahnold_data,
   #     ahnold_params,
   #     DLL = script_name,
   #     random = c(
-  #       "seen_year_species_betas",
-  #       "seeing_year_species_betas",
   #       "seen_region_cluster_betas",
   #       "seeing_region_cluster_betas"
   #     ))
+
+  ahnold_model <-
+    MakeADFun(
+      ahnold_data,
+      ahnold_params,
+      DLL = script_name,
+      random = c(
+        "seen_year_species_betas",
+        "seeing_year_species_betas",
+        "seen_region_cluster_betas",
+        "seeing_region_cluster_betas"
+      ))
 
   if (tmb_to_stan == F) {
     a <- Sys.time()
@@ -461,14 +509,6 @@ seen_trend %>%
   geom_line(aes(year, estimate, color = classcode), show.legend = F) +
   facet_wrap(~classcode)
 
-  geom_pointrange(aes(
-    year,
-    y = estimate,
-    ymin = lower,
-    ymax = upper
-  )) +
-  facet_grid(classcode ~ type, scales = "free")
-
 
 did_betas <- ahnold_estimates %>%
   filter(str_detect(variable, "net_did")) %>%
@@ -485,6 +525,7 @@ betas <- bind_rows(
   as_data_frame()
 
 betas %>%
+  filter(variable != 'intercept') %>%
   ggplot() +
   geom_pointrange(aes(
     variable,

@@ -162,14 +162,14 @@ get_fish_life <- function(genus, species) {
     partial_match = T,
     verbose = F
   )
-
   out <- Predict[[1]]$Mean_pred %>%
     as.matrix() %>%
-    as.data.frame() %>%
-    mutate(variable = row.names(.),
-           index = 1:nrow(.)) %>%
-    spread(variable, V1) %>%
-    select(-index)
+    t() %>%
+    as.data.frame() #%>%
+    # mutate(variable = row.names(.),
+    #        index = 1:nrow(.)) %>%
+    # spread(variable, V1) %>%
+    # select(-index)
 
   out[colnames(out) != 'Temperature'] <-
     exp(out[colnames(out) != 'Temperature'])
@@ -1012,9 +1012,9 @@ abundance_models <- length_to_density_models %>%
   bind_rows(kfm_to_density_models) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
   mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
+  mutate(data = map(data, ~ mutate(.x, month = as.numeric(as.character(factor_month))))) %>%
   mutate(data = map(data, ~ left_join(.x, enso, by = c('year', 'month')))) %>%
   mutate(data = map(data, ~ left_join(.x, pdo, by = c('year', 'month')))) %>%
-
   mutate(
     data = map2(
       data,
@@ -1062,6 +1062,12 @@ abundance_models <- cross_df(
   )
 ) %>%
   unnest()
+
+save(
+  file = glue::glue("{run_dir}/ahnold_model_data.Rdata"),
+  abundance_models
+)
+
 
 # run vast ----------------------------------------------------------------
 
@@ -1129,6 +1135,8 @@ species_comp_and_targeted_by_dbase_plot <- abundance_models %>%
   geom_col(position = 'dodge') +
   coord_flip() +
   facet_wrap( ~ data_source)
+
+
 
 # estimate abundance through delta-glm ------------------------------------
 

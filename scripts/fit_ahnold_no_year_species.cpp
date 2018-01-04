@@ -24,6 +24,12 @@ Type objective_function<Type>::operator() ()
 
   DATA_VECTOR(log_density); // observed log densities
 
+  DATA_VECTOR(seen_weights); // seen data weighting
+
+  DATA_VECTOR(seeing_weights); // seen data weighting
+
+
+
   // seeing data
 
   DATA_MATRIX(x_seeing_non_nested); // non nested part of data
@@ -116,7 +122,7 @@ Type objective_function<Type>::operator() ()
 
   for (int i = 0; i < i_max; i++){
 
-    nll -= dnorm(log_density(i), log_density_hat(i), exp(seen_density_species_sigma(seen_species_index(i) - 1)), true);
+    nll -= seen_weights(i) * dnorm(log_density(i), log_density_hat(i), exp(seen_density_species_sigma(seen_species_index(i) - 1)), true);
 
   } // close log density nll
 
@@ -153,7 +159,7 @@ Type objective_function<Type>::operator() ()
   //
   // } // close year species effects
 
-  nll -= sum(dbinom(any_seen,Type(1),prob_seeing, true));
+  nll -= sum(seeing_weights * dbinom(any_seen,Type(1),prob_seeing, true));
 
   i_max = seeing_region_cluster_betas.size();
 
