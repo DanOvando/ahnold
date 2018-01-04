@@ -29,7 +29,7 @@ if (("demons" %in% installed.packages()) == F){
 
 demons::load_functions('functions')
 
-run_name <- 'Working'
+run_name <- 'v1.0'
 
 run_dir <- file.path('results', run_name)
 
@@ -46,7 +46,7 @@ write(run_description,
 
 # options -----------------------------------------------------------------
 
-run_length_to_density <-  F
+run_length_to_density <-  T
 
 run_vast <- T # run VAST, best to leave off for now
 
@@ -165,11 +165,7 @@ get_fish_life <- function(genus, species) {
   out <- Predict[[1]]$Mean_pred %>%
     as.matrix() %>%
     t() %>%
-    as.data.frame() #%>%
-    # mutate(variable = row.names(.),
-    #        index = 1:nrow(.)) %>%
-    # spread(variable, V1) %>%
-    # select(-index)
+    as.data.frame()
 
   out[colnames(out) != 'Temperature'] <-
     exp(out[colnames(out) != 'Temperature'])
@@ -305,10 +301,10 @@ num_clusters <- data_frame(clusters = 1:20) %>%
     )$withinss
   )))
 
-num_clusters %>%
-  ggplot(aes(clusters, within_ss)) +
-  geom_point() +
-  geom_line()
+# num_clusters %>%
+#   ggplot(aes(clusters, within_ss)) +
+#   geom_point() +
+#   geom_line()
 
 cluster_classcodes <-
   kmeans(
@@ -337,6 +333,7 @@ length_data <- length_data %>%
   left_join(life_history_data, by = 'classcode')
 
 
+## process kfm dat
 
 kfm_data <-
   read_csv('data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
@@ -427,8 +424,6 @@ density_data <- read_csv('data/ci_reserve_data_final3 txt.csv') %>%
   arrange(index) %>%
   select(-index)
 
-
-
 site_coords <- density_data %>%
   group_by(site, side) %>%
   summarise(latitude = mean(lon.wgs84, na.rm = T),
@@ -456,16 +451,7 @@ species_distributions <- length_data %>%
 
 
 if (file.exists('data/enso.csv')) {
-  enso <- read_csv('data/enso.csv') #%>%
-    # group_by(year) %>%
-    # summarise(mean_enso = mean(enso, na.rm = T)) %>%
-    # mutate(
-    #   lag1_enso = dplyr::lag(mean_enso, 1),
-    #   lag2_enso = dplyr::lag(mean_enso, 2),
-    #   lag3_enso = dplyr::lag(mean_enso, 3),
-    #   lag4_enso = dplyr::lag(mean_enso, 4)
-    # )
-
+  enso <- read_csv('data/enso.csv')
 } else {
 
   scrape_enso(outdir = 'data/')
@@ -474,49 +460,14 @@ if (file.exists('data/enso.csv')) {
 }
 
 if (file.exists('data/pdo.csv')) {
-  pdo <- read_csv('data/pdo.csv') #%>%
-    # group_by(year) %>%
-    # summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
-    # mutate(
-    #   lag1_pdo = dplyr::lag(mean_pdo, 1),
-    #   lag2_pdo = dplyr::lag(mean_pdo, 2),
-    #   lag3_pdo = dplyr::lag(mean_pdo, 3),
-    #   lag4_pdo = dplyr::lag(mean_pdo, 4)
-    # )
+  pdo <- read_csv('data/pdo.csv')
 
 } else {
   scrape_pdo(outdir = 'data/')
 
-  pdo <- read_csv('data/pdo.csv') # %>%
-    # group_by(year) %>%
-    # summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
-    # mutate(
-    #   lag1_pdo = dplyr::lag(mean_pdo, 1),
-    #   lag2_pdo = dplyr::lag(mean_pdo, 2),
-    #   lag3_pdo = dplyr::lag(mean_pdo, 3),
-    #   lag4_pdo = dplyr::lag(mean_pdo, 4)
-    # )
-
+  pdo <- read_csv('data/pdo.csv')
 }
 
-
-# deal with processed densities -------------------------------------------
-
-reg_data <- density_data %>%
-  select(biomass, site, side, site_side, year, classcode) %>%
-  ungroup() %>%
-  left_join(conditions_data, by = c('site', 'side', 'year', 'classcode')) %>%
-  left_join(life_history_data %>% select(classcode, targeted, trophicgroup,
-                                         commonname),
-            by = 'classcode') %>%
-  # left_join(enso, by = 'year') %>%
-  # left_join(pdo, by = 'year') %>%
-  mutate(
-    any_seen = biomass > 0,
-    log_density = log(biomass),
-    # targeted = as.numeric(targeted == 'Targeted'),
-    post_mlpa = as.numeric(year >= 2003)
-  )
 
 
 # convert transect data to density estimates ------------------------------
@@ -524,9 +475,7 @@ reg_data <- density_data %>%
 
 if (file.exists('data/length-to-density-data.Rdata') == F |
     run_length_to_density == T) {
-  density_example <- density_data %>%
-    filter(is.na(biomass) == F & biomass > 0) %>%
-    sample_n(1)
+
 
   length_example <-   length_data %>%
     filter(is.na(commonname) == F) %>%
@@ -563,11 +512,6 @@ if (file.exists('data/length-to-density-data.Rdata') == F |
       mean_canopy = pctcnpy
     )
 
-  # species_sightings <- length_data %>%
-  #   left_join(site_data, by = 'site') %>%
-  #   group_by(region) %>%
-  #   summarise(species_seen = list(unique(classcode)))
-  #
   species_sightings <- length_to_density_data %>%
     left_join(site_data, by = 'site') %>%
     group_by(site) %>%
@@ -677,6 +621,7 @@ mean_foo <- function(var) {
 
 }
 
+# sum biomass across all lengths
 length_to_density_data <- length_to_density_data %>%
   group_by(campus,
            method,
@@ -768,8 +713,6 @@ kfm_data <- kfm_data %>%
   select(-region) #for compatibility with things later on
 
 
-
-
 # deal with missing covariates --------------------------------------------
 # pretty hacky for now, need to go back and deal with this better
 
@@ -808,54 +751,18 @@ length_to_density_data <- length_to_density_data %>%
   )
 
 
-density_data <- reg_data %>%
-  mutate(
-    factor_year = factor(year),
-    log_density = log(biomass),
-    factor_month = factor(9)
-  ) %>%
-  group_by(site, side, factor_month, year) %>%
-  mutate(
-    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
-    mean_canopy = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)
-  ) %>%
-  group_by(site, side, year) %>%
-  mutate(
-    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
-    mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)
-  ) %>%
-  group_by(site, year) %>%
-  mutate(
-    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
-    mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)
-  ) %>%
-  group_by(year) %>%
-  mutate(
-    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
-    mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    mean_vis = ifelse(is.na(mean_vis), mean(mean_vis, na.rm = T), mean_vis),
-    mean_kelp = ifelse(is.na(mean_kelp), mean(mean_kelp, na.rm = T), mean_kelp)
-  )
-
-
 # save raw-isa data -------------------------------------------------------
 
 save(
   file = glue::glue("{run_dir}/rawish_ahnold_data.Rdata"),
   life_history_data,
   length_to_density_data,
-  density_data,
   kfm_data
 )
 
 # prepare data for model fitting ------------------------------------------
 
-# length_to_density_data <- length_to_density_data %>%
-#   left_join(observer_experience %>% select(observer, year,trunc_observer, cumulative_n_obs),
-#             by = c('observer','year'))
+# XX THIS PART IS OUT OF ORDER, FINISH PROCESSING DATA AND THEN PASS THAT DATA TO MODEL FITTING, CONFUSING AS IS
 
 consistent_sites <- length_to_density_data %>%
   group_by(site) %>%
@@ -921,19 +828,6 @@ prob_kfm_length_covars <-
   paste(c('region',
           'factor_month'),
         collapse = '+')
-
-# prob_raw_length_covars <-
-#   paste(c('region','mean_vis', 'mean_canopy','factor_month'),
-#         collapse = '+')
-
-supplied_density_covars <-
-  paste(c('mean_kelp', 'mean_vis', 'site_side'),
-        collapse = '+')
-
-prob_supplied_density_covars <-
-  paste(c('mean_kelp', 'mean_vis', 'site_side'),
-        collapse = '+')
-
 
 length_to_density_models <- length_to_density_data %>%
   nest(-classcode) %>%

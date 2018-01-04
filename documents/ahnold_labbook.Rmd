@@ -2166,4 +2166,45 @@ You can get rid of the year-species effects, and instead try and add in more spe
 The other thing I want to check is the effective sample size
 
 
+# 2018-01-03 
 
+OK, TMB works just fine, but lord that result is sensitive to the thigns that you include in there.
+
+To get Stan to work, you'll probably have to experiment with non-centering the random effects. Let's go back to that at another occasion. 
+
+Rather than just poking at things randomly, it's time to pull things back together and make some decisions about where to go from here. 
+
+Right off the bat, I think you have to ditch the "raw" vs "length to density" thing. It's good to have it in your back pocked saved, but makes life needless complicated and doesn't really stand up to scrutiny: reults only hold if we use a somewhat esoterically processed version of the raw data. 
+
+Now, the KFM data are interesting, but present a bit of a challenge for automation since they are missing a whole pile of other covariates, but seems like should be included if possible... let's revisit that. 
+
+For now though, I think you should focus on doing the best job possible with the "length to density data", and maybe even changing that stupid ass name. Then, once you design that as well as possible, you can revisit the other data, namely the KFM data. 
+
+The other important question is what to do with all the glm/glmer crap. Is there any value in it? You could certainly use it as the basis for a bootstrapped version of either the two stage or one stage method, so seems worth keeping around to some extent. They also serve a purpose in being much easier for model selection and comparison. They provide you some insight into how stable particular results are (not very). But, every model run now produces something like 400 graphs all showing different things, which isn't really all that tractable, and the broken out models don't help you actually get to the point you want, without bootstrapping. So why don't you keep those, and write a new function that takes a delta model and either 1) extracts years and fits did or 2) does the two stage thing... Seems like backburner priority right now over getting the integrated version incorporated. 
+
+What are the key features that you want to explore right now?
+
+One is clearly model selection: what's in and what's out. Looking at the TMB outputs though, nearly all of the covariates you include are significant, and the ones that aren't are just components of some factor. So, there actually doesn't seem like all that much room for model selection at this point: hard to justtify removing observer experience or something like that. 
+
+But, there is some question of highly collinear variables... could consider picking 1 or 2 of them.... should read up on this some. It's hard to think too causally about a parameter if it is simply absorbing another parameter, but it's worth thinking about. 
+
+
+Another big question is data weighting.... do you want to weight each observation equally, or each species equally? Given the imbalance in the samples, it seems like the DiD term is really the effect of the most common targeted species to some extent
+
+Another is whether the random effects are kosher. They certainly help a lot, since the DiD term as I interpret is the common deviation in the trends attributable to being a targeted species, beyond the general trend for that species. I like that. But, it's a little unclear whether it's kosher or not, in terms of causal interpretation. 
+
+You can also explore treating them as fixed effects.... though it makes things a little more complicated since implies that the did term is relative to one species in one year in particular... right? revisit that. 
+
+Another is whether there is one population or many. If you're (somehow) including year terms, then it's just a question of adding more of them in (ugh). I think you run into sample size issues pretty quickly there. 
+
+You do want to be able to do MPA or no MPA. Can do either by filtering and fitting separately, or could think about adding in effects and then measuring join and separate MPA effects.... mess with that. 
+
+So what to actually do here. Let's go through and strip the fat out of run-ahnold, maybe breaking a few things into functions that more cleanly spit out the actual data that you care about. 
+
+Then, let's add in the old stuff as an optional section, just to keep it alive and well without the supplied density shite. 
+
+Then, I want to focus on a thing that runs the TMB model a few times: straight up DiD, random effect version, and wildcard. Do that all data, and broken out inside/outside MPA. 
+
+Focus on those are your primary results, and then tinker from there. But the goal: this is DONE tomorrow. Then, Friday/weekend is spent on paper draft
+
+VAST is interesting.... should also keep that capability in there
