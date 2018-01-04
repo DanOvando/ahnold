@@ -8,27 +8,34 @@ knitr::opts_chunk$set(echo = F)
 ```
 
 ```{r, echo = F}
-library(tidyverse)
-library(rstan)
-library(shiny)
-load(here::here('cluster-seen-only.Rdata'))
-load(here::here('x_seen.Rdata'))
+# library(tidyverse)
+# library(rstan)
+# library(shiny)
+# load(here::here('cluster-seen-only.Rdata'))
+# load(here::here('x_seen.Rdata'))
+# 
 
-
-year_betas <- ahnold_stan_fit %>% 
+betas <- ahnold_fit_stan %>% 
   as.data.frame() %>% 
   select(contains('betas')) %>% 
-  as_data_frame() %>% 
-  set_names(colnames(x_seen)) %>% 
-  select(contains('20')) %>% 
-  mutate(iteration = 1:nrow(.)) %>% 
-  gather(classcode_year, beta_hat,-iteration) %>% 
-  tidyr::separate(classcode_year,c('classcode','year'),'-') %>% 
-  mutate(year = as.numeric(year)) %>% 
-  group_by(classcode,year) %>% 
-  mutate(cs_beta_hat = (beta_hat - mean(beta_hat)) / (2 * sd(beta_hat))) %>% ungroup() %>% 
-  group_by(classcode, year) %>% 
-  ungroup()
+  as_data_frame() 
+
+group_names <- unique(str_replace_all(colnames(betas),'\\d|\\[|\\]',''))
+
+for (i in group_names){
+  
+  
+  variable_name <- paste0("x_",str_replace_all(i,'_betas',''))
+  
+  seen_var <- ifelse(str_detect(variable_name,'seen'),'_seen','_seeing')
+  
+  colnames(betas)[str_detect(colnames(betas), i)] <-   paste0(colnames(eval(rlang::parse_expr(variable_name))),seen_var)
+
+  
+}
+
+betas <- betas %>% 
+  mutate(iteration = 1:nrow(.))
 
 
 ```
