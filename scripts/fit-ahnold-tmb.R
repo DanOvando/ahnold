@@ -39,8 +39,17 @@ data <- abundance_models %>%
          mean_temp = ifelse(is.na(mean_temp), mean(mean_temp, na.rm = T), mean_temp)) %>%
   mutate(temp_deviation = (mean_temp - temperature)^2) %>%
   mutate(generations_protected = pmin(round((year - mpa_year - 1) / tm), max_generations),
-  targeted = as.numeric(targeted > 0))
+  targeted = as.numeric(targeted > 0)) %>%
+  mutate(temp_deviation = center_scale(temp_deviation))
 
+
+# test <-
+#   rstanarm::stan_glmer(
+#     log_density ~ (factor_year  - 1|  classcode) + temp_deviation - 1,
+#     data = data %>% filter(any_seen == T),
+#     cores = 1,
+#     chains = 1
+#   )
 
 numeric_species_key <-
   data_frame(classcode = unique(data$classcode)) %>%
@@ -48,12 +57,6 @@ numeric_species_key <-
   mutate(numeric_classcode = 1:nrow(.))
 
 
-# data %>%
-#   filter(any_seen == T) %>%
-#   ggplot(aes(enso, log_density)) +
-#   geom_point() +
-#   geom_smooth(method = 'lm') +
-#   facet_wrap(~classcode)
 # prepare seen ------------------------------------------------------------
 
 non_nested_variables <- c(
@@ -409,7 +412,7 @@ if (run_tmb == T) {
     )
 
     save(file = here::here(run_dir, "ahnold-onestage-tmb-fit.Rdata"), ahnold_fit)
-    print("made it here")
+
 
     ahnold_report <- ahnold_model$report()
 
