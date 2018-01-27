@@ -2266,4 +2266,20 @@ AHA, this is how you do it. Catch, sum the total catch in numbers, then distribu
 
 What I really want is something that introduces noise in both the number seen and the distribution seen. But let's put a pin in that for now, and revisit that later. This should get you more or less where you want off sampling biomass with noise, where the q/effort/selectivity influence the ability of the observer. For a given effort, the higher the q, the higher the sample size, and therefore the higher resolution your samples of the age distribution will be. 
 
+# 1/18 Check in meeting with Chris and Steve
+
+Value of information in terms of what things are really driving the bus in teh detection 
+
+Start with MSE
+
+Show that under simulated you can't detect it
+
+Verify that in an empirical situation
+
+# 2018-1-26 personal check in
+
+OK, that got a little out of hand. I clearly completely forgot what I'd done before the last meeting, so let's take stock. 
+
+You've basically abandoned the whole F*ING structure you build before, of passing and testing arbitrary combinations of variables
+
 

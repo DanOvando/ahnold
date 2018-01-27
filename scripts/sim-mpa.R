@@ -24,7 +24,7 @@ run_name <- 'v1.0'
 
 run_dir <- file.path('results', run_name)
 
-simulate_samples <- F
+simulate_samples <- T
 
 burn_years <- 10
 
@@ -293,6 +293,7 @@ pisco_performance <-
                    min_year = 75,
                    time_step = time_step)
 
+save(file = 'about_time.Rdata', simple_performance, pisco_performance)
 
 # tmb side ----------------------------------------------------------------
 

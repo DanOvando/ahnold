@@ -12,8 +12,6 @@ run_tmb <- TRUE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
-run_tmb <-  T
-
 max_generations <- 4
 
 run_name <- "Working"

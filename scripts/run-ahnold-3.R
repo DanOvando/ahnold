@@ -52,8 +52,6 @@ run_tmb <- TRUE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
-run_tmb <-  T
-
 max_generations <- 4
 
 run_length_to_density <-  FALSE
@@ -970,6 +968,7 @@ c(
 fixed_did = c(FALSE, TRUE)
 )
 
+if (run_tmb == T){
 
 tmb_runs <- tmb_runs %>%
   mutate(tmb_fit = pmap(
@@ -986,7 +985,17 @@ tmb_runs <- tmb_runs %>%
   ))
 
 
- ahnold_fit <- tmb_runs$tmb_fit[[1]]$result
+save(file = paste0(run_dir, '/tmb_runs.Rdata'),
+     tmb_runs)
+
+
+} else {
+
+  load(file = paste0(run_dir, '/tmb_runs.Rdata'))
+}
+
+
+ ahnold_fit <- tmb_runs$tmb_fit[[2]]$result
 
  did_betas <- ahnold_fit$ahnold_estimates %>%
    filter(str_detect(variable, "net_did")) %>%
@@ -1003,9 +1012,6 @@ tmb_runs <- tmb_runs %>%
    )) +
    geom_hline(aes(yintercept = 0))
 
-
- save(file = paste0(run_dir, '/tmb_runs.Rdata'),
-      tmb_runs)
 
 
 # estimate abundance through delta-glm ------------------------------------
