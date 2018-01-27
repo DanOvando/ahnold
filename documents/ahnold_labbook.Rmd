@@ -2166,4 +2166,120 @@ You can get rid of the year-species effects, and instead try and add in more spe
 The other thing I want to check is the effective sample size
 
 
+# 2018-01-03 
+
+OK, TMB works just fine, but lord that result is sensitive to the thigns that you include in there.
+
+To get Stan to work, you'll probably have to experiment with non-centering the random effects. Let's go back to that at another occasion. 
+
+Rather than just poking at things randomly, it's time to pull things back together and make some decisions about where to go from here. 
+
+Right off the bat, I think you have to ditch the "raw" vs "length to density" thing. It's good to have it in your back pocked saved, but makes life needless complicated and doesn't really stand up to scrutiny: reults only hold if we use a somewhat esoterically processed version of the raw data. 
+
+Now, the KFM data are interesting, but present a bit of a challenge for automation since they are missing a whole pile of other covariates, but seems like should be included if possible... let's revisit that. 
+
+For now though, I think you should focus on doing the best job possible with the "length to density data", and maybe even changing that stupid ass name. Then, once you design that as well as possible, you can revisit the other data, namely the KFM data. 
+
+The other important question is what to do with all the glm/glmer crap. Is there any value in it? You could certainly use it as the basis for a bootstrapped version of either the two stage or one stage method, so seems worth keeping around to some extent. They also serve a purpose in being much easier for model selection and comparison. They provide you some insight into how stable particular results are (not very). But, every model run now produces something like 400 graphs all showing different things, which isn't really all that tractable, and the broken out models don't help you actually get to the point you want, without bootstrapping. So why don't you keep those, and write a new function that takes a delta model and either 1) extracts years and fits did or 2) does the two stage thing... Seems like backburner priority right now over getting the integrated version incorporated. 
+
+What are the key features that you want to explore right now?
+
+One is clearly model selection: what's in and what's out. Looking at the TMB outputs though, nearly all of the covariates you include are significant, and the ones that aren't are just components of some factor. So, there actually doesn't seem like all that much room for model selection at this point: hard to justtify removing observer experience or something like that. 
+
+But, there is some question of highly collinear variables... could consider picking 1 or 2 of them.... should read up on this some. It's hard to think too causally about a parameter if it is simply absorbing another parameter, but it's worth thinking about. 
+
+
+Another big question is data weighting.... do you want to weight each observation equally, or each species equally? Given the imbalance in the samples, it seems like the DiD term is really the effect of the most common targeted species to some extent
+
+Another is whether the random effects are kosher. They certainly help a lot, since the DiD term as I interpret is the common deviation in the trends attributable to being a targeted species, beyond the general trend for that species. I like that. But, it's a little unclear whether it's kosher or not, in terms of causal interpretation. 
+
+You can also explore treating them as fixed effects.... though it makes things a little more complicated since implies that the did term is relative to one species in one year in particular... right? revisit that. 
+
+Another is whether there is one population or many. If you're (somehow) including year terms, then it's just a question of adding more of them in (ugh). I think you run into sample size issues pretty quickly there. 
+
+You do want to be able to do MPA or no MPA. Can do either by filtering and fitting separately, or could think about adding in effects and then measuring join and separate MPA effects.... mess with that. 
+
+So what to actually do here. Let's go through and strip the fat out of run-ahnold, maybe breaking a few things into functions that more cleanly spit out the actual data that you care about. 
+
+Then, let's add in the old stuff as an optional section, just to keep it alive and well without the supplied density shite. 
+
+Then, I want to focus on a thing that runs the TMB model a few times: straight up DiD, random effect version, and wildcard. Do that all data, and broken out inside/outside MPA. 
+
+Focus on those are your primary results, and then tinker from there. But the goal: this is DONE tomorrow. Then, Friday/weekend is spent on paper draft
+
+VAST is interesting.... should also keep that capability in there
+
+HOLY SHIT. SEE GELMAN MULTILEVEL DATA ANALYSIS 23.2
+
+YOU'VE been waaaaaaay to married to the exact DiD specification. You're essentially doing it manually you dumbass. 
+
+Consider a case where you include time trends by species. That takes care of each species intercepts. You then also include a trend of targeted over time. Now, your hypothesis is that targeted species were affected by the policy. So, if that's true, then on average targeted species should start to diverge a bit. THey all have their same general trend, but if it's correct, the model would parse a bit of the trend out into the group level predictor of the targeted by time. 
+
+Now, you use those coefficients to predict the response. HOlding everything else constant, you then get the change in predicted density as a function of that thing. But, you've got all that other noise in there, so hold the treatment constant as well. 
+
+So, if this is right, the simplest form of the DiD that you can think of here is random effects by species over time, fixed effects for being targeted in each year, dropping the intercept so keeping all terms. Then, manually do the DiD in the code as you are currently doing. Let's test this out tomorrow before launching into it, but I think this has promise. 
+
+# Setting up the simulated data
+
+You need to stop randomly poking at regression structures until something works. You need to do two things
+
+
+1. Actually sit down with the fucking math, or try to
+
+2. Really dive into the simulation exercise. Use SPASM. Simulate a few species with a common environmental forcing where each species responds a little differently to that forcing. Simulate a few observers, each with a different skill that evolves over time (selectivity and q and prob seen), where the probability seen is a linear function of density, with recruitment deviates drawn from a common random walk function. The hard part is what to do with the zeros.... If there is a true density and if you see it you sample from that and if they are there but you just don't see it, then if what you care about is a sample of the density then that's fine... right?
+
+This is the really hard part. Think about Jason's example. Suppose that you send out your samples and come up with 99 zeros and one positive. If you only look at the positive, your estimate will be biased, if the next year for example the population increases but you get a 50 observations but lower than the huge school you saw before. The problem is, are you trying to estimate the transect density or the population density? is that right? 
+
+Think about the data. You get a bunch of transects, some positive some zero. Suppose that every transect actually had 50 fish. then your estimate of the density is biased. Supposed though that some really had zero fish. Then, if you had to estiamte the density of the *average transect*, then you need to include them. And that's what you're really trying to estimate. So, suppose that probability of detection scales with population size. So, as you get more and more transects filled in, then your density of the average transect should get better and better. But, the other problem is true zeros. The example that you just went through is basically saying that your estimate of true density gets less biased with higher population. But, what if there is just more of a chance of true zeros at lower population sizes? How do you simulate that? 
+
+Here's what I think. You treat the thing as one population. Every time step, you distribute the population as you already do. Then though, you set up a series of transects in each patch. Those transects either contain or do not contain fish in proportion to the abundance in the patch that transect occurs in, say through some logistic function where as the population gets bigger the probability of a transect having that species goes to 1..... too complicated. ugh.
+
+Let's start without the observation side: just the premise that you should be able to estimate the MPA affect and control for environmental noise using the DiD. If that works, then you'll tackle the added pain in the ass of detection probabilities. 
+
+So what screws with DiD. DiD assumes parallel trends and constant differences among groups. So, let's do one simulation where all populations are at EQ, no recruitment violations, etc. The only change is the MPA, and use the model to estimate that difference. ALl fished species are equally overfished. See if the model can tackle that. 
+
+Then, let's fuck with things. Add in a recruitment deviate function that is related to ENSO, where it's good for some species and bad for others, and feed it the enso data. Change the degree of overfishing for each species, in proportion to the magnitude of the catches for each species from the data, why not. That should cause some violation of parallel trends and make the effect size heterogeneous. And, seems like the a good approximation of the two most simple violations of the DiD assumptions. The predator/prey thing is straightforward to think about generally. 
+
+You then want to compare the ability of the different models to nail both of these. 
+
+To generate data from this system, in each time step you'll generate a bunch of samples using your observers. ugh. 
+
+Once you've found the best one for that, you'll tackle the observation thing. 
+
+I suppose one option is to 
+
+Simulate them all forward, targeted and non-targeted, and calculate the effect of the MPAs (the difference in log density with and without MPA over time)
+
+Calculate the density in each cell, sample the age structure 
+
+# How to simulate visual survey?
+
+At the moment, the model is trying to estimate the average change in transect density as a function of covariates and the mpas. Right now, that sampling event is a transect. So, the density of the average transect should go up by blah. 
+
+Now, it may well be that the transect level is just too high a variance event to be included in this analysis, but that's a data problem, not a simulation testing problem. 
+
+Taking a sampling event to happen in one cell, how do you want to think about that process. Under that idea, there are 100 fish in a box, and you send a diver down to sample them. One option then is to treat it just as a fishing problem, where each diver "catches" fish in proportion to effort, q, and selectivity. This has the advantage of being easy to implement, and deals with the density proportional to abundance thing. The downside to this is that it would imply that you always the same proportions of each fish, i.e. every sampling event you just see the selectivity ogive, which isn't really accurate. 
+
+So, a multinomial process makes more sense on that level. The idea there is that you are more or likely to see fish in a certain length group. i.e. if you sample 100 fish from the catch, you would sample them with a net proportion of the selectivity and their relative abundance in the population. But, that leaves the annoying question of how many fish to sample. In theory you want that process to scale with abundance..... 
+
+AHA, this is how you do it. Catch, sum the total catch in numbers, then distribute that total catch in numbers using rmultinom in proportion to each age classes contribution to the catch. So, the "error" there comes from observation, meaning you had a chance to see a bigger fish but you actually didn't see it. This is still imperfect, since it doesn't really introduce stochasticity into the count process itself.... i.e. you'll always see 100 fish, it will just change the distribution of those 100 fish. 
+
+What I really want is something that introduces noise in both the number seen and the distribution seen. But let's put a pin in that for now, and revisit that later. This should get you more or less where you want off sampling biomass with noise, where the q/effort/selectivity influence the ability of the observer. For a given effort, the higher the q, the higher the sample size, and therefore the higher resolution your samples of the age distribution will be. 
+
+# 1/18 Check in meeting with Chris and Steve
+
+Value of information in terms of what things are really driving the bus in teh detection 
+
+Start with MSE
+
+Show that under simulated you can't detect it
+
+Verify that in an empirical situation
+
+# 2018-1-26 personal check in
+
+OK, that got a little out of hand. I clearly completely forgot what I'd done before the last meeting, so let's take stock. 
+
+You've basically abandoned the whole F*ING structure you build before, of passing and testing arbitrary combinations of variables
+
 
