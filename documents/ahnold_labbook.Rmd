@@ -2301,8 +2301,4 @@ So, that all led you back to the simulation results, which live in `sim-mpa`.
 
 I truly have no idea what you were doing before to get those faster convergences, but you clearly got drunk and changed something since it takes for ever now unless you cap max_treedepth. But, it seems to sort of work again. so, `sim-mpa` is where you now do your simulation test to show that unless you explicitly control for the environmental stuff this whole thing breaks down pretty badly. 
 
-So, 
-
-
-
 
