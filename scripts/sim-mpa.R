@@ -24,7 +24,7 @@ run_name <- 'v1.0'
 
 run_dir <- file.path('results', run_name)
 
-simulate_samples <- T
+simulate_samples <- F
 
 burn_years <- 10
 
@@ -39,6 +39,14 @@ mpa_size <- 0.5
 n_samples <- 5
 
 time_step <-  1
+
+
+plot_theme <- hrbrthemes::theme_ipsum(base_size = 14,
+                                      axis_title_size = 16)
+
+
+theme_set(plot_theme)
+
 # prepare data ------------------------------------------------------------
 
 load(paste0(run_dir, '/abundance_data.Rdata'))
@@ -216,7 +224,6 @@ test_performance <-
     pre_post_model <-
       lm(log_density ~ targeted + post_mpa + targeted:post_mpa, data = simple_data)
 
-
     bare_bones_did <- broom::tidy(bare_bones_model) %>%
       filter(str_detect(term, 'targeted:')) %>%
       mutate(year = str_replace_all(term, '\\D', '') %>% as.numeric()) %>%
@@ -264,11 +271,9 @@ test_performance <-
       )
 
     out_plot <-
-    {
-      bare_bones_did + mixed_effect_did + plot_layout(ncol = 1)
-    } + check_block_did + plot_layout(ncol = 2)
+    {bare_bones_did + mixed_effect_did + plot_layout(ncol = 1)} + check_block_did + plot_layout(ncol = 2)
 
-    out <- list(
+        out <- list(
       out_plot = out_plot,
       bare_bones_model = bare_bones_model,
       mixed_effect_model = mixed_effect_model,
@@ -277,7 +282,6 @@ test_performance <-
 
     return(out)
   }
-
 
 simple_performance <-
   test_performance(

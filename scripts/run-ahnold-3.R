@@ -22,6 +22,9 @@ library(lme4)
 library(TMB)
 library(FishLife)
 library(patchwork)
+library(rstan)
+library(extrafont)
+library(hrbrthemes)
 library(tidyverse)
 if (("demons" %in% installed.packages()) == F){
   devtools::install_github('danovando/demons')
@@ -48,7 +51,7 @@ write(run_description,
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- TRUE
+run_tmb <- FALSE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -80,6 +83,11 @@ max_generations <- 5
 
 max_year <- 2013
 
+plot_theme <- hrbrthemes::theme_ipsum(base_size = 14,
+                                      axis_title_size = 16)
+
+
+theme_set(plot_theme)
 
 # load data ---------------------------------------------------------------
 
@@ -199,7 +207,7 @@ life_history_data <- life_history_data %>%
 # check age at recruitment to survey
 
 smallest_length_seen <- length_data %>%
-  group_by(classcode, commonname) %>%
+  group_by(classcode) %>%
   summarise(smallest_length_seen = min(fish_tl, na.rm = T))
 
 life_history_data <- life_history_data %>%
@@ -994,24 +1002,112 @@ save(file = paste0(run_dir, '/tmb_runs.Rdata'),
   load(file = paste0(run_dir, '/tmb_runs.Rdata'))
 }
 
-
+browser()
  ahnold_fit <- tmb_runs$tmb_fit[[2]]$result
+
+
+ seen_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seen_non_nested_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
+
+ seeing_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seeing_non_nested_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
+
+ seen_year_species_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seen_year_species_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
+
+ seeing_year_species_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seeing_year_species_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
+
+ seen_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seen_region_cluster_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
+
+ seeing_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seeing_region_cluster_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
 
  did_betas <- ahnold_fit$ahnold_estimates %>%
    filter(str_detect(variable, "net_did")) %>%
    mutate(group = variable) %>%
-   mutate(year = 1:nrow(.))
+   mutate(year = abundance_data$data[[1]]$year %>% unique())
 
- did_betas %>%
+
+ betas <- bind_rows(
+   seen_non_nested_betas,
+   seeing_non_nested_betas,
+   seen_year_species_betas,
+   seeing_year_species_betas,
+   seen_region_cluster_betas,
+   seeing_region_cluster_betas,
+   did_betas %>% select(-year)
+ ) %>%
+   as_data_frame()
+
+ non_nested_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested")) %>%
    ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+
+ year_species_effects_plots <- betas %>%
+   filter(str_detect(group, "year_species_betas")) %>%
+   mutate(year = str_replace_all(variable,"\\D","") %>% as.numeric()) %>%
+   mutate(classcode = str_split(variable,'-', simplify = T)[,2]) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_ribbon(aes(x = year, ymin = lower, ymax = upper, fill = classcode), alpha = 0.25) +
+   geom_line(aes(x = year, y = estimate, color = classcode)) +
+   facet_wrap(~group)
+
+  region_cluster_plots <- betas %>%
+   filter(str_detect(group, "region_cluster_betas")) %>%
+   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
+   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
+   ggplot() +
+    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+    geom_pointrange(aes(x = region,
+                        y = estimate,
+                        ymin = lower,
+                        ymax = upper, color = cluster)) +
+    facet_wrap(~group)
+
+
+
+ did_plot <- did_betas %>%
+   ggplot() +
+   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+ geom_hline(aes(yintercept = 0)) +
    geom_pointrange(aes(
      year,
      y = estimate,
      ymin = lower,
      ymax = upper
-   )) +
-   geom_hline(aes(yintercept = 0))
+   ),
+   size = 1.5) +
+   labs(x = "Year", y = "MPA Effect",
+        title = 'Net Estimated Effect of MLPA',
+        caption = "'Effect' refers to effect of MLPA on log density of fished species")
 
+
+ ggsave(filename = here::here(run_dir, 'mlpa_effect.pdf'),
+        did_plot, width = 8, height = 6)
 
 
 # estimate abundance through delta-glm ------------------------------------

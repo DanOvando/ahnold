@@ -1,0 +1,40 @@
+---
+title: "Ahnold Paper Update"
+author: "Dan Ovando"
+date: "1/26/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Project and Progress Summary
+
+Remind everyone of what you're doing and the current status: it doesn't work
+
+# Data Overview
+
+Just a quick review of what we have to play with, sample size and species coverage wise
+
+# Model Structure
+
+The idea behind the model structure, dealing with the zeros, etc. 
+
+# Model Validation
+
+The results of simfish
+
+# Results
+
+
+Results such as they stand
+
+# Proposed next steps
+
+Paper focusing on
+
+- Show how you could in theory use the model to estimate the MPA effect
+- Show how things break down under the real world, i.e. what you'd need to collect to detect the thing
+- Illustrate with real world example of the fitting challenge
+- So what would you need to overcome this?
