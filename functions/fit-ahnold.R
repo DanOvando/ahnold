@@ -60,7 +60,7 @@ fit_ahnold <- function(data,
   # prepare data for c++ ----------------------------------------------------
 
 
-
+browser()
   seen_cdata <-
     make_c_worthy(seen_data,
                   non_nested_vars = non_nested_variables,
