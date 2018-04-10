@@ -947,28 +947,23 @@ if (run_vast == T) {
 
 script_name <- "fit_ahnold"
 
-sfa <- safely(fit_ahnold)
+sfa <- safely(fit_zissou)
 
 pisco <- abundance_data$data[abundance_data$data_source == 'pisco'][[1]]
 
 
 tmb_runs <- data_frame(data = list(pisco),  non_nested_variables = list(c(
-  'targeted',
   'level',
   'factor_month',
   'cumulative_n_obs',
-  'temp_deviation',
   'surge',
   'mean_canopy',
   'mean_depth'
 ),
 c(
-  'targeted',
   'level',
-  'factor_year',
   'factor_month',
   'cumulative_n_obs',
-  'temp_deviation',
   'surge',
   'mean_canopy',
   'mean_depth'
@@ -977,7 +972,7 @@ fixed_did = c(FALSE, TRUE)
 )
 
 if (run_tmb == T){
-
+browser()
 tmb_runs <- tmb_runs %>%
   mutate(tmb_fit = pmap(
     list(
@@ -986,7 +981,7 @@ tmb_runs <- tmb_runs %>%
       include_intercept = include_intercept,
       fixed_did = fixed_did
     ),
-    sfa,
+    fit_zissou,
     run_dir = run_dir,
     script_name = script_name,
     fixed_regions = F
@@ -1002,7 +997,6 @@ save(file = paste0(run_dir, '/tmb_runs.Rdata'),
   load(file = paste0(run_dir, '/tmb_runs.Rdata'))
 }
 
-browser()
  ahnold_fit <- tmb_runs$tmb_fit[[2]]$result
 
 

@@ -24,29 +24,29 @@ make_c_worthy <- function(subdata,
         .
       }
     } %>%
-    mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2) %>%
-    mutate(targeted = subdata$targeted)
+    mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2) #%>%
+    # mutate(targeted = subdata$targeted)
 
 
- x_enso <- subdata %>%
-    select(classcode, enso) %>%
-    mutate(index = 1:nrow(.)) %>%
-    spread(classcode, enso, fill = 0) %>%
-    arrange(index) %>%
-    select(-index) %>%
-    set_names(paste0("enso_",colnames(.)))
+ # x_enso <- subdata %>%
+ #    select(classcode, enso) %>%
+ #    mutate(index = 1:nrow(.)) %>%
+ #    spread(classcode, enso, fill = 0) %>%
+ #    arrange(index) %>%
+ #    select(-index) %>%
+ #    set_names(paste0("enso_",colnames(.)))
 
- x_pdo <- subdata %>%
-   select(classcode, pdo) %>%
-   mutate(index = 1:nrow(.)) %>%
-   spread(classcode, pdo, fill = 0) %>%
-   arrange(index) %>%
-   select(-index) %>%
-   set_names(paste0("pdo_",colnames(.)))
+ # x_pdo <- subdata %>%
+ #   select(classcode, pdo) %>%
+ #   mutate(index = 1:nrow(.)) %>%
+ #   spread(classcode, pdo, fill = 0) %>%
+ #   arrange(index) %>%
+ #   select(-index) %>%
+ #   set_names(paste0("pdo_",colnames(.)))
 
- x_non_nested <- x_non_nested %>%
-   bind_cols(x_enso,
-             x_pdo)
+ x_non_nested <- x_non_nested #%>%
+   # bind_cols(x_enso,
+   #           x_pdo)
 
  x_did <- subdata %>%
    select(targeted, factor_year) %>%
