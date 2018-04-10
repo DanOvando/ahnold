@@ -28,8 +28,6 @@ Type objective_function<Type>::operator() ()
 
   DATA_MATRIX(x_seeing_non_nested); // non nested part of data
 
-  // DATA_MATRIX(x_seeing_did); // difference in difference terms
-
   DATA_MATRIX(x_seeing_year_species); // year random effects
 
   DATA_MATRIX(x_seeing_region_cluster); // REGION CLUSTERS
@@ -42,13 +40,21 @@ Type objective_function<Type>::operator() ()
 
   DATA_MATRIX(standard_non_nested); // standardized non nested part of data
 
-  // DATA_MATRIX(standard_did_with_mpa); // standardized did estimators with mpa
-
-  // DATA_MATRIX(standard_did_without_mpa); // standardized did estimators without mpa
-
   DATA_MATRIX(standard_year_species); // standardized did estimators without mpa
 
   DATA_MATRIX(standard_region_cluster); // STANDARD REGION CLUSTERS
+
+  // did data
+
+  DATA_MATRIX(non_nested_did_data);
+
+  DATA_MATRIX(targeted_year_did_data);
+
+  DATA_MATRIX(nontargeted_year_did_data);
+
+  DATA_MATRIX(species_did_data);
+
+
 
   /////////define parameters/////////
 
@@ -71,8 +77,6 @@ Type objective_function<Type>::operator() ()
 
   PARAMETER_VECTOR(seeing_non_nested_betas);
 
-  // PARAMETER_VECTOR(seeing_did_betas);
-
   PARAMETER_VECTOR(seeing_year_species_betas);
 
   PARAMETER_VECTOR(seeing_year_species_sigmas);
@@ -80,6 +84,24 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(seeing_region_cluster_betas);
 
   PARAMETER_VECTOR(seeing_region_cluster_sigmas);
+
+  // did parameters
+
+  PARAMETER_VECTOR(non_nested_did_betas);
+
+  PARAMETER_VECTOR(targeted_did_betas);
+
+  PARAMETER_VECTOR(nontargeted_did_betas);
+
+  PARAMETER_VECTOR(species_did_betas)
+
+  PARAMETER(log_targeted_sigma);
+
+  PARAMETER(log_nontargeted_sigma);
+
+  PARAMETER(log_species_sigma);
+
+  PARAMETER(log_did_sigma);
 
   /////////process parameters and data/////////
 
@@ -172,8 +194,44 @@ Type objective_function<Type>::operator() ()
 
   vector<Type> log_abundance_hat = standardized_yearly_prob_seeing * standardized_abundance;
 
+  //// did model ////
+
+  vector<Type> log_abundance_hat_hat = non_nested_did_data * non_nested_did_betas + targeted_year_did_data * targeted_did_betas + nontargeted_year_did_data * nontargeted_did_betas + species_did_data * species_did_betas;
+
+  i_max = log_abundance_hat.size();
+
+  for (int i = 0; i < i_max; i++){
+
+    nll -= dnorm(log_abundance_hat(i), log_abundance_hat_hat(i), exp(log_did_sigma), true);
+
+  } // close did thing
+
+
+  i_max = targeted_did_betas.size();
+
+  for (int i = 0; i < i_max; i++){
+
+    nll -= dnorm(targeted_did_betas(i), Type(0), exp(log_targeted_sigma), true);
+
+    nll -= dnorm(nontargeted_did_betas(i), Type(0), exp(log_nontargeted_sigma), true);
+
+  } // close did thing
+
+
+  i_max = species_did_betas.size();
+
+  for (int i = 0; i < i_max; i++){
+
+    nll -= dnorm(species_did_betas(i), Type(0), exp(log_species_sigma), true);
+
+  } // close did thing
+
+
+  vector<Type> mpa_effect = targeted_did_betas - nontargeted_did_betas;
 
   /////////outputs/////////
+
+
 
   REPORT(log_density_hat);
 
@@ -184,6 +242,10 @@ Type objective_function<Type>::operator() ()
   REPORT(standardized_abundance);
 
   REPORT(log_abundance_hat);
+
+  REPORT(mpa_effect);
+
+  ADREPORT(mpa_effect);
 
   return nll;
 

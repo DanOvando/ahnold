@@ -945,7 +945,7 @@ if (run_vast == T) {
 # fit model ---------------------------------------------------------------
 
 
-script_name <- "fit_ahnold"
+script_name <- "fit_zissou"
 
 sfa <- safely(fit_zissou)
 
@@ -972,8 +972,9 @@ fixed_did = c(FALSE, TRUE)
 )
 
 if (run_tmb == T){
-browser()
-tmb_runs <- tmb_runs %>%
+
+  tmb_runs <- tmb_runs %>%
+    slice(1) %>%
   mutate(tmb_fit = pmap(
     list(
       data = data,

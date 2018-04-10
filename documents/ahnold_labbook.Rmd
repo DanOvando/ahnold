@@ -2412,37 +2412,19 @@ So, the tradeoff becomes in estimating a bunch of standardized densities for eac
 
 ```{r}
 library(rstan)
+library(rstanarm)
 library(tidyverse)
 
 run_dir <- "v1.0"
 load(
-  file = here::here("results",run_dir,"rawish_ahnold_data.Rdata"))
+  file = here::here("results",run_dir,"abundance_data.Rdata"))
 
-site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
-  magrittr::set_colnames(., tolower(colnames(.))) %>%
-  select(
-    site,
-    side,
-    mpagroup,
-    mpa_status,
-    reserve,
-    region,
-    year_mpa,
-    mpaareanm2,
-    lat_wgs84,
-    lon_wgs84
-  ) %>%
-  rename(lat_wgs84 = lon_wgs84,
-         lon_wgs84 = lat_wgs84) %>%
-  unique() %>%
-  mutate(eventual_mpa = (year_mpa > 0))
 
-tester <- pisco_data %>%
-  left_join(site_data, by = c("site",'side')) %>% 
-  filter(region %in% c("SMI","SRI","SCI","ANA")) %>% 
-  mutate(biomass = 0.001*fish_tl ^3) %>% 
-  group_by(year, region, classcode, targeted) %>% 
-  summarise(mb = mean(biomass)) %>% 
+
+tester <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+  group_by(year, classcode, targeted) %>% 
+  summarise(mb = mean(density_g_m2),
+            loo = mean(loo)) %>% 
   filter(is.na(targeted) == F) %>% 
   group_by(classcode) %>% 
   mutate(ny = n_distinct(year)) %>% 
@@ -2451,19 +2433,18 @@ tester <- pisco_data %>%
   mutate(factor_year = factor(year)) 
 
 tester %>% 
-  ggplot(aes(year, mb, color = classcode)) + 
-  geom_line(show.legend = F) + 
-  facet_wrap(~region)
+  ggplot(aes(year, log(mb), color = factor(targeted), group = interaction(classcode, targeted))) + 
+  geom_line(show.legend = T)
   
-simple <- lm(log(mb) ~ targeted + factor_year + targeted:factor_year, data = tester %>% filter(year > 1999))
+simple <- lm(log(mb) ~ targeted + factor_year + targeted:factor_year + loo, data = tester %>% filter(year > 1999))
 
 a = simple %>% 
   broom::tidy() %>% 
   filter(str_detect(term, "targeted:"))
 
-test <- stan_glmer(log(mb) ~ (1|classcode) + (factor_year - 1|targeted) - 1, data = tester, chains = 1)
+test <- stan_glmer(log(mb) ~ (1|classcode) + (factor_year - 1|targeted) - 1, data = tester %>% filter(year > 1999), chains = 1)
 
-of_interest <- test$coefficients[ str_detect(names(of_interest),"targeted:")]
+of_interest <- test$coefficients[ str_detect(names(test$coefficients),"targeted:")]
 
 mpa_effect <- data_frame(coef = of_interest, variable = names(of_interest)) %>% 
   mutate(targeted = map_dbl(variable, ~str_extract(.x, pattern = '(?<=:).*(?=])') %>% as.numeric())) %>% 
@@ -2478,6 +2459,13 @@ mpa_effect %>%
   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
   geom_line() + 
   geom_point(data = a %>% mutate(year = 2001:2013),aes(year, estimate))
+
+tester %>% 
+  group_by(year, targeted) %>% 
+  summarise(mmb = mean(mb)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, log(mmb), color = factor(targeted))) + 
+  geom_line()
 
 ```
 

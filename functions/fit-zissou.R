@@ -86,6 +86,45 @@ fit_zissou <- function(data,
     arrange(classcode, year) %>%
     left_join(numeric_species_key, by = "classcode")
 
+  annual_data <- data %>%
+    group_by(year, classcode) %>%
+    summarise(enso = mean(enso),
+              pdo = mean(pdo),
+              temp = mean(mean_temp - temperature),
+              targeted = unique(targeted))
+
+  did_data <- standard_year_species %>%
+    mutate(year = as.numeric(year)) %>%
+    select(year, classcode) %>%
+    left_join(annual_data, by = c("year",'classcode')) %>%
+    arrange(classcode, year)
+
+  non_nested_did_data <- did_data %>%
+    select(enso, pdo, temp) %>%
+    mutate(intercept = 1)
+
+  year_did_data <- did_data %>%
+    mutate(targeted_year = paste(targeted,year, sep = '-'),
+           marker = 1) %>%
+    select(year, classcode, targeted_year, marker) %>%
+    spread(targeted_year,marker, fill = 0) %>%
+    arrange(classcode, year)  %>%
+    select(-year,-classcode)
+
+  targeted <- str_detect(colnames(year_did_data),"1-")
+
+  targeted_year_did_data <- year_did_data[,targeted]
+
+  nontargeted_year_did_data <- year_did_data[,targeted == F]
+
+  species_did_data <- did_data %>%
+    select(classcode) %>%
+    mutate(marker = 1, index = 1:nrow(.)) %>%
+    spread(classcode, marker, fill = 0) %>%
+    arrange(index) %>%
+    select(-index)
+
+
   standard_species <- standard_year_species$numeric_classcode
 
   standard_year_species <-  standard_year_species %>%
@@ -138,7 +177,11 @@ fit_zissou <- function(data,
     seen_species_index = seen_species_index,
     year_species_index = seen_cdata$year_species_index,
     seen_weights = rep(1, nrow(seen_cdata$x_non_nested)),
-    seeing_weights = rep(1, nrow(seeing_cdata$x_non_nested))
+    seeing_weights = rep(1, nrow(seeing_cdata$x_non_nested)),
+    non_nested_did_data = non_nested_did_data,
+    targeted_year_did_data = targeted_year_did_data,
+    nontargeted_year_did_data = nontargeted_year_did_data,
+    species_did_data = species_did_data
   )
 
   zissou_data <- map_if(zissou_data, is.data.frame, ~ as.matrix(.x))
@@ -160,7 +203,15 @@ fit_zissou <- function(data,
     seeing_year_species_betas = rep(0, ncol(zissou_data$x_seen_year_species)),
     seeing_year_species_sigmas = rep(log(1), n_species),
     seeing_region_cluster_betas = rep(0, ncol(zissou_data$x_seeing_region_cluster)),
-    seeing_region_cluster_sigmas = rep(log(1), n_distinct(zissou_data$region_cluster_index))
+    seeing_region_cluster_sigmas = rep(log(1), n_distinct(zissou_data$region_cluster_index)),
+    non_nested_did_betas = rep(0, ncol(non_nested_did_data)),
+    targeted_did_betas = rep(0, ncol(targeted_year_did_data)),
+    nontargeted_did_betas = rep(0, ncol(nontargeted_year_did_data)),
+    species_did_betas = rep(0, ncol(species_did_data)),
+    log_targeted_sigma = log(1),
+    log_nontargeted_sigma = log(1),
+    log_species_sigma = log(1),
+    log_did_sigma = log(1)
   )
 
   any_na <- map_lgl(zissou_params, ~ any(is.na(.x))) %>% any()
@@ -168,7 +219,6 @@ fit_zissou <- function(data,
   if (any_na) {
     stop("NAs in ahnold_params")
   }
-browser()
   if (use_tmb == T) {
 
     compile(here::here("src", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
@@ -186,7 +236,10 @@ browser()
         "seen_year_species_betas",
         "seeing_year_species_betas",
         "seen_region_cluster_betas",
-        "seeing_region_cluster_betas"
+        "seeing_region_cluster_betas",
+        "targeted_did_betas",
+        "nontargeted_did_betas",
+        "species_did_betas"
       )    }
 
     ahnold_model <-
@@ -200,7 +253,6 @@ browser()
     # save(file = here::here(run_dir, "ahnold-onestage-tmb-model.Rdata"),
     #      ahnold_model)
 
-browser()
     a <- Sys.time()
     set.seed(seed)
     ahnold_fit <-
@@ -212,19 +264,19 @@ browser()
       )
     Sys.time() - a
 
-    save(file = here::here(run_dir, "ahnold-onestage-tmb-fit.Rdata"),
-         ahnold_fit)
+    # save(file = here::here(run_dir, "ahnold-onestage-tmb-fit.Rdata"),
+    #      ahnold_fit)
 
     ahnold_report <- ahnold_model$report()
 
     ahnold_sd_report <- sdreport(ahnold_model)
 
 
-    save(file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
-         ahnold_sd_report)
-
-    save(file = here::here(run_dir, "ahnold-tmb-onestage-report.Rdata"),
-         ahnold_report)
+    # save(file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
+    #      ahnold_sd_report)
+    #
+    # save(file = here::here(run_dir, "ahnold-tmb-onestage-report.Rdata"),
+    #      ahnold_report)
 
 
   }
@@ -239,41 +291,6 @@ browser()
     mutate(lower = estimate - 1.96 * std_error,
            upper = estimate + 1.96 * std_error)
 
-  ahnold_fits <- summary(ahnold_report) %>%
-    as.data.frame() %>%
-    mutate(variable = rownames(.)) %>%
-    set_names(tolower)
-
-  abundance_trends <- data_frame(log_abundance_hat = ahnold_report$log_abundance_hat,
-                                 classcode = standard_species) %>%
-    mutate(abundance_hat = exp(log_abundance_hat)) %>%
-    group_by(classcode) %>%
-    mutate(year = 1999 + 1:length(abundance_hat)) %>%
-    mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
-    ungroup()
-
-  raw <- pisco %>%
-    group_by(year, classcode) %>%
-    summarise(md = mean(density_g_m2)) %>%
-    group_by(classcode) %>%
-    mutate(smd = (md - mean(md))/(sd(md))) %>%
-    ungroup() %>%
-    left_join(numeric_species_key, by = "classcode") %>%
-    select(-classcode) %>%
-    rename(classcode = numeric_classcode)
-
-
-  abundance_trends %>%
-    ggplot(aes(year, scaled_abundance_hat, color = factor(classcode))) +
-    geom_line(show.legend = F) +
-    geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
-    geom_point(data = raw,aes(year, smd, color = factor(classcode)), show.legend = F)+
-    facet_wrap(~classcode) +
-    theme_minimal()
-
-
-
-
 
   return(
     list(
@@ -283,7 +300,8 @@ browser()
       ahmold_model = ahnold_model,
       ahnold_report = ahnold_report,
       ahnold_sd_report = ahnold_sd_report,
-      ahnold_estimates = ahnold_estimates
+      ahnold_estimates = ahnold_estimates,
+      did_data = did_data
     )
   )
 }
