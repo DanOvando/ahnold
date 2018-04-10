@@ -1,9 +1,8 @@
-rm(list = ls())
 library(tidyverse)
 library(spasm)
-library(rfishbase)
+library(FishLife)
 library(multidplyr)
-library(trelliscopejs)
+# library(trelliscopejs)
 library(hrbrthemes)
 library(scales)
 
@@ -143,6 +142,7 @@ tune_f <-
   function(params,
            target_depletion,
            linf,
+           scientific_name,
            adult_movement,
            larval_movement,
            steepness,
@@ -153,20 +153,25 @@ tune_f <-
            burn_years = burn_years,
            num_patches = num_patches) {
 
-    fish <- create_fish(linf = linf,
-                        m = 0.2,
-                        r0 = exp(params[1]),
-                        adult_movement = adult_movement,
-                        larval_movement = larval_movement,
-                        density_dependence_form = density_dependence_form,
-                        steepness = steepness)
+    scientific_name <- gsub("(^)([[:alpha:]])", "\\1\\U\\2", scientific_name, perl=TRUE)
+
+    fish <- create_fish(
+      scientific_name = scientific_name,
+      linf = linf,
+      m = NA,
+      r0 = exp(params[1]),
+      adult_movement = adult_movement,
+      larval_movement = larval_movement,
+      density_dependence_form = density_dependence_form,
+      steepness = steepness,
+      query_fishlife = T
+    )
 
     manager <- create_manager(year_mpa = 999)
-
     unfished <-
       sim_fishery(
         fish = fish,
-        fleet = create_fleet(initial_effort = 0, fish = fish),
+        fleet = create_fleet(initial_effort = 0, fish = fish, fleet_model = "constant-effort"),
         manager = manager,
         num_patches = num_patches,
         sim_years = sim_years,
@@ -182,7 +187,7 @@ tune_f <-
     fished <-
       sim_fishery(
         fish = fish,
-        fleet = create_fleet(initial_effort = exp(params[2]), fish = fish),
+        fleet = create_fleet(initial_effort = exp(params[2]), fish = fish, fleet_model = "constant-effort"),
         manager = manager,
         sim_years = sim_years,
         burn_year = burn_years,
@@ -213,7 +218,7 @@ tune_f <-
   }
 
 
-fitfoo <- function(target_depletion, target_catch, linf,sim_years,burn_years,
+fitfoo <- function(target_depletion,scientific_name, target_catch, linf,sim_years,burn_years,
                    num_patches,
                    larval_movement,
                    adult_movement,
@@ -221,11 +226,12 @@ fitfoo <- function(target_depletion, target_catch, linf,sim_years,burn_years,
                    steepness)
 {
   nlminb(
-    c(log(1000*target_catch), log(100000)),
+    c(log(1000*target_catch), log(200)),
     tune_f,
     target_depletion = target_depletion,
     target_catch = target_catch,
-    linf = linf,
+    scientific_name = scientific_name,
+    linf = NA,
     alpha = 0.5,
     sim_years = sim_years,
     burn_years = burn_years,
@@ -239,12 +245,13 @@ fitfoo <- function(target_depletion, target_catch, linf,sim_years,burn_years,
 }
 
 slice_grid <- sim_grid %>%
-  slice(1:5) %>%
+  # slice(1:5) %>%
   mutate(tuned_pars = pmap(
     list(
       target_depletion = depletion,
       target_catch = target_catch,
       linf = linf,
+      scientific_name = sci_name,
       adult_movement = adult_movement,
       larval_movement = larval_movement,
       density_dependence_form = density_dependence_form,
@@ -265,11 +272,14 @@ fishfoo <- function(common_name,
                     density_dependence_form,
                     steepness,
                     pars) {
+
+  scientific_name <- gsub("(^)([[:alpha:]])", "\\1\\U\\2", scientific_name, perl=TRUE)
+
   create_fish(
     common_name = common_name,
-    scientific_name = ,
-    linf = linf,
-    m = m,
+    scientific_name = scientific_name,
+    linf = NA,
+    m = NA,
     r0 = exp(pars[1]),
     adult_movement = adult_movement,
     larval_movement = larval_movement,
@@ -400,16 +410,16 @@ plot_foo <- function(outcomes, year_mpa) {
 
 
 sim_grid_plots <- slice_grid %>%
-  mutate(sim_plot = map_plot(mpa_experiment, ~plot_foo(.x, year_mpa = year_mpa))) %>%
+  mutate(sim_plot = map(mpa_experiment, ~plot_foo(.x, year_mpa = year_mpa))) %>%
   select(-fish,-fleet,-mpa_experiment)
 
-a <- slice_grid %>%
-  mutate(run = 1:nrow(.)) %>%
-  select(run,mpa_experiment) %>%
-  unnest() %>%
-  group_by(run,year) %>%
-  mutate(post_mpa = any(percent_mpa > 0))
+# a <- slice_grid %>%
+#   mutate(run = 1:nrow(.)) %>%
+#   select(run,mpa_experiment) %>%
+#   unnest() %>%
+#   group_by(run,year) %>%
+#   mutate(post_mpa = any(percent_mpa > 0))
 
-trelliscope(sim_grid_plots, name = 'a')
+# trelliscope(sim_grid_plots, name = 'a')
 
 save.image(file.path(run_dir,'mpa-sims.Rdata'))

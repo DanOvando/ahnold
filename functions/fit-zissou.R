@@ -1,4 +1,4 @@
-fit_ahnold <- function(data,
+fit_zissou <- function(data,
                        non_nested_variables =  c(
                          'targeted',
                          'factor_year',
@@ -60,7 +60,6 @@ fit_ahnold <- function(data,
   # prepare data for c++ ----------------------------------------------------
 
 
-browser()
   seen_cdata <-
     make_c_worthy(seen_data,
                   non_nested_vars = non_nested_variables,
@@ -79,6 +78,58 @@ browser()
 
   # prepare standardized matrices -------------------------------------------
 
+  standard_year_species <- expand.grid(year = unique(seeing_data$factor_year), classcode = unique(seeing_data$classcode), stringsAsFactors = F) %>%
+    as_data_frame() %>%
+    mutate(marker = 1,
+           classcode_year = paste(classcode, year, sep = "-")) %>%
+    spread(classcode_year, marker, fill = 0) %>%
+    arrange(classcode, year) %>%
+    left_join(numeric_species_key, by = "classcode")
+
+  annual_data <- data %>%
+    group_by(year, classcode) %>%
+    summarise(enso = mean(enso),
+              pdo = mean(pdo),
+              temp = mean(mean_temp - temperature),
+              targeted = unique(targeted))
+
+  did_data <- standard_year_species %>%
+    mutate(year = as.numeric(year)) %>%
+    select(year, classcode) %>%
+    left_join(annual_data, by = c("year",'classcode')) %>%
+    arrange(classcode, year)
+
+  non_nested_did_data <- did_data %>%
+    select(enso, pdo, temp) %>%
+    mutate(intercept = 1)
+
+  year_did_data <- did_data %>%
+    mutate(targeted_year = paste(targeted,year, sep = '-'),
+           marker = 1) %>%
+    select(year, classcode, targeted_year, marker) %>%
+    spread(targeted_year,marker, fill = 0) %>%
+    arrange(classcode, year)  %>%
+    select(-year,-classcode)
+
+  targeted <- str_detect(colnames(year_did_data),"1-")
+
+  targeted_year_did_data <- year_did_data[,targeted]
+
+  nontargeted_year_did_data <- year_did_data[,targeted == F]
+
+  species_did_data <- did_data %>%
+    select(classcode) %>%
+    mutate(marker = 1, index = 1:nrow(.)) %>%
+    spread(classcode, marker, fill = 0) %>%
+    arrange(index) %>%
+    select(-index)
+
+
+  standard_species <- standard_year_species$numeric_classcode
+
+  standard_year_species <-  standard_year_species %>%
+    select(-year,-classcode,-numeric_classcode)
+
   standard_non_nested <- seeing_cdata$x_non_nested %>%
     gather(variable, value) %>%
     group_by(variable) %>%
@@ -86,24 +137,10 @@ browser()
     spread(variable, mean_value)
 
   standard_non_nested <-
-    standard_non_nested[rep(1, n_distinct(seeing_data$factor_year)), ]
+    standard_non_nested[rep(1, nrow(standard_year_species)), ]
 
   standard_non_nested <-
     standard_non_nested[colnames(seeing_cdata$x_non_nested)]
-
-
-  standard_year_species <- seeing_cdata$x_year_species %>%
-    gather(variable, value) %>%
-    group_by(variable) %>%
-    summarise(mean_value = mean(value, na.rm = T)) %>%
-    spread(variable, mean_value)
-
-  standard_year_species <-
-    standard_year_species[rep(1, n_distinct(seeing_data$factor_year)), ]
-
-  standard_year_species <-
-    standard_year_species[colnames(seeing_cdata$x_year_species)]
-
 
   standard_region_cluster <- seeing_cdata$x_region_cluster %>%
     gather(variable, value) %>%
@@ -112,19 +149,10 @@ browser()
     spread(variable, mean_value)
 
   standard_region_cluster <-
-    standard_region_cluster[rep(1, n_distinct(seeing_data$factor_year)), ]
+    standard_region_cluster[rep(1, nrow(standard_year_species)), ]
 
   standard_region_cluster <-
     standard_region_cluster[colnames(seeing_cdata$x_region_cluster)]
-
-  standard_did_with_mpa <-
-    data_frame(year = unique(seeing_data$factor_year)) %>%
-    spread_factors(drop_one = fixed_did)
-
-  standard_did_without_mpa <- standard_did_with_mpa
-
-  standard_did_without_mpa[standard_did_without_mpa > 0] = 0
-
 
 
   # fit model ---------------------------------------------------------------
@@ -133,14 +161,11 @@ browser()
 
   n_species <- length(unique(seen_species_index))
 
-
-  ahnold_data <- list(
+  zissou_data <- list(
     x_seen_non_nested = seen_cdata$x_non_nested,
-    x_seen_did = seen_cdata$x_did,
     x_seen_year_species = seen_cdata$x_year_species,
     x_seen_region_cluster = seen_cdata$x_region_cluster,
     x_seeing_non_nested = seeing_cdata$x_non_nested,
-    x_seeing_did = seeing_cdata$x_did,
     x_seeing_year_species = seeing_cdata$x_year_species,
     x_seeing_region_cluster = seeing_cdata$x_region_cluster,
     region_cluster_index = seeing_cdata$region_cluster_index,
@@ -148,48 +173,57 @@ browser()
     any_seen = any_seen,
     standard_non_nested = standard_non_nested,
     standard_year_species = standard_year_species,
-    standard_did_with_mpa = standard_did_with_mpa,
-    standard_did_without_mpa = standard_did_without_mpa,
     standard_region_cluster = standard_region_cluster,
     seen_species_index = seen_species_index,
     year_species_index = seen_cdata$year_species_index,
     seen_weights = rep(1, nrow(seen_cdata$x_non_nested)),
-    seeing_weights = rep(1, nrow(seeing_cdata$x_non_nested))
+    seeing_weights = rep(1, nrow(seeing_cdata$x_non_nested)),
+    non_nested_did_data = non_nested_did_data,
+    targeted_year_did_data = targeted_year_did_data,
+    nontargeted_year_did_data = nontargeted_year_did_data,
+    species_did_data = species_did_data
   )
 
-  ahnold_data <- map_if(ahnold_data, is.data.frame, ~ as.matrix(.x))
+  zissou_data <- map_if(zissou_data, is.data.frame, ~ as.matrix(.x))
 
-  any_na <- map_lgl(ahnold_data, ~ any(is.na(.x))) %>% any()
+  any_na <- map_lgl(zissou_data, ~ any(is.na(.x))) %>% any()
 
   if (any_na) {
-    stop("NAs in ahnold_data")
+    stop("NAs in zissou_data")
   }
-  ahnold_params <- list(
-    seen_non_nested_betas = rep(0, ncol(ahnold_data$x_seen_non_nested)),
-    seen_did_betas = rep(0, ncol(ahnold_data$x_seen_did)),
-    seen_year_species_betas = rep(0, ncol(ahnold_data$x_seen_year_species)),
+
+  zissou_params <- list(
+    seen_non_nested_betas = rep(0, ncol(zissou_data$x_seen_non_nested)),
+    seen_year_species_betas = rep(0, ncol(zissou_data$x_seen_year_species)),
     seen_year_species_sigmas = rep(log(1), n_species),
-    seen_region_cluster_betas = rep(0, ncol(ahnold_data$x_seen_region_cluster)),
-    seen_region_cluster_sigmas = rep(log(1), n_distinct(ahnold_data$region_cluster_index)),
+    seen_region_cluster_betas = rep(0, ncol(zissou_data$x_seen_region_cluster)),
+    seen_region_cluster_sigmas = rep(log(1), n_distinct(zissou_data$region_cluster_index)),
     seen_density_species_sigma = rep(log(1), n_species),
-    seeing_non_nested_betas = rep(0, ncol(ahnold_data$x_seeing_non_nested)),
-    seeing_did_betas = rep(0, ncol(ahnold_data$x_seeing_did)),
-    seeing_year_species_betas = rep(0, ncol(ahnold_data$x_seen_year_species)),
+    seeing_non_nested_betas = rep(0, ncol(zissou_data$x_seeing_non_nested)),
+    seeing_year_species_betas = rep(0, ncol(zissou_data$x_seen_year_species)),
     seeing_year_species_sigmas = rep(log(1), n_species),
-    seeing_region_cluster_betas = rep(0, ncol(ahnold_data$x_seeing_region_cluster)),
-    seeing_region_cluster_sigmas = rep(log(1), n_distinct(ahnold_data$region_cluster_index))
+    seeing_region_cluster_betas = rep(0, ncol(zissou_data$x_seeing_region_cluster)),
+    seeing_region_cluster_sigmas = rep(log(1), n_distinct(zissou_data$region_cluster_index)),
+    non_nested_did_betas = rep(0, ncol(non_nested_did_data)),
+    targeted_did_betas = rep(0, ncol(targeted_year_did_data)),
+    nontargeted_did_betas = rep(0, ncol(nontargeted_year_did_data)),
+    species_did_betas = rep(0, ncol(species_did_data)),
+    log_targeted_sigma = log(1),
+    log_nontargeted_sigma = log(1),
+    log_species_sigma = log(1),
+    log_did_sigma = log(1)
   )
 
-  any_na <- map_lgl(ahnold_params, ~ any(is.na(.x))) %>% any()
+  any_na <- map_lgl(zissou_params, ~ any(is.na(.x))) %>% any()
 
   if (any_na) {
     stop("NAs in ahnold_params")
   }
-
   if (use_tmb == T) {
-    compile(here::here("scripts", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
 
-    dyn.load(dynlib(here::here("scripts", script_name)))
+    compile(here::here("src", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
+
+    dyn.load(dynlib(here::here("src", script_name)))
 
     if (fixed_regions == T){
 
@@ -202,20 +236,22 @@ browser()
         "seen_year_species_betas",
         "seeing_year_species_betas",
         "seen_region_cluster_betas",
-        "seeing_region_cluster_betas"
+        "seeing_region_cluster_betas",
+        "targeted_did_betas",
+        "nontargeted_did_betas",
+        "species_did_betas"
       )    }
 
     ahnold_model <-
       MakeADFun(
-        ahnold_data,
-        ahnold_params,
+        zissou_data,
+        zissou_params,
         DLL = script_name,
         random = randos
       )
 
-    save(file = here::here(run_dir, "ahnold-onestage-tmb-model.Rdata"),
-         ahnold_model)
-
+    # save(file = here::here(run_dir, "ahnold-onestage-tmb-model.Rdata"),
+    #      ahnold_model)
 
     a <- Sys.time()
     set.seed(seed)
@@ -228,19 +264,19 @@ browser()
       )
     Sys.time() - a
 
-    save(file = here::here(run_dir, "ahnold-onestage-tmb-fit.Rdata"),
-         ahnold_fit)
+    # save(file = here::here(run_dir, "ahnold-onestage-tmb-fit.Rdata"),
+    #      ahnold_fit)
 
     ahnold_report <- ahnold_model$report()
 
     ahnold_sd_report <- sdreport(ahnold_model)
 
 
-    save(file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
-         ahnold_sd_report)
-
-    save(file = here::here(run_dir, "ahnold-tmb-onestage-report.Rdata"),
-         ahnold_report)
+    # save(file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
+    #      ahnold_sd_report)
+    #
+    # save(file = here::here(run_dir, "ahnold-tmb-onestage-report.Rdata"),
+    #      ahnold_report)
 
 
   }
@@ -264,7 +300,8 @@ browser()
       ahmold_model = ahnold_model,
       ahnold_report = ahnold_report,
       ahnold_sd_report = ahnold_sd_report,
-      ahnold_estimates = ahnold_estimates
+      ahnold_estimates = ahnold_estimates,
+      did_data = did_data
     )
   )
 }

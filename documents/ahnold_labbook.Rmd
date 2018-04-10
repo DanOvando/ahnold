@@ -2338,3 +2338,152 @@ What needs to happen to make ahnold chapter ready.
 5. Demonstrate with MLPA data
 
 6. Tease next steps: stock assessment MPA detection, synthetic controls?
+
+# There's no damn reason to estimate an annual MPA effect: let's do pre, first five years, next five years
+
+# simple power analysis idea
+
+the idea is that you are sampling from an unfished and a fished, or an MPA and a no-MPA world. You want to say, can you say that the mean of the MPA world is substantially different than the no-mpa world, where each sample is a fraw of an MPA effect for that species 
+
+Think of it like after ten years, where each draw is a sample MPA effect for one species at different places, or multiple species
+
+```{r}
+
+experiment <- data_frame(no_mpa =  rnorm(100,0.5,1), mpa = rnorm(100,0.5 * 1.1,1)) %>% gather(experiment, mpa_effect)
+
+experiment %>% 
+  ggplot(aes(mpa_effect, fill = experiment)) + 
+  geom_density()
+
+
+model <- "
+
+data{
+
+int n;
+
+vector[n] mpa;
+
+
+
+
+}
+
+
+
+
+"
+
+
+```
+
+# thoughts on out of rabbit hole
+
+f the DiD. What if you estimate a species specific MPA effect, which comes from a distribution of mean MPA effect, and that's the thing that you actually want to estiamte. 
+
+Here's how you do that. Random year block effects for each species, where each year block for each species comes from a fished or an unfished distribution. i.e. the mean density of a species in a year block is a draw from a mean density for that species group (fished or unfished) in that year. The MPA effect then is the difference in the group level means in each year block (targed and non-targered). 
+
+Need to think about whether this counts as a DiD or something else, once you include fixed or random effects by species 
+
+no that does it! As long as you include intercepts for each species, the the year effects are the trends around that mean. So, by parallel trends if there's no effect then the difference mean trend should be zero, and then deviate after the MPAs. BOOYA. 
+
+Shit, on a related note, I don't think your approach to the net delta effect is right: it does depend on the scale of the other coefficients, so it it can shrink or expand the average effect.... poop. 
+
+Ask jim. I think you just need to get away from the zeros, and fit the model to more aggregate densities... should think about how to do that. 
+
+Doing the manual estimate of the "MPA" effect doesn't properly account for the zeros, since the difference btween MPA on and MPA off is context dependent: its effect on density can be bigger or smaller depending on the value of the other parameters. So, it you're taking the MPA effect on the densities from the linaer model and multiplying those by a vector of detection probabilities over time, you might be diluting the "true" MPA effect. 
+
+So back to the two stage model. 
+
+Goal: An estimated average effect of MPA on densities of fished species
+
+1. The raw data are transet level (30x2 meter transect) counts of fish (species, length bin, numbers). These data are at "site-side" locations, e.g. yellowbanks-east (eastern side of the yellowbanks site). Most sites are sureyed a few times per year. Sites are located throughout the channel islands, but only a few have been consistently surveyed since 2000 (monitoring of Santa Rosa and San Miguel islands only began after 2003). Some sites are inside MPAs, others outside. All MPAs in places in 2003 except for Anacapa reserved, 1973. Available covariates include the observer, visibillity, surge, kelp cover, temperature, and depth. 
+
+2. Identification strategy: Density of unfished species as control for density of fished species, following  difference-in-difference style approach.
+
+3. Working backwards... suppose that you have densities over time for fished and unfished species. The simplest DiD would be targeted + year + targeted:year. We know that doesn't work here, for a variety of reasons. What I want is the average group-level effect. 
+
+So, a regression that was random effects for each species, year-species random effects, where the prior for each year-species effect comes from a mean density for targeted or untargeted species in that year block. Focusing just there for a moment. 
+
+If each species has an intercept that is its mean density, then the time trends should be deviations from that density with mean 0 (hopefully...). So, under the parallel trends assumption then, pre-MPA the fished and unfished species should have roughly equal mean year effects, though individual species can vary. You definitely can't be estimating year-species effects, unless you do the densities at very fine levels, since if you do it by island then that means that for every species you onlt have at most 4 replicates per year.
+
+So, the tradeoff becomes in estimating a bunch of standardized densities for each species at really fine spatial scales, which decreases bias but increases variance, or aggregating up to a larger level (e.g. island). From there, you're back to a simpler regression, and I think something like a simple DiD, where the effect is the difference in means between the targeted and non-targeted groups. 
+
+
+```{r}
+library(rstan)
+library(rstanarm)
+library(tidyverse)
+
+run_dir <- "v1.0"
+load(
+  file = here::here("results",run_dir,"abundance_data.Rdata"))
+
+
+
+tester <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+  group_by(year, classcode, targeted) %>% 
+  summarise(mb = mean(density_g_m2),
+            loo = mean(loo)) %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(classcode) %>% 
+  mutate(ny = n_distinct(year)) %>% 
+  ungroup() %>% 
+  filter(ny > 10) %>% 
+  mutate(factor_year = factor(year)) 
+
+tester %>% 
+  ggplot(aes(year, log(mb), color = factor(targeted), group = interaction(classcode, targeted))) + 
+  geom_line(show.legend = T)
+  
+simple <- lm(log(mb) ~ targeted + factor_year + targeted:factor_year + loo, data = tester %>% filter(year > 1999))
+
+a = simple %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, "targeted:"))
+
+test <- stan_glmer(log(mb) ~ (1|classcode) + (factor_year - 1|targeted) - 1, data = tester %>% filter(year > 1999), chains = 1)
+
+of_interest <- test$coefficients[ str_detect(names(test$coefficients),"targeted:")]
+
+mpa_effect <- data_frame(coef = of_interest, variable = names(of_interest)) %>% 
+  mutate(targeted = map_dbl(variable, ~str_extract(.x, pattern = '(?<=:).*(?=])') %>% as.numeric())) %>% 
+  mutate(year =  map_dbl(variable, ~str_extract(.x, pattern = "(?<=year).*(?=\\s)") %>% as.numeric()))
+
+mpa_effect %>% 
+  filter(year >= 2001) %>% 
+  select(coef, targeted, year) %>% 
+  spread(targeted, coef) %>% 
+  mutate(delta = `1` - `0`) %>% 
+  ggplot(aes(year, delta)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line() + 
+  geom_point(data = a %>% mutate(year = 2001:2013),aes(year, estimate))
+
+tester %>% 
+  group_by(year, targeted) %>% 
+  summarise(mmb = mean(mb)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, log(mmb), color = factor(targeted))) + 
+  geom_line()
+
+```
+
+Yep so that confirms the mixed effect approach to this. So, the question is just what scale do you want the densities to be at. Good to know I'm not a total idiot. So, the first goal is a CPUE standardization function at arbitrary spatial scales, maybe different scales for each species? So you'd ahve a strata column that says like species_spatial. Once you fit that, look at the outcomes and fit the model outside of TMB, then pass it back to TMB. 
+
+
+On the also plus side, this thing is just about dead on the expected magnitude of effects... 
+
+
+
+# zissou revamp
+
+Calling it zissou now. 
+
+- Use recipes to fix up the data processing a bit, center and scale things, filter down uncommon observers etc. 
+
+- Resurrect two-stage model
+
+- testing...
+
+
