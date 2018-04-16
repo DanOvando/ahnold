@@ -190,19 +190,21 @@ Type objective_function<Type>::operator() ()
 
   vector<Type> standardized_yearly_prob_seeing = 1 / (1 + exp(-logit_standardized_yearly_prob_seeing));
 
-  vector<Type> standardized_abundance = standard_non_nested * seen_non_nested_betas + standard_year_species * seen_year_species_betas  + standard_region_cluster * seen_region_cluster_betas;
+  vector<Type> log_standardized_abundance = standard_non_nested * seen_non_nested_betas + standard_year_species * seen_year_species_betas  + standard_region_cluster * seen_region_cluster_betas;
 
-  vector<Type> log_abundance_hat = standardized_yearly_prob_seeing * standardized_abundance;
+  vector<Type> standardized_abundance = exp(log_standardized_abundance);
+
+  vector<Type> abundance_hat = standardized_yearly_prob_seeing * standardized_abundance;
 
   //// did model ////
 
-  vector<Type> log_abundance_hat_hat = non_nested_did_data * non_nested_did_betas + targeted_year_did_data * targeted_did_betas + nontargeted_year_did_data * nontargeted_did_betas + species_did_data * species_did_betas;
+  vector<Type> abundance_hat_hat = non_nested_did_data * non_nested_did_betas + targeted_year_did_data * targeted_did_betas + nontargeted_year_did_data * nontargeted_did_betas + species_did_data * species_did_betas;
 
-  i_max = log_abundance_hat.size();
+  i_max = abundance_hat.size();
 
   for (int i = 0; i < i_max; i++){
 
-    nll -= dnorm(log_abundance_hat(i), log_abundance_hat_hat(i), exp(log_did_sigma), true);
+    nll -= dnorm(abundance_hat(i), abundance_hat_hat(i), exp(log_did_sigma), true);
 
   } // close did thing
 
@@ -232,7 +234,6 @@ Type objective_function<Type>::operator() ()
   /////////outputs/////////
 
 
-
   REPORT(log_density_hat);
 
   REPORT(prob_seeing);
@@ -241,7 +242,7 @@ Type objective_function<Type>::operator() ()
 
   REPORT(standardized_abundance);
 
-  REPORT(log_abundance_hat);
+  REPORT(abundance_hat);
 
   REPORT(mpa_effect);
 

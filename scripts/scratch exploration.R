@@ -32,9 +32,9 @@ ahnold_estimates %>%
 ahnold_report <- tmb_runs$tmb_fit[[1]]$ahnold_report
 
 
-abundance_trends <- data_frame(log_abundance_hat = ahnold_report$log_abundance_hat,
+abundance_trends <- data_frame(abundance_hat = ahnold_report$abundance_hat,
                                classcode = rep(1:n_distinct(pisco$classcode), each = length(2000:2013))) %>%
-  mutate(abundance_hat = exp(log_abundance_hat)) %>%
+  mutate(log_abundance_hat = log(abundance_hat)) %>%
   group_by(classcode) %>%
   mutate(year = 1999 + 1:length(abundance_hat)) %>%
   mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
@@ -53,13 +53,22 @@ abundance_trends %>%
 
 abundance_trends %>%
   ggplot() +
-  geom_line(aes(year, log_abundance_hat, color = factor(targeted), group = interaction(targeted, classcode)),show.legend = F) +
+  geom_line(aes(
+    year,
+    log_abundance_hat,
+    color = factor(targeted),
+    group = interaction(targeted, classcode)
+  ),
+  show.legend = F,
+  alpha = 0.5) +
+  geom_smooth(aes(year, log_abundance_hat, color = factor(targeted))) +
   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red")
 
 
 
 did_data <- tmb_runs$tmb_fit[[1]]$did_data %>%
-  mutate(abundance_hat = exp(ahnold_report$log_abundance_hat)) %>%
+  mutate(log_abundance_hat = log(ahnold_report$abundance_hat)) %>%
+  mutate(abundance_hat = exp(log_abundance_hat)) %>%
   group_by(classcode) %>%
   mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
   ungroup() %>%
@@ -69,7 +78,7 @@ a <- lm(abundance_hat ~ targeted + factor_year  + targeted:factor_year, data = d
   broom::tidy() %>%
   filter(str_detect(term,"targeted:"))
 
-test <- stan_glmer(abundance_hat ~ (1|classcode) + (factor_year - 1|targeted) - 1, data = did_data, chains = 1)
+test <- stan_glmer(log_abundance_hat ~ (1|classcode) + (factor_year - 1|targeted) - 1, data = did_data, chains = 1)
 
 test <- stan_glmer(scaled_abundance_hat ~ (1|classcode) + (factor_year - 1|targeted) - 1, data = did_data, chains = 1)
 
