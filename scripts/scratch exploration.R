@@ -55,13 +55,13 @@ abundance_trends %>%
   ggplot() +
   geom_line(aes(
     year,
-    log_abundance_hat,
+    abundance_hat,
     color = factor(targeted),
     group = interaction(targeted, classcode)
   ),
   show.legend = F,
   alpha = 0.5) +
-  geom_smooth(aes(year, log_abundance_hat, color = factor(targeted))) +
+  geom_smooth(aes(year, abundance_hat, color = factor(targeted))) +
   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red")
 
 

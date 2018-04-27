@@ -196,6 +196,8 @@ Type objective_function<Type>::operator() ()
 
   vector<Type> abundance_hat = standardized_yearly_prob_seeing * standardized_abundance;
 
+  vector<Type> log_abundance_hat = log(abundance_hat);
+
   //// did model ////
 
   vector<Type> abundance_hat_hat = non_nested_did_data * non_nested_did_betas + targeted_year_did_data * targeted_did_betas + nontargeted_year_did_data * nontargeted_did_betas + species_did_data * species_did_betas;

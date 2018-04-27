@@ -100,7 +100,8 @@ fit_zissou <- function(data,
     arrange(classcode, year)
 
   non_nested_did_data <- did_data %>%
-    select(enso, pdo, temp) %>%
+    select(temp) %>%
+    # select(enso, pdo, temp) %>%
     mutate(intercept = 1)
 
   year_did_data <- did_data %>%
