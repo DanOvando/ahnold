@@ -42,6 +42,10 @@ fit_zissou <- function(data,
     left_join(numeric_species_key, by = "classcode") %>%
     slice(seen_has_important$index)
 
+  candidate_years <- seen_data$year %>% unique()
+
+  seen_data <- add_mising_years(seen_data, candidate_years)
+
   log_density <- seen_data$log_density
 
   seen_data <- seen_data %>%
@@ -242,7 +246,6 @@ fit_zissou <- function(data,
         "nontargeted_did_betas",
         "species_did_betas"
       )    }
-
     ahnold_model <-
       MakeADFun(
         zissou_data,
@@ -271,6 +274,12 @@ fit_zissou <- function(data,
     ahnold_report <- ahnold_model$report()
 
     ahnold_sd_report <- sdreport(ahnold_model)
+
+    diagnostics = data.frame(
+      "name" = names(ahnold_model$par),
+      "est" = ahnold_fit$par,
+      "final_gradient" = as.vector(ahnold_model$gr(ahnold_fit$par))
+    )
 
 
     # save(file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
@@ -302,7 +311,8 @@ fit_zissou <- function(data,
       ahnold_report = ahnold_report,
       ahnold_sd_report = ahnold_sd_report,
       ahnold_estimates = ahnold_estimates,
-      did_data = did_data
+      did_data = did_data,
+      diagnostics = diagnostics
     )
   )
 }

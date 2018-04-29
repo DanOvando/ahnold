@@ -32,7 +32,7 @@ if (("demons" %in% installed.packages()) == F){
 
 demons::load_functions('functions')
 
-run_name <- 'v1.0'
+run_name <- 'v2.0'
 
 run_dir <- file.path('results', run_name)
 
@@ -81,7 +81,7 @@ rank_targeting <- F
 
 max_generations <- 5
 
-max_year <- 2013
+max_year <- 2017
 
 plot_theme <- hrbrthemes::theme_ipsum(base_size = 14,
                                       axis_title_size = 16)
@@ -91,7 +91,7 @@ theme_set(plot_theme)
 
 # load data ---------------------------------------------------------------
 
-length_data <- read_csv('data/UCSB_FISH raw thru 2013.csv') %>%
+length_data <- read_csv('data/UCSB_FISH.csv') %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   mutate(classcode = tolower(classcode)) %>%
   mutate(observer = ifelse(is.na(observer), 'unknown', observer))
@@ -103,10 +103,7 @@ length_data <- length_data %>%
     level != 'CAN',
     campus == 'UCSB',
     method %in%  c(
-      'SBTL_FISH',
-      'SBTL_FISH_NPS',
-      'SBTL_FISH_CRANE',
-      'SBTL_FISH_VRG'
+      'SBTL_FISH'
     ),!(site == 'SCI_PELICAN' & side == 'FAR WEST'),!(toupper(classcode) %in% c('NO_ORG', 'LDAL', 'CNIC'))
   )
 
@@ -604,11 +601,11 @@ if (file.exists('data/pisco-data.Rdata') == F |
     stop('multiple species per classcode')
   }
 
-  save(file = paste0('data/pisco-data.Rdata'),
+  save(file = paste0('processed_data/pisco-data.Rdata'),
        pisco_data)
 
 } else {
-  load('data/pisco-data.Rdata')
+  load('processed_data/pisco-data.Rdata')
 
 }
 
