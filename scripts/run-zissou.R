@@ -1,4 +1,4 @@
-# Run Ahnold v2 -------
+# Run Zissou -------
 # Author: Dan Ovando
 # Project: Ahnold
 # Summary: Run a revised version of ahnold, redoing some of the database filtering and
@@ -8,7 +8,6 @@
 
 
 # setup ---------------------------------------------------------------
-rm(list = ls())
 library(scales)
 # library(rstanarm)
 library(scales)
@@ -32,12 +31,12 @@ if (("demons" %in% installed.packages()) == F){
 
 demons::load_functions('functions')
 
-run_name <- 'v2.0'
+run_name <- 'v2.1'
 
 run_dir <- file.path('results', run_name)
 
 run_description <-
-  'Model selection process, testing STAN selection'
+  'MPA only'
 
 if (dir.exists(run_dir) == F) {
   dir.create(run_dir, recursive = T)
@@ -51,7 +50,7 @@ write(run_description,
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- FALSE
+run_tmb <- TRUE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -66,6 +65,8 @@ num_knots <-  10
 channel_islands_only <- T # only include channel islands, leave T
 
 min_year <- 1999 # included years must be greater than this
+
+mpa_only <- TRUE
 
 occurance_ranking_cutoff <- 0.5
 
@@ -486,7 +487,7 @@ if (file.exists('data/pdo.csv')) {
 # convert transect data to density estimates ------------------------------
 
 
-if (file.exists('data/pisco-data.Rdata') == F |
+if (file.exists('processed_data/pisco-data.Rdata') == F |
     run_length_to_density == T) {
 
 
@@ -879,6 +880,15 @@ abundance_data <- abundance_data %>%
   select(classcode, data_source, data) %>%
   unnest() %>%
   nest(-data_source)
+
+if (mpa_only == T){
+
+abundance_data <- abundance_data %>%
+  unnest() %>%
+  filter(eventual_mpa == T) %>%
+  nest(-data_source)
+
+}
 
 save(
   file = glue::glue("{run_dir}/abundance_data.Rdata"),
