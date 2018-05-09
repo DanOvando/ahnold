@@ -184,4 +184,3 @@ sim_grid_plots <- sim_grid_outcomes %>%
   mutate(eq_f = map_dbl(fleet, 'eq_f')) %>%
   select(-fish,-fleet,-outcomes)
 
-trelliscope(sim_grid_plots, name = 'arg')

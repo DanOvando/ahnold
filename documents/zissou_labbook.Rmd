@@ -2639,3 +2639,36 @@ essington 2006 pelagic ecosystem response to a century of commercial fishing
 
 Take a look at that spatial closure 
 
+# Simulation checklist
+
+Ok, so what needs to happen here? You need to merge in both the CDFW and manually generated f series, a la `scrooge`. You also need to add in density dependent adult movement. I think those are the only bells and whistles that need to happen. 
+
+Key experiment checklist:
+
+- multiple species (mostly for aggregation later)
+
+- depletion (0.25 increments between crazy overfished to unfished)
+
+- steepness (0.6 and 1)
+
+- larval movement (high and low)
+
+- adult movement (high and low)
+
+- adult density denepdent movement (on and off)
+
+- recruitment form (for anything with steepness less than 1)
+
+- constant effort
+
+- constant catch
+
+- open access?
+
+That's about  172,000 experiment run... not terrible but not great. Let's get one running and sus on the timing on this with and without open-access in there, and see if there's a better way to fix open access. 
+
+The biggest overhead is doing this with 18 species, is that really needed? The advantage is that it allows you to more or less generate trajectories for the species in the islands. But if not, seems like grabing a few representative species would work just fine (do you really need 6 rockfish)
+
+You forgot what you've done already. run-mpa-sims already did a lot of the legwork here. Now, you were also doing the actual regression analysis over in sim-mpa.R. 
+
+So, the plan now is to first simulate all the experiments, and then to simulate data sampling from that library if you need. 

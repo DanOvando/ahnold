@@ -1,8 +1,6 @@
 library(tidyverse)
 library(spasm)
 library(FishLife)
-library(multidplyr)
-# library(trelliscopejs)
 library(hrbrthemes)
 library(scales)
 
@@ -12,63 +10,10 @@ burn_years <- 25
 
 num_patches <- 10
 
-comp_foo <- function(fish,
-                     fleet,
-                     year_mpa,
-                     mpa_size,
-                     sim_years,
-                     num_patches,
-                     burn_years,
-                     run_id,
-                     num_runs) {
-  write(
-    paste('run', run_id, 'out of', num_runs),
-    file = 'simprog.txt',
-    append = T,
-    ncolumns = 1
-  )
-
-  no_mpa <-
-    sim_fishery(
-      fish = fish,
-      fleet = fleet,
-      manager = create_manager(year_mpa = year_mpa, mpa_size = 0),
-      sim_years = sim_years,
-      num_patches = num_patches,
-      burn_years = burn_years
-    ) %>%
-    mutate(experiment = 'no-mpa')
-
-  wi_mpa <-
-    sim_fishery(
-      fish = fish,
-      fleet = fleet,
-      manager = create_manager(year_mpa = year_mpa, mpa_size = mpa_size),
-      sim_years = sim_years,
-      num_patches = num_patches,
-      burn_years = burn_years
-    ) %>%
-    mutate(experiment = 'with-mpa')
-
-  outcomes <- no_mpa %>%
-    bind_rows(wi_mpa) %>%
-    group_by(year, experiment) %>%
-    summarise(
-      ssb = sum(ssb),
-      percent_mpa = mean(mpa),
-      catch = sum(biomass_caught),
-      profits = sum(profits),
-      effort = sum(effort)
-    )
-
-
-
-}
-
 
 # load data ---------------------------------------------------------------
 
-run_name <- 'Working'
+run_name <- 'v2.1'
 
 run_dir <- file.path('results', run_name)
 
@@ -136,113 +81,6 @@ sim_grid <- sim_grid %>%
   left_join(cdfw_catches, by = 'sci_name') %>%
   mutate(target_catch = map_dbl(catches,~dplyr::first(.x$catch)))
 
-
-
-tune_f <-
-  function(params,
-           target_depletion,
-           linf,
-           scientific_name,
-           adult_movement,
-           larval_movement,
-           steepness,
-           density_dependence_form,
-           target_catch = 100,
-           alpha = 0.5,
-           sim_years = sim_years,
-           burn_years = burn_years,
-           num_patches = num_patches) {
-
-    scientific_name <- gsub("(^)([[:alpha:]])", "\\1\\U\\2", scientific_name, perl=TRUE)
-
-    fish <- create_fish(
-      scientific_name = scientific_name,
-      linf = linf,
-      m = NA,
-      r0 = exp(params[1]),
-      adult_movement = adult_movement,
-      larval_movement = larval_movement,
-      density_dependence_form = density_dependence_form,
-      steepness = steepness,
-      query_fishlife = T
-    )
-
-    manager <- create_manager(year_mpa = 999)
-    unfished <-
-      sim_fishery(
-        fish = fish,
-        fleet = create_fleet(initial_effort = 0, fish = fish, fleet_model = "constant-effort"),
-        manager = manager,
-        num_patches = num_patches,
-        sim_years = sim_years,
-        burn_year = burn_years
-      )
-
-    ssb0 <- unfished %>%
-      filter(year == max(year)) %>%
-      summarise(ssb = sum(ssb)) %>% {
-        .$ssb
-      }
-
-    fished <-
-      sim_fishery(
-        fish = fish,
-        fleet = create_fleet(initial_effort = exp(params[2]), fish = fish, fleet_model = "constant-effort"),
-        manager = manager,
-        sim_years = sim_years,
-        burn_year = burn_years,
-        num_patches = num_patches
-      )
-
-    ssb <- fished %>%
-      filter(year == max(year)) %>%
-      summarise(ssb = sum(ssb)) %>% {
-        .$ssb
-      }
-
-    fish_caught <- fished %>%
-      filter(year == max(year)) %>%
-      summarise(caught = sum(biomass_caught)) %>% {
-        .$caught
-      }
-
-
-    depletion <- ssb / ssb0
-
-    ss <-
-      alpha * (log(depletion) - log(target_depletion)) ^ 2 + (1 - alpha) * (log(fish_caught) - log(target_catch)) ^
-      2
-
-    print(ss)
-    return(ss)
-  }
-
-
-fitfoo <- function(target_depletion,scientific_name, target_catch, linf,sim_years,burn_years,
-                   num_patches,
-                   larval_movement,
-                   adult_movement,
-                   density_dependence_form,
-                   steepness)
-{
-  nlminb(
-    c(log(1000*target_catch), log(200)),
-    tune_f,
-    target_depletion = target_depletion,
-    target_catch = target_catch,
-    scientific_name = scientific_name,
-    linf = NA,
-    alpha = 0.5,
-    sim_years = sim_years,
-    burn_years = burn_years,
-    num_patches = num_patches,
-    adult_movement = adult_movement,
-    larval_movement = larval_movement,
-    steepness = steepness,
-    density_dependence_form = density_dependence_form
-  )$par
-
-}
 
 slice_grid <- sim_grid %>%
   # slice(1:5) %>%
