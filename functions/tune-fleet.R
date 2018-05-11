@@ -42,7 +42,7 @@ tune_fleet <- function( f_v_m,
 
   } else if (fleet$fleet_model == "constant-effort"){
 
-    fleet$initial_effort <-   (fish$m * f_v_m) / fleet$q
+    fleet$initial_effort <-   ((fish$m * f_v_m) / fleet$q) * num_patches
 
   } else if (fleet$fleet_model == "open-access"){
 
