@@ -1,0 +1,80 @@
+---
+title: "SimMPA"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(FishLife)
+library(spasm)
+here:here()
+```
+
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+
+```{r}
+sliderInput("depletion", label = "Initial Depletion",
+            min = 0, max = 2, step = .01, value = 0.75)
+
+sliderInput("mpa_size", label = "% of Range in MPA",
+            min = 0, max = 1, step = .01, value = 0.25)
+
+```
+
+Column
+-----------------------------------------------------------------------
+
+### MPA Outcomes
+
+```{r}
+
+num_patches <- 10
+
+fish <- create_fish()
+
+fleet <- create_fleet(fish = fish)
+
+fleet <- tune_fleet(f_v_m = input$depletion, 
+                    fish = fish, 
+                    fleet = fleet, 
+                    num_patches = 10)
+
+experiment <- comp_foo(fish = fish, 
+                       fleet = fleet,
+                       year_mpa = 15,
+                       mpa_size = num_patches * input$mpa_size,
+                       burn_years = 20,
+                       sim_years = 40,
+                       num_patches = num_patches)
+
+    calc_mpa_effect <- function(outcomes) {
+      mpa_effect <- outcomes %>%
+        group_by(year) %>%
+        mutate(mpa_size = max(percent_mpa)) %>%
+        ungroup() %>%
+        select(year, experiment, biomass, mpa_size) %>%
+        spread(experiment, biomass) %>%
+        mutate(mpa_effect = `with-mpa` / `no-mpa` - 1) # %>%
+      # select(year, mpa_size, mpa_effect)
+    }
+
+results <- calc_mpa_effect(experiment$outcomes)
+
+renderPlot({
+  results %>% 
+    ggplot(aes(year, mpa_effect)) + 
+    geom_point()
+
+})
+
+```
+
+

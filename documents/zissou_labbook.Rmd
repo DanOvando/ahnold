@@ -2671,4 +2671,6 @@ The biggest overhead is doing this with 18 species, is that really needed? The a
 
 You forgot what you've done already. run-mpa-sims already did a lot of the legwork here. Now, you were also doing the actual regression analysis over in sim-mpa.R. 
 
-So, the plan now is to first simulate all the experiments, and then to simulate data sampling from that library if you need. 
+So, the plan now is to first simulate all the experiments, and then to simulate data sampling from that library if you need.
+
+ kelp rockfish ("satr") is driving a bit of the downturn in the fished species, a bit flatter without them. 

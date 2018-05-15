@@ -94,7 +94,7 @@ fit_zissou <- function(data,
     group_by(year, classcode) %>%
     summarise(enso = mean(enso),
               pdo = mean(pdo),
-              temp = mean(mean_temp - temperature),
+              temp = mean(temp_deviation),
               targeted = unique(targeted))
 
   did_data <- standard_year_species %>%
@@ -159,7 +159,6 @@ fit_zissou <- function(data,
   standard_region_cluster <-
     standard_region_cluster[colnames(seeing_cdata$x_region_cluster)]
 
-
   # fit model ---------------------------------------------------------------
 
   seen_species_index <- seen_data$numeric_classcode
@@ -196,7 +195,6 @@ fit_zissou <- function(data,
   if (any_na) {
     stop("NAs in zissou_data")
   }
-
   zissou_params <- list(
     seen_non_nested_betas = rep(0, ncol(zissou_data$x_seen_non_nested)),
     seen_year_species_betas = rep(0, ncol(zissou_data$x_seen_year_species)),

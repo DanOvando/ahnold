@@ -31,12 +31,12 @@ if (("demons" %in% installed.packages()) == F){
 
 demons::load_functions('functions')
 
-run_name <- 'v2.1'
+run_name <- 'v2.0'
 
 run_dir <- file.path('results', run_name)
 
 run_description <-
-  'MPA only'
+  'MPA and no MPA, fitting to log standardized index'
 
 if (dir.exists(run_dir) == F) {
   dir.create(run_dir, recursive = T)
@@ -66,7 +66,7 @@ channel_islands_only <- T # only include channel islands, leave T
 
 min_year <- 1999 # included years must be greater than this
 
-mpa_only <- TRUE
+mpa_only <- FALSE
 
 occurance_ranking_cutoff <- 0.5
 
@@ -635,6 +635,36 @@ mean_foo <- function(var) {
 
 }
 
+
+channel_sides <-
+  data_frame(region = c("ANA", "SCI", "SRI", "SMI"),
+             midline = c(34, 34, 34, 34.03))
+
+pisco_data <- pisco_data %>%
+  mutate(year_month = year + (month / 12 - .1))
+
+rolling_mean_temperatures <- pisco_data %>%
+  mutate(year_month = year + (month / 12 - .1)) %>%
+  left_join(site_data, by = c('site','side')) %>%
+  filter(region %in% c("ANA", "SCI","SRI","SMI")) %>%
+  group_by(year) %>%
+  summarise(mean_temperature = mean(mean_temp)) %>%
+  mutate(rolling_mean = RcppRoll::roll_mean(mean_temperature,4, align = "right",
+                                            fill = NA)) %>%
+  mutate(rolling_mean3 = RcppRoll::roll_mean(mean_temperature,3, align = "right",
+                                             fill = NA))  %>%
+  mutate(rolling_mean2 = RcppRoll::roll_mean(mean_temperature,2, align = "right",
+                                             fill = NA)) %>%
+  mutate(rolling_mean1 = RcppRoll::roll_mean(mean_temperature,1, align = "right",
+                                             fill = NA)) %>%
+  mutate(rolling_mean = ifelse(is.na(rolling_mean), rolling_mean3, rolling_mean)) %>%
+  mutate(rolling_mean = ifelse(is.na(rolling_mean), rolling_mean2, rolling_mean)) %>%
+  mutate(rolling_mean = ifelse(is.na(rolling_mean), rolling_mean1, rolling_mean)) %>%
+  select(year, rolling_mean) %>%
+  mutate(rolling_mean = zoo::na.approx(rolling_mean)) %>%
+  ungroup()
+
+
 # sum biomass across all lengths
 pisco_data <- pisco_data %>%
   mutate(sampling_event = paste(campus, method, year, month, day, site, side, zone, transect, level) %>%
@@ -845,14 +875,26 @@ filterfoo <-
   }
 
 
+# create dropped pairs
+
+
+
 
 abundance_data <- pisco_data %>%
+  left_join(site_data, by = c("site","side")) %>%
   mutate(data_source = 'pisco') %>%
   nest(-data_source,-classcode) %>%
   bind_rows(kfm_data %>%  mutate(data_source = 'kfm') %>%
-              nest(-data_source,-classcode)) %>%
+              left_join(site_data, by = c("site","side")) %>%
+              mutate(year_month = year + (month / 12 - .1)) %>%
+              nest(-data_source,-classcode)
+              ) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
-  mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
+  # mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
+  # mutate(data = map(data, ~ left_join(.x, channel_sides, by = c("region")))) %>%
+  # mutate(data = map(data, ~ mutate(.x, channel_zone = ifelse(lat_wgs84 > midline, "inner", "outer")))) %>%
+  mutate(data = map(data, ~ left_join(.x, rolling_mean_temperatures, by = c("year")))) %>%
+  mutate(data = map(data, ~ mutate(.x, temp_deviation = (rolling_mean - temperature)^2))) %>%
   mutate(data = map(data, ~ mutate(.x, month = as.numeric(as.character(factor_month))))) %>%
   mutate(data = map(data, ~ left_join(.x, enso, by = c('year', 'month')))) %>%
   mutate(data = map(data, ~ left_join(.x, pdo, by = c('year', 'month')))) %>%
@@ -880,6 +922,8 @@ abundance_data <- abundance_data %>%
   select(classcode, data_source, data) %>%
   unnest() %>%
   nest(-data_source)
+
+
 
 if (mpa_only == T){
 
@@ -956,10 +1000,12 @@ script_name <- "fit_zissou"
 
 sfa <- safely(fit_zissou)
 
-pisco <- abundance_data$data[abundance_data$data_source == 'pisco'][[1]]
+pisco <- abundance_data$data[abundance_data$data_source == 'pisco'][[1]] #%>%
+  # filter(classcode != )
 
 
 tmb_runs <- data_frame(data = list(pisco),  non_nested_variables = list(c(
+  'site_side',
   'level',
   'factor_month',
   'cumulative_n_obs',
@@ -968,6 +1014,7 @@ tmb_runs <- data_frame(data = list(pisco),  non_nested_variables = list(c(
   'mean_depth'
 ),
 c(
+  'site_side',
   'level',
   'factor_month',
   'cumulative_n_obs',

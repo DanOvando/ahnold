@@ -206,7 +206,7 @@ Type objective_function<Type>::operator() ()
 
   for (int i = 0; i < i_max; i++){
 
-    nll -= dnorm(abundance_hat(i), abundance_hat_hat(i), exp(log_did_sigma), true);
+    nll -= dnorm(log_abundance_hat(i), abundance_hat_hat(i), exp(log_did_sigma), true);
 
   } // close did thing
 
@@ -248,7 +248,11 @@ Type objective_function<Type>::operator() ()
 
   REPORT(mpa_effect);
 
+  REPORT(abundance_hat_hat);
+
   ADREPORT(mpa_effect);
+
+  ADREPORT(abundance_hat_hat);
 
   return nll;
 

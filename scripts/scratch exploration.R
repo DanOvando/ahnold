@@ -21,19 +21,13 @@ raw <- pisco %>%
 
 ahnold_estimates <- tmb_runs$tmb_fit[[1]]$ahnold_estimates
 
-ahnold_estimates %>%
-  filter(variable == "mpa_effect") %>%
-  mutate(year = 2000:2013) %>%
-  ggplot() +
-  geom_pointrange(aes(x = year, y = estimate, ymin = lower, ymax = upper)) +
-  geom_hline(aes(yintercept = 0),linetype = 2) +
-  geom_vline(aes(xintercept = 2003), linetype = 2, color= "red")
-
 ahnold_report <- tmb_runs$tmb_fit[[1]]$ahnold_report
+
+years <- fitted_data$year %>% unique
 
 
 abundance_trends <- data_frame(abundance_hat = ahnold_report$abundance_hat,
-                               classcode = rep(1:n_distinct(pisco$classcode), each = length(2000:2013))) %>%
+                               classcode = rep(1:n_distinct(pisco$classcode), each = length(years))) %>%
   mutate(log_abundance_hat = log(abundance_hat)) %>%
   group_by(classcode) %>%
   mutate(year = 1999 + 1:length(abundance_hat)) %>%

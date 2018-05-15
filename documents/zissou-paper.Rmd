@@ -18,7 +18,11 @@ library(sf)
 library(viridis)
 library(hrbrthemes)
 library(scales)
+library(patchwork)
+library(rpart)
+library(extrafont)
 library(tidyverse)
+extrafont::loadfonts()
 
 functions <- list.files(here::here("functions"))
 
@@ -36,8 +40,9 @@ num_patches <- 25
   theme_set(zissou_theme)
   
 
-
-  run_name <- "v2.1"
+  samps <- 5000
+ 
+  run_name <- "v2.0"
 
 run_dir <- here::here("results", run_name)
 
@@ -52,6 +57,105 @@ load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
 fitted_data <- tmb_runs$data[[1]]
 
+ahnold_fit <- tmb_runs$tmb_fit[[1]]
+
+
+ seen_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seen_non_nested_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
+
+ seeing_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seeing_non_nested_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
+
+ seen_year_species_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seen_year_species_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
+
+ seeing_year_species_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seeing_year_species_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
+
+ seen_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seen_region_cluster_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
+
+ seeing_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "seeing_region_cluster_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
+
+ did_betas <- ahnold_fit$ahnold_estimates %>%
+   filter(variable == "mpa_effect") %>%
+   mutate(group = variable) %>%
+   mutate(year = fitted_data$year %>% unique())
+
+
+ betas <- bind_rows(
+   seen_non_nested_betas,
+   seeing_non_nested_betas,
+   seen_year_species_betas,
+   seeing_year_species_betas,
+   seen_region_cluster_betas,
+   seeing_region_cluster_betas,
+   did_betas %>% select(-year)
+ ) %>%
+   as_data_frame()
+
+ non_nested_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested")) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+
+ year_species_effects_plots <- betas %>%
+   filter(str_detect(group, "year_species_betas")) %>%
+   mutate(year = str_replace_all(variable,"\\D","") %>% as.numeric()) %>%
+   mutate(classcode = str_split(variable,'-', simplify = T)[,2]) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_ribbon(aes(x = year, ymin = lower, ymax = upper, fill = classcode), alpha = 0.25) +
+   geom_line(aes(x = year, y = estimate, color = classcode)) +
+   facet_wrap(~group)
+
+  region_cluster_plots <- betas %>%
+   filter(str_detect(group, "region_cluster_betas")) %>%
+   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
+   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
+   ggplot() +
+    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+    geom_pointrange(aes(x = region,
+                        y = estimate,
+                        ymin = lower,
+                        ymax = upper, color = cluster)) +
+    facet_wrap(~group)
+
+
+
+ did_plot <- did_betas %>%
+   ggplot() +
+   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+ geom_hline(aes(yintercept = 0)) +
+   geom_pointrange(aes(
+     year,
+     y = estimate,
+     ymin = lower,
+     ymax = upper
+   ),
+   size = 1.5) +
+   labs(x = "Year", y = "Targeted Trend Divergence")
 
 
 
@@ -115,24 +219,34 @@ We first utilize a spatially explicit, age structured bio-economic model to gene
 
 # Results and Discussion
 
-We used our bioeconomic model to simulate the regional scale conservation effects of MPAs across XX thousand fisheries spanning a wide range of plausible states of nature, including degrees of larval and adult movement, density dependence, fleet dynamics, and pre-MPA exploitation levels. Across this range of scenarios, we see that the mean MPA effect was XX%, with a min of XX% and a max of XX%. Conservation benefits larger than XX% generally took XX or more years to achieve. 
-
-We can also use these simulations to examine how individual fishery traits affect regional-scale conservation outcomes.  
-
+## Simulated MPA Effects
 
 ```{r}
 outcomes <- processed_grid %>%
   slice(1:samps) %>% 
   select(-fish, -fleet) %>%
   unnest() %>% 
-  filter(year_mpa >15) %>% 
   mutate(year = year - burn_years) %>% 
   mutate(years_protected = year - year_mpa + 1) %>% 
   mutate(mpa_effect = pmin(mpa_effect,1)) %>% 
   group_by(experiment) %>% 
   mutate(b0 = `no-mpa`[year == min(year)]) %>% 
-  mutate(depletion = `no-mpa`/b0) %>% 
+  mutate(depletion = 1 - `no-mpa`/b0) %>% 
   ungroup()
+
+eqo <- outcomes %>% 
+  filter(year == max(year))
+
+```
+
+
+We used our bioeconomic model to simulate the regional scale conservation effects of MPAs across XX thousand fisheries spanning a wide range of plausible states of nature, including degrees of larval and adult movement, density dependence, fleet dynamics, and pre-MPA exploitation levels (seem SI for details on the simulation process). It is critical to note that we have no current way of assigning probabilities to any of these states of nature, though we have tried to constrain the parameter space to plausible states. Therefore, the results of our simulations suggest simply the number of simulated ways that a given outcome could happen; we do not have any knowledge though if in reality some of these simulated outcomes are individually much more or less likely than others. But, if we assume that the simualted parameter space is a reasonable representation of a range of plausible states of nature, these results provide an indication of the general magnitude of effects that we might expect XX. 
+
+
+Across this range of scenarios, we see that the median equilibrium MPA effect was `r round(100*median(eqo$mpa_effect))`%, with a min of `r round(100*min(eqo$mpa_effect))`% and a max of over `r round(100*max(eqo$mpa_effect))`%XX (Fig.\@ref(fig:trend-effect)). We also see that while large percentage increases in biomass can accrue relatively rapidly under some circumstances, increases of over 10% took approximately 10 years to achieve for 50% of the simulated fisheries. 
+
+
+```{r trend-effect, fig.cap = "Distribution of simulated regional MPA effects over time (A), and at equilibrium (B)"}
 
 trend_plot <- outcomes %>%
   filter(years_protected >0) %>% 
@@ -140,15 +254,15 @@ trend_plot <- outcomes %>%
   ggplot(aes(
     years_protected,
     mpa_effect,
-    group = experiment
+    group = years_protected
   )) +
-  geom_line(alpha = 0.25, color = "steelblue") +
+  geom_boxplot() +
   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
   scale_y_continuous(labels = scales::percent, name = "Regional MPA Effect") + 
   labs(x = "Years of MPA Protection")
 
 density_plot <- outcomes %>% 
-  filter(years_protected > 0) %>% 
+  filter(years_protected > 0, year == max(year)) %>% 
   ggplot(aes(mpa_effect)) + 
   geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
   geom_density(fill = "steelblue", alpha = 0.75) + 
@@ -157,75 +271,91 @@ density_plot <- outcomes %>%
             plot.margin = unit(c(.05, .05, .05, .05), "lines"))
 
 
-
-
-mpa_plots <- trend_plot + (density_plot + coord_flip()) + plot_layout(ncol = 2, widths = c(2, 1))
+mpa_plots  <- (trend_plot + labs(title = "A")) + (density_plot + coord_flip() + labs(title = "B")) + plot_layout(ncol = 2, widths = c(2, 1))
   
-
 mpa_plots
 
 ```
 
+The exact expected MPA effect for a given fishery will depend on a complex set of interactions among fishery variables (XX regression tree analysis?). However, two of the most critical factors affecting the direction and magnitude of the MPA effect are the degree of overfishing present before (and contining after) MPA implementation, and the size of the MPA, and so we focus on the effects of these two variables. Across our simulated fisheries, the median simulated MPA effect was zero to negative for cases where "small" MPAs (smaller than 25%) were implemented in relatively unexploited fisheries. For moderate depletions (50% to 75%), mpa sizes from 1% to 50% produced MPA effects in the range of 1-10%, while for depletions above 75% MPAs of almost any size produced median MPA effects from 10-100% (Fig.\@ref(fig:f-and-s-plot)). 
 
-```{r}
+```{r trait-plots}
 
-substantial_plot <- outcomes %>% 
-  filter(years_protected > 0) %>% 
-  group_by(years_protected) %>% 
-  summarise(percent_substantial = mean(mpa_effect > 0.05)) %>% 
-  ggplot(aes(years_protected,percent_substantial)) + 
-  geom_line() + 
-  scale_y_continuous(labels = percent) + 
-  labs(subtitle = "Percent of runs with 5% or greater MPA effect", x = "Years Protected") + 
-  theme(axis.title.y = element_blank(),
-            plot.margin = unit(c(.1, .1, .1, .1), "lines"))
+a = lm(mpa_effect ~ adult_movement*larval_movement + depletion + mpa_size + factor(density_dependence_form) + density_movement_modifier , data = outcomes)
 
-substantial_plot
-
-```
+fit_tree = rpart(
+  mpa_effect ~ adult_movement + larval_movement + depletion + mpa_size + factor(density_dependence_form) + density_movement_modifier + factor(density_dependence_form) + density_movement_modifier,
+  data = outcomes %>% filter(year == max(year))
+)
 
 
-```{r}
-
-depletion_and_size_plot <- outcomes %>% 
-  filter(years_protected >= 0, year_mpa >= 20) %>%
-  group_by(experiment) %>% 
-  mutate(depletion = 1 - plyr::round_any(depletion[years_protected == 0], .1),
-         mpa_size = plyr::round_any(mpa_size, .1)) %>% 
-  group_by(depletion, mpa_size) %>% 
-  summarise(median_mpa_effect = median(mpa_effect)) %>% 
-  ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-  geom_raster(interpolate = F) + 
-  scale_fill_viridis(labels = percent,
-                     guide = guide_colorbar(frame.colour = "black",
-                                            frame.linewidth = 1,
-                                            barheight = unit(15,"lines")), name = "Median MPA Effect") + 
-  labs(x = "Initial Depletion", y = "Percent of Range in MPA") + 
-  scale_y_continuous(labels = percent) + 
-  scale_x_continuous(labels = percent)
-
-depletion_and_size_plot
-
-```
-
-see what's going on with the depletion = 0 thing.
-
-```{r}
-
-dd_form_plot <- outcomes %>% 
-  filter(years_protected > 0) %>% 
-  ggplot(aes(factor(density_dependence_form), mpa_effect)) + 
+adult_movement_plot <- outcomes %>% 
+  mutate(rounded_am = plyr::round_any(adult_movement,1)) %>% 
+  ggplot(aes(rounded_am,mpa_effect , group = rounded_am)) + 
   geom_boxplot()
 
+
+larval_movement_plot <- outcomes %>% 
+  mutate(rounded_lm = plyr::round_any(larval_movement,1)) %>% 
+  ggplot(aes(rounded_lm,mpa_effect , group = rounded_lm)) + 
+  geom_boxplot()
+
+depletion_plot <- outcomes %>% 
+  filter(years_protected == 15) %>% 
+  mutate(rounded_dep = plyr::round_any(depletion,.05)) %>% 
+  ggplot(aes(rounded_dep, mpa_effect, group = rounded_dep)) + 
+  geom_boxplot() + 
+  scale_y_continuous(labels = percent, name = 'MPA Effect') + 
+  scale_x_continuous(labels = percent, name = "Initial Depletion")
+
+size_plot <- outcomes %>% 
+    filter(years_protected == 15) %>% 
+  mutate(rounded_size = plyr::round_any(mpa_size,.05)) %>% 
+  ggplot(aes(rounded_size, mpa_effect, group = rounded_size)) + 
+  geom_boxplot() + 
+  scale_y_continuous(labels = percent, name = "MPA Effect") + 
+  scale_x_continuous(labels = percent, name = "Range in MPA")
+
+
 ```
 
+```{r f-and-s-plot, fig.cap = "Median (A) and range (B) MPA effect after 15 years of protection across a range of pre-MPA depletions and MPA sizes"}
+
+  depletion_and_size_plot <- outcomes %>% 
+    filter(years_protected >= 0) %>%
+    group_by(experiment) %>% 
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .1),
+           mpa_size = plyr::round_any(mpa_size, .1)) %>% 
+    filter(years_protected == 15) %>% 
+    group_by(depletion, mpa_size) %>% 
+    summarise(median_mpa_effect = median(mpa_effect)) %>% 
+    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
+    geom_raster(interpolate = F) + 
+    geom_contour(aes(z = median_mpa_effect)) +
+    scale_fill_viridis(labels = percent,
+                       guide = guide_colorbar(frame.colour = "black",
+                                              frame.linewidth = 1,
+                                              barheight = unit(15,"lines")), 
+                       name = "MPA Effect") +
+  labs(x = "Initial Depletion", y = "Range in MPA") + 
+    scale_y_continuous(labels = percent) + 
+    scale_x_continuous(labels = percent)
+  
+  combo_plot <- (depletion_and_size_plot + labs(title = "A")) + ((size_plot + labs(title = "B")) / depletion_plot) * theme(plot.margin = unit(c(.1,.1,.1,.1), units = "lines"),axis.text.x = element_text(size = 12),                                                                        axis.text.y = element_text(size = 12)) + plot_layout(widths = c(2,1))
+  
+  combo_plot
+```
 
 **make sure to point out that this just shows the ways that something can happen, but we don't know anything about the relative probability of any of those states of nature**
 
 
-Detecting MPA outcomes
+## Detecting MPA outcomes
 
-simple power analysis: For a given sample size and effect size, what's the highest that the variance could be to detect that effect?
+How in depth do we want to go here (both in the body and in the "SI")? 
+
+At the simplest level, we can do a simple power analysis, thinking about for a given sample size, what is the highest variance that could exist around the mean to detect a given effect size (where "detect" means reject from zero). Somewhat appealing, but really abstract; what's the "sample size" we have (every transect? one per species per year)? What's a "reasonable" variance around the mean effect in a real system?
+
+At the more complex level, I have a simulator built up where observers collect length comps from the data given various degrees of evolving skill etc. Can use it to demonstrate that a) the proposed identification strategy works just great under ideal circumstances, but that b) under even slightly realistic circumstances (stochastic autocorrelated recruitment with environmental forcing, evolving observer skill, different life history) you're back to selection on observables. I think this is probably an important point that warrants fleshing out, but lord is it a pain to fit... 
 
 ```{r}
 
@@ -244,27 +374,412 @@ effect_size = expand.grid(
   mutate(ttest = map_dbl(samples, ~t.test(.x)$p.value))
   
 
-effect_size %>% 
-  ggplot(aes(sample_size, ttest, color = sd)) + 
-  geom_point()
+# effect_size %>% 
+#   ggplot(aes(sample_size, ttest, color = sd)) + 
+#   geom_point()
 
 ```
 
 
-# Application to Channel Islands
+## Detecting MPA Effects in the Channel Islands
 
-Theory and simulation testing indicate then that while the regional-scale conservation effects of MPAs can range from negative to highly positive, for ranges representative of the size of many MPAs (relative to species ranges) and our best knowledge of current exploitation levels we might expect the MPA effect to be on the smaller end of the scale (-XX% to +XX%). Given this, and the high variability inherent to both the natural processes and marine monitoring programs, we can summarize *a priori* that the "true" MPA effect will be challenging to detect. 
+Theory and simulation testing indicate then that while the regional-scale conservation effects of MPAs can range from negative to highly positive, for ranges representative of the size of many MPAs (relative to species ranges, XX) and our best knowledge of current depletion levels in fisheries (XX) we might expect the MPA effect to be on the smaller end of the scale, especially within the first 10 years of existence (0% to +25%). Given this, we can guess *a priori* that the "true" MPA effect will be challenging to isolate from the variation both in the natural system and in the MPA monitoring program. We use data from the Partnership for Interdisciplinary Studies of Coastal Oceans (PISCO) monitoring of the Channel Islands National Marine Sancturary to test our ability to detect the MPA effect in a real world context. PISCO conducts visual underwater SCUBA surveys at a variety of sites inside and outside of MPAs throughout the Channel Islands. At the rawest level, the data are counts of fish in specified length bins along a 30 x 2m transect. These length bins are converted to biomasses, and then densities, by converting length to weights using available allometric data and dividing by the transect area. Our goal then is to estimate the effect of the MPAs on these densities of fish throughout the Channel Islands. 
 
-detect means differentiate from zero in this case
+Our identification strategy for this case study is to use unfished species as our control for unaccounted for environmental trends before and after MPA implementation (in 2003). In short, the model works by estimating the difference in the trends between fished and unfished species post MPA (see nice infographic here). We fit this model using a hierarchichal mixed-effect framework in Template Model Builder [TMB, @Kristensen2016]. The model consists broadly of three levels, the first (starting from the "bottom") being transect-level densities of fish species observed by PISCO, which are standardized into an index of abundance to account for both probability of detection and expected density as a result of both abundance and changes in covariates such as observer skill [see @Maunder2004]. For the second stage, we break the abundance indices into targeted and non-targeted speices (per the classifications in the PISCO data), and estimate the mean trend of each group. In the third step, we estimate the difference in the mean trend between the targeted and non-targeted species, which under the right set of circumstances should reflect the causal effect of the MPAs on the outcome of interest (in this case biomass density of fish) (obviously doesn't control for other factors influencing trend in abundance, i.e. not saying that MPA caused a decrease, but I guess that the MPA wasn't enough to overcome the decrease? need to think through phrasing here).
+
+The "causal interpretation" of the model is as follows then. While individual species in the survey have their own abundance trends, the model assumes that abundance of targeted and non-targeted species each come from a common distribution. Assuming parallel pre-treatment trends (see SI), the trend in the underlying mean abundance of non-targeted species post MPA serves as our control for unobserved environmental variables that could also affect the trends in the mean density of targeted species. So, by this logic, we should see no significant divergence between the targeted and non-targeted trends pre "treatment" (implementation of the MPAs), and then some divergence between the treated group (targeted species) and the non-treated group (non-targeted) post treament (if the treatment has an effect). XX How worth it is it to spell this all out so carefully given that the simulation testing shows that this isn't good enough to really call causal; better to spell out what this does at least control for and highlight things that it can't account for, like additional shocks (e.g. fishing changes), a lack of actual parallel trends (or a divergence from parallel trends in a new regime, etc.XX Bottom line, how do you want to talk about these effects, somewhere between better than only selection on observables but certainly not "this was the effect"
+
+```{r}
+
+
+```
+
+
+We do not detect a significant change in the density of fished species relative to the density of unfished species following the implementation of MPAs in the Channel Islands in 2003 (Fig.\@ref(fig:did-plot)). The mean estimated post MPA implementation divergence between the trends of targeted and non-targeted species was `r round(mean(did_betas$estimate))`, indicating a roughly 0% divergence. However, it is important to note that just because we cannot a reject a hypothesis of zero divergence between the targeted and non-targeted groups does not mean that we have precisely estimated the effect size to be zero. Post implementation, the upper limit of the estimated 95% confidence intervals was `r round(max(did_betas$upper),2)` , and the lower limit was `r round(min(did_betas$lower),2)`, meaning that the data has some support for up to an 80% increase or a 66% decrease. 
+
+
+```{r did-plot, fig.cap = "Estimated divergence in densities of fished and unfished species in the Channel Islands. MPAs are implement in 2003 (red dashsed line). Estimates are from a regression on log(abundnace), and estimated effects roughyl correspond to percentage changes"}
+
+did_plot
+
+```
 
 # Methods
 
 ## Simulation Model
 
-## 
+The simulation model used in this analysis is roughly the same as the one described in @Ovando2016. It is an age structured, spatially explicit, bio-economic model. Recruitment is assumed to have Beverton-Holt dynamics on average, though auto-correlated log-normal recruitment deviates can be specified. The timing of density dependence can be one of five forms presented in @Babcock2011, ranging from independent density dependence in each patch to density dependence in a shated larval stage across patches. The model allows for both adult and larval movement, where larval movement is assumed to follow a Gaussian dispersal kernel based on the distance of each patch to the source patch. Adult movement is also modeled using a Gaussian dispersal kernel, but with the added option of density dependent movement as well. In the adult density dependent movement scenario we calculate the density gradient between each patch and every other patch, where the density gradient is calculated as
+
+$$g_{i,j} = \frac{b_i}{b_i^0} - \frac{b_j}{b_j^0} + 1$$
+
+Where *i* is the source patch and *j* is a sink patch, and $b^0$ is the unfished biomass in a given patch. The density gradient $g_{i,j}$ is used as a multiplicative modifier for the distance-based Gaussian dispersal kernel *d*, so that the net movement *m* of individuals from patch *i* to patches 1:J is
+
+$$m_{i,j} = \frac{d_{i,j}g_{i,j}}{\sum_{1:J}d_{i,j}g_{i,j}} $$
+
+Fishing activity is controlled by a fleet model that can take one of four forms: constant catch, constant effort, supplied catch, and open-access. For the supplied catch scenario, a vector of catches drawn from the California Department of Fish and Game database of landings in the Santa Barbara Channel region. For the open-access scenario, we model effort through a profit-response function, where profits are calculated per
+
+$$profits_{t} \sim p_{t}q_{t}E_{t}B^{c}_{t} - c_{t}E_{t}^{\beta}$$
+
+And then effort is modeled as 
+
+$$effort_{t} = effort_{t-1} + effort_{msy}(\theta\frac{profits_{t-1}}{profits_{msy}})$$
+
+The operating model allows for time-varying and autocorrelated deviations in prices *p*, cost *c*, and catchability *q*. 
+
+For all fleet model scenarios, effort is distributed in space in one of three manners: equally, weighted by commercial biomass in each patch, and weighted by historic profits in each patch. 
+
+MPAs are implemented in the operating model by setting a specified percentage of the patches to be placed in a no-take MPA. Patches are then assigned to an MPA eitehr in a linear fashion (left to right) or assigned at random throughout the patches. In all scenarios MPAs are implemented halfway through the simulated time series (allowing the pre-MPA fishing mortality to deplete the popualtion to a desired level beforehand).
+
+
+Using this operating model, we simulated MPA effects accross XX number of fisheries, where the MPA effect is modeled by running the exact same fishery simulation with and without MPAs, and then calculating the difference in biomass in each year between the two scenarios (setting identical seeds for each simulation). The range of evaluated scenarios is presented in Table.XX
+
+XX insert table of model runs XX
+
+
+## Regression Analysis
+
+
+```{r}
+
+filter_summary <- fitted_data %>% 
+  select(classcode, targeted) %>% 
+  unique() %>% 
+  group_by(targeted) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(targeted = targeted == 1) %>% 
+  spread(targeted, n)
+```
+
+The regression analysis is a mixed-effects hierarchichal model. The raw data are estimated length compositions by species along a transect at a site. Lengths are converted to biomass per allometric relationshisp supplied by PISCO (see SI for summaries of the raw data). We performed some minimal data filtering to reduce noise in the data. We only include species that were observed at least twice in each year of the dataset (2000-2017) somewhere in the core(XX) Channel Islands (Anacapa, Santa Cruz, Santa Rosa, San Miguel). While some data are available from 1999, per consultation with PISCO we ommit those data due to changes in survey protocols. This filtering process results in `r filter_summary$FALSE` non-targeted species and `r filter_summary$TRUE` targeted species remaining in the analysis. 
+
+The first stage of the regression is a delta log-normal hurdle model. The model estimates two regressions, the first is a logit glm estimating the probability of observing a given fish species at a observation *i* (transect at time *t*. The likehlihood for whether a given species was observed *o* at a given observation is distributed
+
+$$o_{s,i} \sim binomial(\frac{1}{1 +e^{-\beta^{o}{X}}}) $$
+ where $\beta^{o}$ are the estimated coefficients for the observation model and *X* is a matrix of covariates that include random effects for each year in the data (2000 to 2017). The expected density *d* of positive observations is modeled per a log-normal distribution
+ 
+ $$log(d_{s,i}) \sim normal(\beta^{d}X, \sigma_s)$$
+
+where $\beta^{d}$ are the estimated coefficients for the expected density model and *X* is the same vector of covariates as used in the observation portion of the model. 
+
+X contains both fixed and random effects. Fixed effects include the level of the transect, the month of the observation, the estimated surge at the transect, the canopy cover at the transect, the depth of the transect, and the experience (and experience squared) of the diver conducting the transect. We classify each species into one of two clusters based on the mean longitude the species was encountered at, breaking the species into two groups: those primarily found in the western end of the Channel Islands those found more in the eastern end.  We then estimate random effects for each island for each cluster
+
+$$\beta_{island,cluster} \sim normal(0,\sigma_{cluster})$$
+
+This allows the mean effect of each island to differ for each cluster. 
+
+The second critical component of X are random effects for each year for each species
+
+$$\beta_{year,species} \sim normal(0,\sigma_{species})$$
+
+These $\beta_{year,species}$ represent our "standardized" estimate of observed abundance of each species in each time step, controlling for the included covariates. 
+
+However, we still need to account for changes in the probability of detection over time. For that, we create a standard matrix of dimensions rows(X) and columns(Y), holding everything fixed at mean (or most frequently observed level for factors) levels for all variables except for year and species. Calling this standardized matrix $X^{standard}$, the probability of observing a given species in year *y* is then
+
+$$p_{s,y} = (\frac{1}{1 +e^{-\beta^{o}{X^{standard}}}})$$
+
+The standardized index of abundance for species *s* in year *y* then is
+
+$$I_{species,year} = p_{species,year}e^{\beta_{species,year}}$$
+
+
+The next phase of the model requires us to estimate the mean abundance of targeted and non-targeted species over time. T
+
+
+ $$log(I_{species,year}) \sim normal(\beta^{effect}X^{effect}, \sigma_s)$$
+
+$X^{effect}$ contains both fixed and random effects. The fixed effects include an intercept and the temperature deviation for a given species in a year, where temperature deviation is
+
+$$t_{s,y} = (t^{pref}_{s} -  \bar{t_{y}})^2$$
+
+where $t^{pref}$ is the preferred temperature for species *s* (drawn form `FishLife`, @Thorson2017), and $\bar{t_{y}}$ is the mean temperature encountered by that species in year *y*. We also include random effects for each species in $X^{effect}$. The most important random effects are year effects for targeted and non-targeted species
+
+$$\beta_{year,targeted} \sim normal(0,\sigma_{targeted})$$
+
+$\beta_{year,targeted}$ is the mean log density of targeted species in year *y*, controlling for included covariates. Therefore, the final step in the model, the divergence in the standardized abundance trends of targeted and non-targeted species is
+
+$$divergence_{year} =  \beta_{year,targeted = 1} - \beta_{year,targeted = 0}$$
+
+The model is fit in TMB to integrate the uncertainty across all levels of the model. 
+
+```{r fe-plot, fig.cap = "Estimated coefficients for fixed effects in observation model (seeing) and observed model (seen)"}
+
+ non_nested_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested")) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+non_nested_beta_plot
+
+```
+
+
+```{r region-plot, fig.cap="Random effects for region by cluster"}
+
+  region_cluster_plots <- betas %>%
+   filter(str_detect(group, "region_cluster_betas")) %>%
+   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
+   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
+   ggplot() +
+    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+    geom_pointrange(aes(x = region,
+                        y = estimate,
+                        ymin = lower,
+                        ymax = upper, color = cluster)) +
+    facet_wrap(~group)
+
+region_cluster_plots
+
+```
+
+
+```{r}
+
+
+
+
+```
+
 
 # Supplementary Materials
 
+
+## Keep It Simple
+
+
+Evidence of regional populations
+
+```{r}
+
+fitted_data %>% 
+  group_by(region, year, classcode) %>% 
+  summarise(mean_density = mean(density_g_m2)) %>% 
+  mutate(log_mean_density = log(mean_density)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, mean_density, color = region)) + 
+  geom_line() + 
+  facet_wrap(~classcode, scales = "free_y") + 
+  theme_minimal()
+
+
+```
+
+
+Standardized vs raw means
+
+
+```{r raw-v-stand-plot, fig.cap = "Raw (points) and standardized (lines) indices of abundance for each of the species included in the analysis"}
+
+life_history <- fitted_data %>%
+  select(classcode, targeted, loo) %>%
+  unique() %>%
+  mutate(numeric_classcode = as.numeric(as.factor(classcode)))
+
+
+numeric_species_key <-
+  data_frame(classcode = unique(fitted_data$classcode)) %>%
+  arrange(classcode) %>%
+  mutate(numeric_classcode = 1:nrow(.))
+
+raw <- fitted_data %>%
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(density_g_m2)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(numeric_species_key, by = "classcode")
+
+
+ahnold_estimates <- tmb_runs$tmb_fit[[1]]$ahnold_estimates
+
+ahnold_report <- tmb_runs$tmb_fit[[1]]$ahnold_report
+
+years <- fitted_data$year %>% unique
+  
+ahnold_estimates %>% 
+  filter(str_detect(variable, "targeted_did_betas")) %>% 
+  group_by(variable) %>% 
+  mutate(year = years) %>% 
+  ggplot() + 
+  geom_line(aes(year, estimate, color = variable)) +
+  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable))
+  
+abundance_trends <- data_frame(abundance_hat = ahnold_report$abundance_hat,
+                               classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
+  mutate(log_abundance_hat = log(abundance_hat)) %>%
+  group_by(classcode) %>%
+  mutate(year = 1999 + 1:length(abundance_hat)) %>%
+  mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
+  ungroup() %>%
+  rename(numeric_classcode = classcode) %>%
+  left_join(life_history, by = "numeric_classcode" )
+
+abundance_trends %>%
+  ggplot(aes(year, log(abundance_hat), color = factor(classcode))) +
+  geom_line(show.legend = F) +
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  facet_wrap(~classcode) +
+  theme_minimal()
+
+
+
+abundance_trends %>%
+  ggplot(aes(year, scaled_abundance_hat, color = factor(classcode))) +
+  geom_line(show.legend = F) +
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_point(data = raw,aes(year, smd, color = factor(classcode)), show.legend = F)+
+  facet_wrap(~classcode) +
+  theme_minimal()
+
+```
+
+
+
+
+```{r}
+
+
+```
+
+
+
+DiD fit to various forms of the raw means etc. 
+
+Repeat basic analysis. 
+
+```{r}
+
+raw <- fitted_data %>%
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(density_g_m2),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(numeric_species_key, by = "classcode")
+
+raw_region <- fitted_data %>%
+  group_by(year, region,classcode, targeted) %>%
+  summarise(md = mean(density_g_m2),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(numeric_species_key, by = "classcode")
+
+
+raw_mpa_only <- fitted_data %>%
+  filter(eventual_mpa == T) %>% 
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(density_g_m2),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(numeric_species_key, by = "classcode")
+
+raw_nompa_only <- fitted_data %>%
+  filter(eventual_mpa == F) %>% 
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(density_g_m2),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(numeric_species_key, by = "classcode")
+
+basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
+
+basic_plus_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted + mt, data = raw)
+
+
+basic_plus_mpa_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted + mt, data = raw_mpa_only)
+
+basic_plus_nompa_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted + mt, data = raw_nompa_only)
+
+
+basic_plus_region_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted + mt, data = raw_region)
+
+
+
+basic_plot <- basic_model %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, ":targeted")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0),linetype = 2, color = "black") +
+  geom_vline(aes(xintercept = 2003),linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error,
+                      ymax = estimate + 1.96*std.error))
+
+basic_plus_plot <- basic_plus_model %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, ":targeted")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0),linetype = 2, color = "black") +
+  geom_vline(aes(xintercept = 2003),linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error,
+                      ymax = estimate + 1.96*std.error))
+
+basic_plus_mpa_plot <- basic_plus_mpa_model %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, ":targeted")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0),linetype = 2, color = "black") +
+  geom_vline(aes(xintercept = 2003),linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error,
+                      ymax = estimate + 1.96*std.error))
+
+
+basic_plus_region_plot <- basic_plus_region_model %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, ":targeted")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0),linetype = 2, color = "black") +
+  geom_vline(aes(xintercept = 2003),linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error,
+                      ymax = estimate + 1.96*std.error))
+
+raw_story <- raw %>% 
+  ungroup() %>% 
+  ggplot(aes(year, md, color = targeted == 1, fill = targeted == 1)) + 
+  geom_point(data = raw %>% group_by(year, targeted) %>% summarise(lmmd = (mean(md))), aes(year, lmmd, color = targeted == 1)) +
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_smooth()
+
+
+dropgrid <- expand.grid(targeted = unique(fitted_data$classcode[fitted_data$targeted == 1]),
+            nontargeted = unique(fitted_data$classcode[fitted_data$targeted == 0]), stringsAsFactors = F) %>%
+  as_data_frame()
+  
+  drops <- map2(dropgrid$targeted,dropgrid$nontargeted, ~c(.x,.y))
+
+raw_mpa_story <- raw_mpa_only %>% 
+  ungroup() %>% 
+  ggplot(aes(year, md, color = targeted == 1, fill = targeted == 1)) + 
+  geom_point(data = raw %>% group_by(year, targeted) %>% summarise(lmmd = (mean(md))), aes(year, lmmd, color = targeted == 1)) +
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_smooth()
+
+raw_nompa_story <- raw_nompa_only %>% 
+  ungroup() %>% 
+  ggplot(aes(year, md, color = targeted == 1, fill = targeted == 1)) + 
+  geom_point(data = raw %>% group_by(year, targeted) %>% summarise(lmmd = (mean(md))), aes(year, lmmd, color = targeted == 1)) +
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_smooth()
+
+
+```
 
 
 - Show how you could in theory use the model to estimate the MPA effect
