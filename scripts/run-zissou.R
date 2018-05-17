@@ -347,6 +347,56 @@ length_data <- length_data %>%
   left_join(life_history_data, by = 'classcode')
 
 
+# load kelp data
+
+kelp_conn <- ncdf4::nc_open(here::here("data/LandsatKelpBiomass_2017.nc"))
+
+kelp_vars <- c('lat','lon','year','quarter', 'biomass')
+
+kelp <- ncdf4::ncvar_get(kelp_conn, varid = c("biomass")) %>%
+  as_data_frame() %>%
+  mutate(lat = ncdf4::ncvar_get(kelp_conn, varid = c("lat")),
+         lon = ncdf4::ncvar_get(kelp_conn, varid = c("lon"))) %>%
+  gather(tdex, kelp_biomass, -lat,-lon) %>%
+  mutate(tdex = str_replace_all(tdex,"\\D","") %>% as.numeric()) %>%
+  na.omit()
+
+time <-
+  data_frame(
+    year = ncdf4::ncvar_get(
+      kelp_conn,
+      varid = c("year")),
+      quarter = ncdf4::ncvar_get(kelp_conn, varid = c("quarter"))) %>%
+  mutate(tdex = 1:nrow(.))
+
+kelp <- kelp %>%
+  left_join(time, by = "tdex") %>%
+  select(-tdex) %>%
+  mutate(rounded_lat = plyr::round_any(lat, 0.1),
+         rounded_lon = plyr::round_any(lon, 0.1)) %>%
+  group_by(rounded_lat, rounded_lon, year, quarter) %>%
+  summarise(mean_kelp = mean(kelp_biomass, na.rm = T))
+
+
+# kelp %>%
+#   mutate(yq = year + quarter)  %>%
+#   ungroup() %>%
+#   ggplot(aes(year, mean_kelp)) +
+#   geom_point() +
+#   geom_smooth()
+
+
+kelp_recipe <- recipes::recipe(mean_kelp ~ ., data = kelp)
+
+
+kelp_reg <- caret::train(kelp_recipe,
+                        data = kelp,
+                        method = "knn",
+                        tuneGrid = data.frame(k = c(2,5,7,10))
+)
+
+
+
 ## process kfm dat
 
 kfm_data <-
@@ -878,7 +928,9 @@ filterfoo <-
 # create dropped pairs
 
 
+site_data$rounded_lat <- site_data$lat_wgs84
 
+site_data$rounded_lon <- site_data$lon_wgs84
 
 abundance_data <- pisco_data %>%
   left_join(site_data, by = c("site","side")) %>%
@@ -922,6 +974,17 @@ abundance_data <- abundance_data %>%
   select(classcode, data_source, data) %>%
   unnest() %>%
   nest(-data_source)
+
+
+# add kelp data
+
+kelp_model <- caret::knnreg(mean_kelp ~ ., data = kelp, k = kelp_reg$bestTune)
+
+abundance_data <- abundance_data %>%
+  mutate(data = map2(data,list(kelp_model),  ~ mutate(.x, interp_kelp = predict(
+    .y,
+    newdata = .x %>% mutate(quarter = (month/3) %>% ceiling()) %>%  select(year, quarter, rounded_lat, rounded_lon)
+  ))))
 
 
 

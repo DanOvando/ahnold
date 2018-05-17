@@ -59,6 +59,7 @@ fitted_data <- tmb_runs$data[[1]]
 
 ahnold_fit <- tmb_runs$tmb_fit[[1]]
 
+report <- tmb_runs$tmb_fit[[1]]$ahnold_estimates
 
  seen_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
    filter(variable == "seen_non_nested_betas") %>%
@@ -540,10 +541,18 @@ region_cluster_plots
 ```
 
 
-```{r}
+```{r targ-plot, fig.cap = "Trends in standardized mean abundance of targeted and non-targeted species"}
 
+targeted_trends <- report %>% 
+  filter(str_detect(variable, "targeted_did")) %>% 
+  group_by(variable) %>% 
+  mutate(year = unique(fitted_data$year)) %>% 
+  ungroup() %>% 
+  ggplot() + 
+  geom_line(aes(year, estimate, color = variable),alpha = 0.5) +
+  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable))
 
-
+targeted_trends
 
 ```
 
