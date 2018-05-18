@@ -16,9 +16,28 @@ fit_zissou <- function(data,
                        use_tmb = T,
                        fixed_did = T,
                        include_intercept = T,
-                       center_and_scale = T,
-                       fixed_regions = F) {
+                       center_scale = T,
+                       fixed_regions = F,
+                       mpa_only = F) {
 
+  if (mpa_only == T){
+
+    data <- data %>%
+      filter(eventual_mpa == T)
+  }
+
+
+  if (center_scale == T){
+
+    data_recipe <- recipes::recipe(log_density ~ ., data = data) %>%
+      step_center(all_numeric(), -all_outcomes(),-year,-targeted,-geographic_cluster) %>%
+      step_scale(all_numeric(), -all_outcomes(),-year,-targeted,-geographic_cluster)
+
+    prepped_data <- recipes::prep(data_recipe, data, retain = TRUE)
+
+    data <- recipes::juice(prepped_data)
+
+  }
 
   numeric_species_key <-
     data_frame(classcode = unique(data$classcode)) %>%
@@ -82,7 +101,7 @@ fit_zissou <- function(data,
 
   # prepare standardized matrices -------------------------------------------
 
-  standard_year_species <- expand.grid(year = unique(seeing_data$factor_year), classcode = unique(seeing_data$classcode), stringsAsFactors = F) %>%
+  standard_year_species <- expand.grid(year = unique(seeing_data$year), classcode = unique(seeing_data$classcode), stringsAsFactors = F) %>%
     as_data_frame() %>%
     mutate(marker = 1,
            classcode_year = paste(classcode, year, sep = "-")) %>%
@@ -92,19 +111,19 @@ fit_zissou <- function(data,
 
   annual_data <- data %>%
     group_by(year, classcode) %>%
-    summarise(enso = mean(enso),
-              pdo = mean(pdo),
+    summarise(
               temp = mean(temp_deviation),
-              targeted = unique(targeted))
+              targeted = unique(targeted),
+              kelp = mean(interp_kelp)) %>%
+    ungroup()
 
   did_data <- standard_year_species %>%
-    mutate(year = as.numeric(year)) %>%
     select(year, classcode) %>%
     left_join(annual_data, by = c("year",'classcode')) %>%
     arrange(classcode, year)
 
   non_nested_did_data <- did_data %>%
-    select(temp) %>%
+    select(temp, kelp) %>%
     # select(enso, pdo, temp) %>%
     mutate(intercept = 1)
 
@@ -187,7 +206,6 @@ fit_zissou <- function(data,
     nontargeted_year_did_data = nontargeted_year_did_data,
     species_did_data = species_did_data
   )
-
   zissou_data <- map_if(zissou_data, is.data.frame, ~ as.matrix(.x))
 
   any_na <- map_lgl(zissou_data, ~ any(is.na(.x))) %>% any()
@@ -222,6 +240,7 @@ fit_zissou <- function(data,
   if (any_na) {
     stop("NAs in ahnold_params")
   }
+
   if (use_tmb == T) {
 
     compile(here::here("src", paste0(script_name, ".cpp")), "-O0") # what is the -O0?
@@ -310,7 +329,8 @@ fit_zissou <- function(data,
       ahnold_sd_report = ahnold_sd_report,
       ahnold_estimates = ahnold_estimates,
       did_data = did_data,
-      diagnostics = diagnostics
+      diagnostics = diagnostics,
+      zissou_data = zissou_data
     )
   )
 }

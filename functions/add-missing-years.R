@@ -18,7 +18,7 @@ add_mising_years <- function(data, candidate_years){
       bind_rows(blank) %>%
       arrange(numeric_classcode, year)
 
-    data$density[data$year %in% years_missing] <-  NA
+    data$density_g_m2 <- exp(data$log_density)
 
     data$density_g_m2[data$year %in% years_missing] <-  NA
 
@@ -31,8 +31,8 @@ add_mising_years <- function(data, candidate_years){
 
     data <- data %>%
       left_join(density_trend, by = "year") %>%
-    mutate(density_g_m2 = ifelse(is.na(density_g_m2), interped_density,density_g_m2 )) %>%
-      select(-interped_density)
+    mutate(log_density = ifelse(is.na(log_density), log(interped_density),log_density )) %>%
+      select(-interped_density,-density_g_m2)
 
     return(data)
 }
