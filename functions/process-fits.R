@@ -82,7 +82,6 @@ region_cluster_plots <- betas %>%
                       ymax = upper, color = cluster)) +
   facet_wrap(~group)
 
-browser()
 
 did_plot <- did_betas %>%
   ggplot() +
