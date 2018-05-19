@@ -20,6 +20,9 @@ fit_zissou <- function(data,
                        fixed_regions = F,
                        mpa_only = F) {
 
+  # data <- data %>%
+  #   filter(classcode != "opic")
+
   if (mpa_only == T){
 
     data <- data %>%
@@ -61,7 +64,7 @@ fit_zissou <- function(data,
     left_join(numeric_species_key, by = "classcode") %>%
     slice(seen_has_important$index)
 
-  candidate_years <- seen_data$year %>% unique()
+  candidate_years <- data$year %>% unique()
 
   seen_data <- add_mising_years(seen_data, candidate_years)
 
@@ -74,11 +77,12 @@ fit_zissou <- function(data,
     left_join(numeric_species_key, by = "classcode") %>%
     slice(seeing_has_important$index)
 
+  seeing_data <- add_mising_years(seeing_data, candidate_years)
+
   any_seen <- seeing_data$any_seen
 
   seeing_data <- seeing_data %>%
     select(-any_seen)
-
 
   # prepare data for c++ ----------------------------------------------------
 
@@ -109,6 +113,7 @@ fit_zissou <- function(data,
     arrange(classcode, year) %>%
     left_join(numeric_species_key, by = "classcode")
 
+
   annual_data <- data %>%
     group_by(year, classcode) %>%
     summarise(
@@ -126,6 +131,20 @@ fit_zissou <- function(data,
     select(temp, kelp) %>%
     # select(enso, pdo, temp) %>%
     mutate(intercept = 1)
+
+  if (any(is.na(non_nested_did_data))){
+
+    non_nested_did_data <- non_nested_did_data %>%
+      mutate(index = 1:nrow(.)) %>%
+      gather(variable, value,-index) %>%
+      group_by(variable) %>%
+      mutate(value = zoo::na.approx(value)) %>%
+      ungroup() %>%
+      spread(variable, value) %>%
+      select(-index)
+
+
+  }
 
   year_did_data <- did_data %>%
     mutate(targeted_year = paste(targeted,year, sep = '-'),
@@ -238,7 +257,7 @@ fit_zissou <- function(data,
   any_na <- map_lgl(zissou_params, ~ any(is.na(.x))) %>% any()
 
   if (any_na) {
-    stop("NAs in ahnold_params")
+    stop("NAs in zissou_params")
   }
 
   if (use_tmb == T) {
@@ -263,7 +282,7 @@ fit_zissou <- function(data,
         "nontargeted_did_betas",
         "species_did_betas"
       )    }
-    ahnold_model <-
+    zissou_model <-
       MakeADFun(
         zissou_data,
         zissou_params,
@@ -271,46 +290,46 @@ fit_zissou <- function(data,
         random = randos
       )
 
-    # save(file = here::here(run_dir, "ahnold-onestage-tmb-model.Rdata"),
-    #      ahnold_model)
+    # save(file = here::here(run_dir, "zissou-onestage-tmb-model.Rdata"),
+    #      zissou_model)
 
     a <- Sys.time()
     set.seed(seed)
-    ahnold_fit <-
+    zissou_fit <-
       nlminb(
-        ahnold_model$par,
-        ahnold_model$fn,
-        ahnold_model$gr,
+        zissou_model$par,
+        zissou_model$fn,
+        zissou_model$gr,
         control = list(iter.max = 4000, eval.max = 5000)
       )
     Sys.time() - a
 
-    # save(file = here::here(run_dir, "ahnold-onestage-tmb-fit.Rdata"),
-    #      ahnold_fit)
+    # save(file = here::here(run_dir, "zissou-onestage-tmb-fit.Rdata"),
+    #      zissou_fit)
 
-    ahnold_report <- ahnold_model$report()
+    zissou_report <- zissou_model$report()
 
-    ahnold_sd_report <- sdreport(ahnold_model)
+    zissou_sd_report <- sdreport(zissou_model)
 
     diagnostics = data.frame(
-      "name" = names(ahnold_model$par),
-      "est" = ahnold_fit$par,
-      "final_gradient" = as.vector(ahnold_model$gr(ahnold_fit$par))
+      "name" = names(zissou_model$par),
+      "est" = zissou_fit$par,
+      "final_gradient" = as.vector(zissou_model$gr(zissou_fit$par))
     )
 
 
-    # save(file = here::here(run_dir, "ahnold-tmb-onestage-sdreport.Rdata"),
-    #      ahnold_sd_report)
+    # save(file = here::here(run_dir, "zissou-tmb-onestage-sdreport.Rdata"),
+    #      zissou_sd_report)
     #
-    # save(file = here::here(run_dir, "ahnold-tmb-onestage-report.Rdata"),
-    #      ahnold_report)
+    # save(file = here::here(run_dir, "zissou-tmb-onestage-report.Rdata"),
+    #      zissou_report)
 
 
   }
 
 
-  ahnold_estimates <-
-    summary(ahnold_sd_report) %>%
+  zissou_estimates <-
+    summary(zissou_sd_report) %>%
     as.data.frame() %>%
     mutate(variable = rownames(.)) %>%
     set_names(tolower) %>%
@@ -323,11 +342,11 @@ fit_zissou <- function(data,
     list(
       seen_cdata = seen_cdata,
       seeing_cdata = seeing_cdata,
-      ahnold_fit = ahnold_fit,
-      ahmold_model = ahnold_model,
-      ahnold_report = ahnold_report,
-      ahnold_sd_report = ahnold_sd_report,
-      ahnold_estimates = ahnold_estimates,
+      zissou_fit = zissou_fit,
+      zissou_model = zissou_model,
+      zissou_report = zissou_report,
+      zissou_sd_report = zissou_sd_report,
+      zissou_estimates = zissou_estimates,
       did_data = did_data,
       diagnostics = diagnostics,
       zissou_data = zissou_data

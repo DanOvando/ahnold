@@ -938,7 +938,8 @@ abundance_data <- pisco_data %>%
   nest(-data_source,-classcode) %>%
   bind_rows(kfm_data %>%  mutate(data_source = 'kfm') %>%
               left_join(site_data, by = c("site","side")) %>%
-              mutate(year_month = year + (month / 12 - .1)) %>%
+              mutate(year_month = year + (month / 12 - .1),
+                     site_side = site_id) %>%
               nest(-data_source,-classcode)
               ) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
@@ -1059,37 +1060,35 @@ save(
 # fit model ---------------------------------------------------------------
 
 
+abundance_data <- abundance_data %>%
+  mutate(data = map(data, ~select(.,log_density,
+                                  targeted,
+                                  site_side,
+                                  region,
+                                  geographic_cluster,
+                                  level,
+                                  factor_month,
+                                  cumulative_n_obs,
+                                  surge,
+                                  mean_canopy,
+                                  mean_vis,
+                                  mean_depth,
+                                  factor_year,
+                                  classcode,
+                                  interp_kelp,
+                                  eventual_mpa,
+                                  temp_deviation,
+                                  any_seen,
+                                  year
+  )))
+
+
 script_name <- "fit_zissou"
 
 sfa <- safely(fit_zissou)
 
-pisco <-
-  abundance_data$data[abundance_data$data_source == 'pisco'][[1]] %>%
-  select(
-    log_density,
-    targeted,
-    site_side,
-    region,
-    geographic_cluster,
-    level,
-    factor_month,
-    cumulative_n_obs,
-    surge,
-    mean_canopy,
-    mean_vis,
-    mean_depth,
-    factor_year,
-    classcode,
-    interp_kelp,
-    eventual_mpa,
-    temp_deviation,
-    any_seen,
-    year
-  )
-  # filter(classcode != )
 
-
-var_options <-  data_frame(var_names = c("a","b"),
+var_options <-  data_frame(var_names = c("pisco_a","pisco_a","kfm"),
                            non_nested_variables =
                              list(c(
                                'site_side',
@@ -1108,23 +1107,49 @@ var_options <-  data_frame(var_names = c("a","b"),
                                'mean_depth',
                                'mean_vis',
                                'mean_canopy'
-                             )))
+                             ),
+                             c(
+                               'site_side',
+                               'factor_month'
+                             )
+                             ))
 
+
+stupid_filter <- function(x){
+
+  missing = x %>%
+    group_by(classcode) %>%
+    summarise(nyd = n_distinct(year)) %>%
+    ungroup() %>%
+    filter(nyd < 17)
+
+  out <- x %>%
+    filter(!(classcode %in% missing$classcode))
+
+}
+
+abundance_data <- abundance_data %>%
+  mutate(data = map(data, stupid_filter))
 
 model_runs <- cross_df(
   list(
-    data = list(pisco),
-    var_names = c("a","b"),
+    data_source = abundance_data$data_source,
+    var_names = var_options$var_names,
     mpa_only = c(TRUE,FALSE),
     center_scale = c(TRUE, FALSE)
    )
   ) %>%
-  left_join(var_options, by = "var_names")
+  left_join(var_options, by = "var_names") %>%
+  left_join(abundance_data, by = "data_source") %>%
+  filter(!(data_source == "kfm" & str_detect(var_names,"pisco"))) %>%
+  filter(!(data_source == "kfm" & mpa_only == TRUE))
+
 
 
 if (run_tmb == T){
 
   model_runs <- model_runs %>%
+    filter(data_source == "kfm") %>%
   mutate(tmb_fit = pmap(
     list(
       data = data,

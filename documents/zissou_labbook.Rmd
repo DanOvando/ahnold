@@ -2674,3 +2674,39 @@ You forgot what you've done already. run-mpa-sims already did a lot of the legwo
 So, the plan now is to first simulate all the experiments, and then to simulate data sampling from that library if you need.
 
  kelp rockfish ("satr") is driving a bit of the downturn in the fished species, a bit flatter without them. 
+ 
+# taking a longer look at kfm vs pisco
+
+
+```{r}
+
+used <- pisco$classcode %>% unique()
+
+kfm <- abundance_data$data[[2]] %>% 
+  filter(classcode %in% used) %>% 
+  group_by(classcode, commonname, year, targeted) %>% 
+  summarise(mean_density = mean(density, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(source = "kfm")
+
+p2 <- pisco_data %>% 
+    filter(classcode %in% used) %>%
+  group_by(classcode, commonname, year, targeted) %>% 
+  summarise(mean_density = mean(density_g_m2, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(source = "pisco")
+
+compare <- kfm %>% 
+  bind_rows(p2) %>% 
+  group_by(classcode, source) %>% 
+  mutate(smd = (mean_density - mean(mean_density))/ sd(mean_density))
+
+compare %>% 
+  ggplot(aes(year, smd, color = source)) + 
+  geom_line() + 
+  facet_wrap(~classcode)
+
+
+
+```
+
