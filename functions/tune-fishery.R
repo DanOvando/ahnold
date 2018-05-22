@@ -21,20 +21,6 @@ tune_fishery <- function( f_v_m,
                                burn_years = 10,
                                num_patches = 1){
 
-
-  # tuned <-
-  #   nlminb(
-  #     fish$m * .8 / fleet$q,
-  #     spasm::tune_for_depletion,
-  #     lower = 0,
-  #     target_depletion = target_depletion,
-  #     fish = fish,
-  #     fleet = fleet,
-  #     sim_years = sim_years,
-  #     burn_years = burn_years,
-  #     num_patches = num_patches
-  #   )
-
   if (fleet$fleet_model == "constant-catch"){
 
     # fleet$target_catch <-   tuned$par

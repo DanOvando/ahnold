@@ -23,15 +23,15 @@ num_patches <- 25
 
 run_experiments <- TRUE
 
-n_cores <- 3
+n_cores <- 2
 
-samps <- 5000
+samps <- 100
 
 grid_search <-  FALSE
 
 # prepare data -----------------------------------------------------
 
-run_name <- "v2.1"
+run_name <- "v3.0"
 
 run_dir <- file.path("results", run_name)
 
@@ -99,26 +99,28 @@ if (run_experiments == T) {
     density_dependence_form = 1:5,
     mpa_size = c(.1, .3, .75),
     f_v_m = seq(.01, 1.25, by = 0.5),
-    fleet_model = c("constant-effort"),
+    fleet_model = c("open-access"),
     effort_allocation = c("profit-gravity", "simple"),
     stringsAsFactors = F
   )
   } else{
 
 
-    sim_grid <- data_frame(scientific_name = sample(unique(fitted_data$taxa), samps, replace = T),
-                           steepness = runif(samps, min = 0.6, max = 1),
-                           adult_movement = sample(1:num_patches,samps, replace = T),
-                           larval_movement = sample(1:num_patches,samps, replace = T),
-                           density_movement_modifier = sample(c(0,1),samps, replace = T),
-                           density_dependence_form = sample(1:5,samps, replace = T),
-                           mpa_size = runif(samps, min = 0.05, max = 1),
-                           f_v_m = runif(samps, min = 0.01, max = 1.25),
-                           fleet_model = c("constant-effort"),
-                           effort_allocation = sample(c("profit-gravity", "simple"), samps, replace = T),
-                           year_mpa = sim_years / 2
-                           # year_mpa = sample(sim_years/2, samps, replace = T)
-                           )
+    sim_grid <-
+      data_frame(
+        scientific_name = sample(unique(fitted_data$taxa), samps, replace = T),
+        steepness = runif(samps, min = 0.6, max = 1),
+        adult_movement = sample(1:num_patches, samps, replace = T),
+        larval_movement = sample(1:num_patches, samps, replace = T),
+        density_movement_modifier = sample(c(0, 1), samps, replace = T),
+        density_dependence_form = sample(1:5, samps, replace = T),
+        mpa_size = runif(samps, min = 0.05, max = 1),
+        f_v_m = runif(samps, min = 0.01, max = 2),
+        fleet_model = c("open-access"),
+        effort_allocation = sample(c("profit-gravity", "simple"), samps, replace = T),
+        year_mpa = sim_years / 2
+        # year_mpa = sample(sim_years/2, samps, replace = T)
+      )
 
   }
 
@@ -131,7 +133,8 @@ if (run_experiments == T) {
       larval_movement = larval_movement,
       density_dependence_form = density_dependence_form,
       density_movement_modifier = density_movement_modifier
-    ), create_fish))
+    ), create_fish,
+    price = 10))
 
   # create fleet objects
 
@@ -142,21 +145,25 @@ if (run_experiments == T) {
         fleet_model = fleet_model,
         effort_allocation = effort_allocation
       ),
-      create_fleet
+      create_fleet,
+      q = .1
     ))
 
   # tune fleet objects
   sim_grid <- sim_grid %>%
-    mutate(fleet = pmap(
+    mutate(tuned_fishery = pmap(
       list(
         f_v_m = f_v_m,
         fish = fish,
         fleet = fleet
       ),
-      tune_fleet,
+      tune_fishery,
       num_patches = num_patches
-    ))
+    )) %>%
+    mutate(fish = map(tuned_fishery,"fish"),
+           fleet = map(tuned_fishery,"fleet"))
 
+  save(sim_grid, file = paste0(run_dir,"/sim_grid.Rdata"))
 
   doParallel::registerDoParallel(cores = n_cores)
 
@@ -185,7 +192,6 @@ if (run_experiments == T) {
         num_patches = num_patches
       ))
 
-
     calc_mpa_effect <- function(outcomes) {
       mpa_effect <- outcomes %>%
         group_by(year) %>%
@@ -199,7 +205,6 @@ if (run_experiments == T) {
 
     results <- results %>%
       mutate(mpa_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_effect))
-
 
     filename <- glue::glue("experiment_{i}.rds")
 
@@ -220,6 +225,12 @@ loadfoo <- function(experiment, experiment_dir, output = "mpa-effect") {
 }
 
 processed_grid <- map_df(1:samps, loadfoo, experiment_dir = experiment_dir)
+
+
+processed_grid$mpa_effect[[3]] %>%
+  ggplot(aes(year, mpa_effect)) +
+  geom_line()
+
 
 save(processed_grid,file = paste0(run_dir,"/processed_grid.Rdata"))
 
