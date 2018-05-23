@@ -9,14 +9,11 @@
 
 # setup ---------------------------------------------------------------
 library(scales)
-# library(rstanarm)
-library(scales)
 library(viridis)
 library(ggmap)
 library(forcats)
 library(stringr)
 library(lubridate)
-library(purrr)
 library(lme4)
 library(TMB)
 library(FishLife)
@@ -24,7 +21,12 @@ library(patchwork)
 library(rstan)
 library(extrafont)
 library(hrbrthemes)
+library(caret)
+library(here)
 library(tidyverse)
+library(furrr)
+
+
 if (("demons" %in% installed.packages()) == F){
   devtools::install_github('danovando/demons')
 }
@@ -33,17 +35,76 @@ demons::load_functions('functions')
 
 run_name <- 'v3.0'
 
-run_dir <- file.path('results', run_name)
-
 run_description <-
   'Fixed model runs to run all the damn options at once instead of as stupid toggles'
+
+in_clouds <- F
+
+if (in_clouds == F){
+
+  run_dir <- here::here("results", run_name)
+
+} else{
+
+  run_dir <- here::here("results","zissou-results", run_name)
+
+}
 
 if (dir.exists(run_dir) == F) {
   dir.create(run_dir, recursive = T)
 }
 
+
+if (in_clouds == T){
+
+
+  system("umount results/zissou-results")
+
+  system("rm -r results/zissou-results")
+
+  if (dir.exists("results/zissou-results") == F){
+
+    system("mkdir results/zissou-results")
+
+  }
+
+  system("gcsfuse zissou-results results/zissou-results")
+
+  system("umount data/zissou-data")
+
+  system("rm -r data/zissou-data")
+
+  if (dir.exists("results/zissou-data") == F){
+
+    system("mkdir data/zissou-data")
+
+  }
+
+  # system("mkdir data/scrooge-data")
+
+  system("gcsfuse zissou-data data/zissou-data")
+
+  cloud_dir <- here::here("results","zissou-results",run_name)
+
+  if (dir.exists(cloud_dir) == F){
+
+    dir.create(cloud_dir)
+
+  }
+
+}
+
+if (in_clouds == F ){
+
+  data_dir <- "data"
+} else{
+
+  data_dir <- "data/zissou-data"
+}
+
 write(run_description,
       file = paste(run_dir, 'RUN_DESCRIPTION.txt', sep = '/'))
+
 
 
 # options -----------------------------------------------------------------
@@ -51,6 +112,10 @@ write(run_description,
 rstan_options(auto_write = TRUE)
 
 run_tmb <- TRUE
+
+n_cores <- 1
+
+future::plan(future::multiprocess, workers = n_cores)
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -92,7 +157,7 @@ theme_set(plot_theme)
 
 # load data ---------------------------------------------------------------
 
-length_data <- read_csv('data/UCSB_FISH.csv') %>%
+length_data <- read_csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   mutate(classcode = tolower(classcode)) %>%
   mutate(observer = ifelse(is.na(observer), 'unknown', observer))
@@ -156,7 +221,7 @@ length_data <- length_data %>%
 
 life_history_data <-
   read_csv(here::here(
-    'data',
+    data_dir,
     'VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv'
   )) %>%
   rename(classcode = pisco_classcode) %>%
@@ -215,7 +280,7 @@ life_history_data <- life_history_data %>%
 #Convert to fished species things with CDFW catches
 
 caselle_fished_species <-
-  read_csv(file = file.path('data', 'caselle-2015-fished-species-list.csv')) %>%
+  read_csv(file = here::here(data_dir, 'caselle-2015-fished-species-list.csv')) %>%
   mutate(commonname = tolower(commonname),
          mod_commonname = tolower(mod_commonname)) %>%
   select(mod_commonname, caselle_targeted)
@@ -226,7 +291,7 @@ life_history_data <- life_history_data %>%
   mutate(targeted = ifelse(is.na(caselle_targeted), targeted, caselle_targeted))
 
 ci_catches <-
-  read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
+  read_csv(file = here::here(data_dir, 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
   summarise(catch = sum(pounds_caught, na.rm = T))
 
 
@@ -266,7 +331,7 @@ if (rank_targeting == T) {
 }
 
 
-site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
+site_data <- read_csv(here::here(data_dir,'Final_Site_Table_UCSB.csv')) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   select(
     site,
@@ -331,11 +396,11 @@ cluster_classcodes <-
 sightings <- sightings %>%
   mutate(geographic_cluster = cluster_classcodes$cluster)
 
-geographic_cluster_plot <-
-  ggmap::qmplot(mean_long,
-                mean_lat ,
-                color = factor(geographic_cluster),
-                data = sightings) + theme_classic()
+# geographic_cluster_plot <-
+#   ggmap::qmplot(mean_long,
+#                 mean_lat ,
+#                 color = factor(geographic_cluster),
+#                 data = sightings) + theme_classic()
 
 life_history_data <- life_history_data %>%
   left_join(sightings %>% select(classcode, geographic_cluster),
@@ -388,22 +453,22 @@ kelp <- kelp %>%
 
 kelp_recipe <- recipes::recipe(mean_kelp ~ ., data = kelp)
 
-
-kelp_reg <- caret::train(kelp_recipe,
-                        data = kelp,
-                        method = "knn",
-                        tuneGrid = data.frame(k = c(2,5,7,10))
-)
-
+#
+# kelp_reg <- caret::train(kelp_recipe,
+#                         data = kelp,
+#                         method = "knn",
+#                         tuneGrid = data.frame(k = c(2,5,7,10))
+# )
+#
 
 
 ## process kfm dat
 
 kfm_data <-
-  read_csv('data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
+  read_csv(here::here(data_dir,'kfm_data/SBCMBON_integrated_fish_20170520.csv'))
 
 kfm_locations <-
-  read_csv('data/kfm_data/SBCMBON_site_geolocation_20170520.csv')
+  read_csv(here::here(data_dir,'kfm_data/SBCMBON_site_geolocation_20170520.csv'))
 
 conditions_data <- length_data %>%
   group_by(site, side, classcode, year) %>%
@@ -474,7 +539,7 @@ length_data <- length_data %>%
 
 # ggmap::qmplot(x = mean_longitude, y = mean_latitude,data = species_distributions)
 
-density_data <- read_csv('data/ci_reserve_data_final3 txt.csv') %>%
+density_data <- read_csv(here::here(data_dir,"ci_reserve_data_final3 txt.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   gather('concat.name', 'value', grep('_', colnames(.)), convert = T) %>%
   mutate(
@@ -514,22 +579,22 @@ species_distributions <- length_data %>%
 # ggmap::qmplot(longitude,latitude, color = side, data = site_coords)
 
 
-if (file.exists('data/enso.csv')) {
-  enso <- read_csv('data/enso.csv')
+if (file.exists(here::here(data_dir,'enso.csv'))) {
+  enso <- read_csv(here(data_dir,'enso.csv'))
 } else {
 
-  scrape_enso(outdir = 'data/')
+  scrape_enso(outdir = paste0(data_dir,'/'))
 
-  enso <- read_csv('data/enso.csv')
+  enso <- read_csv(here(data_dir,'enso.csv'))
 }
 
-if (file.exists('data/pdo.csv')) {
-  pdo <- read_csv('data/pdo.csv')
+if (file.exists(here(data_dir,'pdo.csv'))) {
+  pdo <- read_csv(here(data_dir,'pdo.csv'))
 
 } else {
-  scrape_pdo(outdir = 'data/')
+  scrape_pdo(outdir = paste0(data_dir,'/'))
 
-  pdo <- read_csv('data/pdo.csv')
+  pdo <- read_csv(here(data_dir,'pdo.csv'))
 }
 
 
@@ -979,7 +1044,7 @@ abundance_data <- abundance_data %>%
 
 # add kelp data
 
-kelp_model <- caret::knnreg(mean_kelp ~ ., data = kelp, k = kelp_reg$bestTune)
+kelp_model <- caret::knnreg(mean_kelp ~ ., data = kelp, k = 5)
 
 abundance_data <- abundance_data %>%
   mutate(data = map2(data,list(kelp_model),  ~ mutate(.x, interp_kelp = predict(
@@ -1148,9 +1213,11 @@ model_runs <- cross_df(
 
 if (run_tmb == T){
 
+  future::plan(future::multiprocess, workers = 2)
+
+
   model_runs <- model_runs %>%
-    filter(data_source == "kfm") %>%
-  mutate(tmb_fit = pmap(
+  mutate(tmb_fit = future_pmap(
     list(
       data = data,
       non_nested_variables = non_nested_variables,
@@ -1162,7 +1229,8 @@ if (run_tmb == T){
     script_name = script_name,
     fixed_regions = FALSE,
     include_intercept = FALSE,
-    fixed_did = FALSE
+    fixed_did = FALSE,
+    .progress = T
   ))
 
 

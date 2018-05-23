@@ -20,14 +20,67 @@ tune_fishery <- function( f_v_m,
                                sim_years = 50,
                                burn_years = 10,
                                num_patches = 1){
-
   if (fleet$fleet_model == "constant-catch"){
 
-    # fleet$target_catch <-   tuned$par
+    tol <- 100
 
-    fleet$initial_effort <-   ((fish$m * f_v_m) / fleet$q) * num_patches
+    lower <- 0
 
-    message("nope")
+    upper <- 400
+
+    golden <- (sqrt(5) -1)/2
+
+    best <- 1000
+
+    delta_best <- 100
+
+    counter <-  0
+
+    while(delta_best > tol | counter < 20) {
+
+      counter <- counter + 1
+
+      constant <- (1 - golden) * (upper - lower)
+
+      x1 <- lower + constant
+
+      x2 <- upper - constant
+
+      yield_1 <- estimate_msy(x1, fish = fish, fleet = fleet)
+
+      yield_2 <- estimate_msy(x2, fish = fish, fleet = fleet)
+
+      delta_best <-  (best -  min(yield_1,yield_2))^2
+
+      best <- min(yield_1,yield_2)
+
+      if (yield_1 < yield_2){
+
+        lower <- lower
+
+        upper <- x2
+      } else{
+
+        lower <- x1
+
+        upper <- upper
+
+      }
+
+    } # close golden while
+
+    msy_fit <- nlminb(mean(c(lower, upper)), estimate_msy, fish = fish, fleet = fleet, lower = 0)
+
+    fleet$e_msy <- msy_fit$par
+
+    fish$msy <- -msy_fit$objective
+
+    fish$b_msy <- estimate_msy(fleet$e_msy, fish = fish, fleet = fleet, use = "other")
+
+    msy <- fish$msy
+
+    fleet$target_catch <- msy * f_v_m
+
 
   } else if (fleet$fleet_model == "constant-effort"){
 
@@ -184,7 +237,70 @@ tune_fishery <- function( f_v_m,
     fleet$p_msy <- fish$price * fish$msy - fleet$cost * fleet$e_msy ^ fleet$beta
 
 
-    }
+  } else if (fleet$fleet_model == "supplied-catch"){
+
+
+    tol <- 100
+
+    lower <- 0
+
+    upper <- 400
+
+    golden <- (sqrt(5) -1)/2
+
+    best <- 1000
+
+    delta_best <- 100
+
+    counter <-  0
+
+    while(delta_best > tol | counter < 20) {
+
+      counter <- counter + 1
+
+      constant <- (1 - golden) * (upper - lower)
+
+      x1 <- lower + constant
+
+      x2 <- upper - constant
+
+      yield_1 <- estimate_msy(x1, fish = fish, fleet = fleet)
+
+      yield_2 <- estimate_msy(x2, fish = fish, fleet = fleet)
+
+      delta_best <-  (best -  min(yield_1,yield_2))^2
+
+      best <- min(yield_1,yield_2)
+
+      if (yield_1 < yield_2){
+
+        lower <- lower
+
+        upper <- x2
+      } else{
+
+        lower <- x1
+
+        upper <- upper
+
+      }
+
+    } # close golden while
+
+    msy_fit <- nlminb(mean(c(lower, upper)), estimate_msy, fish = fish, fleet = fleet, lower = 0)
+
+    fleet$e_msy <- msy_fit$par
+
+    fish$msy <- -msy_fit$objective
+
+    fish$b_msy <- estimate_msy(fleet$e_msy, fish = fish, fleet = fleet, use = "other")
+
+    msy <- fish$msy
+
+
+
+
+  }
 
   return(list(fish = fish, fleet = fleet))
 
