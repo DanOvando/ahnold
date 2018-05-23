@@ -225,7 +225,7 @@ We first utilize a spatially explicit, age structured bio-economic model to gene
 ```{r}
 outcomes <- processed_grid %>%
   slice(1:samps) %>% 
-  select(-fish, -fleet) %>%
+  select(-fish, -fleet,-tuned_fishery) %>%
   unnest() %>% 
   mutate(year = year - burn_years) %>% 
   mutate(years_protected = year - year_mpa + 1) %>% 

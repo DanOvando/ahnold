@@ -1,7 +1,7 @@
 # Run Zissou -------
 # Author: Dan Ovando
-# Project: Ahnold
-# Summary: Run a revised version of ahnold, redoing some of the database filtering and
+# Project: zissou
+# Summary: Run a revised version of zissou, redoing some of the database filtering and
 # prep, and comparing raw and standardized approaches, making it easier to run a bunch of
 # different model configs all at once. With end goal: accepting or rejecting null hypotheses,
 # inclurind zero, but more importantly including MPA literature motivated outcomes.
@@ -9,14 +9,11 @@
 
 # setup ---------------------------------------------------------------
 library(scales)
-# library(rstanarm)
-library(scales)
 library(viridis)
 library(ggmap)
 library(forcats)
 library(stringr)
 library(lubridate)
-library(purrr)
 library(lme4)
 library(TMB)
 library(FishLife)
@@ -24,26 +21,90 @@ library(patchwork)
 library(rstan)
 library(extrafont)
 library(hrbrthemes)
+library(caret)
+library(here)
 library(tidyverse)
+library(furrr)
+
+
 if (("demons" %in% installed.packages()) == F){
   devtools::install_github('danovando/demons')
 }
 
 demons::load_functions('functions')
 
-run_name <- 'v2.0'
-
-run_dir <- file.path('results', run_name)
+run_name <- 'v3.0'
 
 run_description <-
-  'MPA and no MPA, fitting to log standardized index'
+  'Fixed model runs to run all the damn options at once instead of as stupid toggles'
+
+in_clouds <- F
+
+if (in_clouds == F){
+
+  run_dir <- here::here("results", run_name)
+
+} else{
+
+  run_dir <- here::here("results","zissou-results", run_name)
+
+}
 
 if (dir.exists(run_dir) == F) {
   dir.create(run_dir, recursive = T)
 }
 
+
+if (in_clouds == T){
+
+
+  system("umount results/zissou-results")
+
+  system("rm -r results/zissou-results")
+
+  if (dir.exists("results/zissou-results") == F){
+
+    system("mkdir results/zissou-results")
+
+  }
+
+  system("gcsfuse zissou-results results/zissou-results")
+
+  system("umount data/zissou-data")
+
+  system("rm -r data/zissou-data")
+
+  if (dir.exists("results/zissou-data") == F){
+
+    system("mkdir data/zissou-data")
+
+  }
+
+  # system("mkdir data/scrooge-data")
+
+  system("gcsfuse zissou-data data/zissou-data")
+
+  cloud_dir <- here::here("results","zissou-results",run_name)
+
+  if (dir.exists(cloud_dir) == F){
+
+    dir.create(cloud_dir)
+
+  }
+
+}
+
+if (in_clouds == F ){
+
+  data_dir <- "data"
+} else{
+
+  data_dir <- "data/zissou-data"
+}
+
 write(run_description,
       file = paste(run_dir, 'RUN_DESCRIPTION.txt', sep = '/'))
+
 
 
 # options -----------------------------------------------------------------
@@ -51,6 +112,10 @@ write(run_description,
 rstan_options(auto_write = TRUE)
 
 run_tmb <- TRUE
+
+n_cores <- 1
+
+future::plan(future::multiprocess, workers = n_cores)
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -92,7 +157,7 @@ theme_set(plot_theme)
 
 # load data ---------------------------------------------------------------
 
-length_data <- read_csv('data/UCSB_FISH.csv') %>%
+length_data <- read_csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   mutate(classcode = tolower(classcode)) %>%
   mutate(observer = ifelse(is.na(observer), 'unknown', observer))
@@ -156,7 +221,7 @@ length_data <- length_data %>%
 
 life_history_data <-
   read_csv(here::here(
-    'data',
+    data_dir,
     'VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv'
   )) %>%
   rename(classcode = pisco_classcode) %>%
@@ -215,7 +280,7 @@ life_history_data <- life_history_data %>%
 #Convert to fished species things with CDFW catches
 
 caselle_fished_species <-
-  read_csv(file = file.path('data', 'caselle-2015-fished-species-list.csv')) %>%
+  read_csv(file = here::here(data_dir, 'caselle-2015-fished-species-list.csv')) %>%
   mutate(commonname = tolower(commonname),
          mod_commonname = tolower(mod_commonname)) %>%
   select(mod_commonname, caselle_targeted)
@@ -226,7 +291,7 @@ life_history_data <- life_history_data %>%
   mutate(targeted = ifelse(is.na(caselle_targeted), targeted, caselle_targeted))
 
 ci_catches <-
-  read_csv(file = file.path('data', 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
+  read_csv(file = here::here(data_dir, 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
   summarise(catch = sum(pounds_caught, na.rm = T))
 
 
@@ -266,7 +331,7 @@ if (rank_targeting == T) {
 }
 
 
-site_data <- read_csv('data/Final_Site_Table_UCSB.csv') %>%
+site_data <- read_csv(here::here(data_dir,'Final_Site_Table_UCSB.csv')) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   select(
     site,
@@ -331,11 +396,11 @@ cluster_classcodes <-
 sightings <- sightings %>%
   mutate(geographic_cluster = cluster_classcodes$cluster)
 
-geographic_cluster_plot <-
-  ggmap::qmplot(mean_long,
-                mean_lat ,
-                color = factor(geographic_cluster),
-                data = sightings) + theme_classic()
+# geographic_cluster_plot <-
+#   ggmap::qmplot(mean_long,
+#                 mean_lat ,
+#                 color = factor(geographic_cluster),
+#                 data = sightings) + theme_classic()
 
 life_history_data <- life_history_data %>%
   left_join(sightings %>% select(classcode, geographic_cluster),
@@ -388,22 +453,22 @@ kelp <- kelp %>%
 
 kelp_recipe <- recipes::recipe(mean_kelp ~ ., data = kelp)
 
-
-kelp_reg <- caret::train(kelp_recipe,
-                        data = kelp,
-                        method = "knn",
-                        tuneGrid = data.frame(k = c(2,5,7,10))
-)
-
+#
+# kelp_reg <- caret::train(kelp_recipe,
+#                         data = kelp,
+#                         method = "knn",
+#                         tuneGrid = data.frame(k = c(2,5,7,10))
+# )
+#
 
 
 ## process kfm dat
 
 kfm_data <-
-  read_csv('data/kfm_data/SBCMBON_integrated_fish_20170520.csv')
+  read_csv(here::here(data_dir,'kfm_data/SBCMBON_integrated_fish_20170520.csv'))
 
 kfm_locations <-
-  read_csv('data/kfm_data/SBCMBON_site_geolocation_20170520.csv')
+  read_csv(here::here(data_dir,'kfm_data/SBCMBON_site_geolocation_20170520.csv'))
 
 conditions_data <- length_data %>%
   group_by(site, side, classcode, year) %>%
@@ -474,7 +539,7 @@ length_data <- length_data %>%
 
 # ggmap::qmplot(x = mean_longitude, y = mean_latitude,data = species_distributions)
 
-density_data <- read_csv('data/ci_reserve_data_final3 txt.csv') %>%
+density_data <- read_csv(here::here(data_dir,"ci_reserve_data_final3 txt.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   gather('concat.name', 'value', grep('_', colnames(.)), convert = T) %>%
   mutate(
@@ -514,22 +579,22 @@ species_distributions <- length_data %>%
 # ggmap::qmplot(longitude,latitude, color = side, data = site_coords)
 
 
-if (file.exists('data/enso.csv')) {
-  enso <- read_csv('data/enso.csv')
+if (file.exists(here::here(data_dir,'enso.csv'))) {
+  enso <- read_csv(here(data_dir,'enso.csv'))
 } else {
 
-  scrape_enso(outdir = 'data/')
+  scrape_enso(outdir = paste0(data_dir,'/'))
 
-  enso <- read_csv('data/enso.csv')
+  enso <- read_csv(here(data_dir,'enso.csv'))
 }
 
-if (file.exists('data/pdo.csv')) {
-  pdo <- read_csv('data/pdo.csv')
+if (file.exists(here(data_dir,'pdo.csv'))) {
+  pdo <- read_csv(here(data_dir,'pdo.csv'))
 
 } else {
-  scrape_pdo(outdir = 'data/')
+  scrape_pdo(outdir = paste0(data_dir,'/'))
 
-  pdo <- read_csv('data/pdo.csv')
+  pdo <- read_csv(here(data_dir,'pdo.csv'))
 }
 
 
@@ -766,7 +831,7 @@ pisco_data <- pisco_data %>%
     mean_canopy = ifelse(is.na(mean_canopy), mean(mean_canopy, na.rm = T), mean_canopy)
   ) %>% mutate(
     mean_temp = ifelse(is.na(mean_temp), mean(mean_temp, na.rm = T), mean_temp)) %>%
-  mutate(temp_deviation = (mean_temp - temperature)^2) %>%
+  mutate(temp_deviation = abs(mean_temp - temperature)) %>%
   mutate(generations_protected = pmin(round((year - year_mpa - 1) / tm), max_generations))
 
 
@@ -843,7 +908,7 @@ kfm_data <- kfm_data %>%
 # save raw-isa data -------------------------------------------------------
 
 save(
-  file = glue::glue("{run_dir}/rawish_ahnold_data.Rdata"),
+  file = glue::glue("{run_dir}/rawish_zissou_data.Rdata"),
   life_history_data,
   pisco_data,
   kfm_data
@@ -938,7 +1003,8 @@ abundance_data <- pisco_data %>%
   nest(-data_source,-classcode) %>%
   bind_rows(kfm_data %>%  mutate(data_source = 'kfm') %>%
               left_join(site_data, by = c("site","side")) %>%
-              mutate(year_month = year + (month / 12 - .1)) %>%
+              mutate(year_month = year + (month / 12 - .1),
+                     site_side = site_id) %>%
               nest(-data_source,-classcode)
               ) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
@@ -946,7 +1012,7 @@ abundance_data <- pisco_data %>%
   # mutate(data = map(data, ~ left_join(.x, channel_sides, by = c("region")))) %>%
   # mutate(data = map(data, ~ mutate(.x, channel_zone = ifelse(lat_wgs84 > midline, "inner", "outer")))) %>%
   mutate(data = map(data, ~ left_join(.x, rolling_mean_temperatures, by = c("year")))) %>%
-  mutate(data = map(data, ~ mutate(.x, temp_deviation = (rolling_mean - temperature)^2))) %>%
+  mutate(data = map(data, ~ mutate(.x, temp_deviation = abs(rolling_mean - temperature)))) %>%
   mutate(data = map(data, ~ mutate(.x, month = as.numeric(as.character(factor_month))))) %>%
   mutate(data = map(data, ~ left_join(.x, enso, by = c('year', 'month')))) %>%
   mutate(data = map(data, ~ left_join(.x, pdo, by = c('year', 'month')))) %>%
@@ -978,7 +1044,7 @@ abundance_data <- abundance_data %>%
 
 # add kelp data
 
-kelp_model <- caret::knnreg(mean_kelp ~ ., data = kelp, k = kelp_reg$bestTune)
+kelp_model <- caret::knnreg(mean_kelp ~ ., data = kelp, k = 5)
 
 abundance_data <- abundance_data %>%
   mutate(data = map2(data,list(kelp_model),  ~ mutate(.x, interp_kelp = predict(
@@ -1005,220 +1071,184 @@ save(
 
 # run vast ----------------------------------------------------------------
 
-if (run_vast == T) {
-  vast_data <- abundance_data %>%
-    filter(
-      data_source == 'pisco'
-    ) %>%
-    unnest() %>%
-    nest(-data_source, -classcode) %>%
-    mutate(survey_region = 'california_current',
-           n_x = num_knots) %>%
-    mutate(
-      vast_data = map2(
-        data,
-        classcode,
-        vast_prep,
-        site_coords = site_coords,
-        conditions_data = conditions_data
-      )
-    )
-
-
-  vast_abundance <- vast_data %>%
-    mutate(
-      vast_results = purrr::pmap(
-        list(
-          region = survey_region,
-          raw_data = vast_data,
-          n_x = n_x
-        ),
-        safely(vasterize_pisco_data),
-        run_dir = run_dir,
-        nstart = 100,
-        obs_model = c(2, 0),
-        catchability_variables_names = c('mean_vis', 'surge', 'factor_month', 'zone', 'level'),
-        vessel = 0,
-        vessel_year = 1
-      )
-    )
-
-  vast_abundance <- vast_abundance %>%
-    mutate(vast_error = map(vast_results, 'error'))
-
-  vast_abundance <- vast_abundance %>%
-    mutate(vast_index = map(vast_results, 'result')) %>%
-    mutate(no_vast_error = map_lgl(vast_error, is.null)) %>%
-    filter(no_vast_error)
-
-  save(file = paste0(run_dir, '/vast_abundance.Rdata'), vast_abundance)
-} else {
-  load(file = paste0(run_dir, '/vast_abundance.Rdata'))
-}
+# if (run_vast == T) {
+#   vast_data <- abundance_data %>%
+#     filter(
+#       data_source == 'pisco'
+#     ) %>%
+#     unnest() %>%
+#     nest(-data_source, -classcode) %>%
+#     mutate(survey_region = 'california_current',
+#            n_x = num_knots) %>%
+#     mutate(
+#       vast_data = map2(
+#         data,
+#         classcode,
+#         vast_prep,
+#         site_coords = site_coords,
+#         conditions_data = conditions_data
+#       )
+#     )
+#
+#
+#   vast_abundance <- vast_data %>%
+#     mutate(
+#       vast_results = purrr::pmap(
+#         list(
+#           region = survey_region,
+#           raw_data = vast_data,
+#           n_x = n_x
+#         ),
+#         safely(vasterize_pisco_data),
+#         run_dir = run_dir,
+#         nstart = 100,
+#         obs_model = c(2, 0),
+#         catchability_variables_names = c('mean_vis', 'surge', 'factor_month', 'zone', 'level'),
+#         vessel = 0,
+#         vessel_year = 1
+#       )
+#     )
+#
+#   vast_abundance <- vast_abundance %>%
+#     mutate(vast_error = map(vast_results, 'error'))
+#
+#   vast_abundance <- vast_abundance %>%
+#     mutate(vast_index = map(vast_results, 'result')) %>%
+#     mutate(no_vast_error = map_lgl(vast_error, is.null)) %>%
+#     filter(no_vast_error)
+#
+#   save(file = paste0(run_dir, '/vast_abundance.Rdata'), vast_abundance)
+# } else {
+#   load(file = paste0(run_dir, '/vast_abundance.Rdata'))
+# }
 
 # fit model ---------------------------------------------------------------
+
+
+abundance_data <- abundance_data %>%
+  mutate(data = map(data, ~select(.,log_density,
+                                  targeted,
+                                  site_side,
+                                  region,
+                                  geographic_cluster,
+                                  level,
+                                  factor_month,
+                                  cumulative_n_obs,
+                                  surge,
+                                  mean_canopy,
+                                  mean_vis,
+                                  mean_depth,
+                                  factor_year,
+                                  classcode,
+                                  interp_kelp,
+                                  eventual_mpa,
+                                  temp_deviation,
+                                  any_seen,
+                                  year
+  )))
 
 
 script_name <- "fit_zissou"
 
 sfa <- safely(fit_zissou)
 
-pisco <- abundance_data$data[abundance_data$data_source == 'pisco'][[1]] #%>%
-  # filter(classcode != )
+
+var_options <-  data_frame(var_names = c("pisco_a","pisco_a","kfm"),
+                           non_nested_variables =
+                             list(c(
+                               'site_side',
+                               'level',
+                               'factor_month',
+                               'cumulative_n_obs',
+                               'surge',
+                               'mean_vis',
+                               'mean_depth'
+                             ),c(
+                               'site_side',
+                               'level',
+                               'factor_month',
+                               'cumulative_n_obs',
+                               'surge',
+                               'mean_depth',
+                               'mean_vis',
+                               'mean_canopy'
+                             ),
+                             c(
+                               'site_side',
+                               'factor_month'
+                             )
+                             ))
 
 
-tmb_runs <- data_frame(data = list(pisco),  non_nested_variables = list(c(
-  'site_side',
-  'level',
-  'factor_month',
-  'cumulative_n_obs',
-  'surge',
-  'mean_canopy',
-  'mean_depth'
-),
-c(
-  'site_side',
-  'level',
-  'factor_month',
-  'cumulative_n_obs',
-  'surge',
-  'mean_canopy',
-  'mean_depth'
-)), include_intercept = c(FALSE, TRUE),
-fixed_did = c(FALSE, TRUE)
-)
+stupid_filter <- function(x){
+
+  missing = x %>%
+    group_by(classcode) %>%
+    summarise(nyd = n_distinct(year)) %>%
+    ungroup() %>%
+    filter(nyd < 17)
+
+  out <- x %>%
+    filter(!(classcode %in% missing$classcode))
+
+}
+
+abundance_data <- abundance_data %>%
+  mutate(data = map(data, stupid_filter))
+
+model_runs <- cross_df(
+  list(
+    data_source = abundance_data$data_source,
+    var_names = var_options$var_names,
+    mpa_only = c(TRUE,FALSE),
+    center_scale = c(TRUE, FALSE)
+   )
+  ) %>%
+  left_join(var_options, by = "var_names") %>%
+  left_join(abundance_data, by = "data_source") %>%
+  filter(!(data_source == "kfm" & str_detect(var_names,"pisco"))) %>%
+  filter(!(data_source == "kfm" & mpa_only == TRUE))
+
+
 
 if (run_tmb == T){
 
-  tmb_runs <- tmb_runs %>%
-    slice(1) %>%
-  mutate(tmb_fit = pmap(
+  future::plan(future::multiprocess, workers = 2)
+
+
+  model_runs <- model_runs %>%
+  mutate(tmb_fit = future_pmap(
     list(
       data = data,
       non_nested_variables = non_nested_variables,
-      include_intercept = include_intercept,
-      fixed_did = fixed_did
+     mpa_only = mpa_only,
+     center_scale = center_scale
     ),
     fit_zissou,
     run_dir = run_dir,
     script_name = script_name,
-    fixed_regions = F
+    fixed_regions = FALSE,
+    include_intercept = FALSE,
+    fixed_did = FALSE,
+    .progress = T
   ))
 
 
-save(file = paste0(run_dir, '/tmb_runs.Rdata'),
-     tmb_runs)
+save(file = paste0(run_dir, '/model_runs.Rdata'),
+     model_runs)
 
 
 } else {
 
-  load(file = paste0(run_dir, '/tmb_runs.Rdata'))
+  load(file = paste0(run_dir, '/model_runs.Rdata'))
 }
 
- ahnold_fit <- tmb_runs$tmb_fit[[1]]
 
-
- seen_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "seen_non_nested_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
-
- seeing_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "seeing_non_nested_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
-
- seen_year_species_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "seen_year_species_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
-
- seeing_year_species_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "seeing_year_species_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
-
- seen_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "seen_region_cluster_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
-
- seeing_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "seeing_region_cluster_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
-
- did_betas <- ahnold_fit$ahnold_estimates %>%
-   filter(variable == "mpa_effect") %>%
-   mutate(group = variable) %>%
-   mutate(year = abundance_data$data[[1]]$year %>% unique())
-
-
- betas <- bind_rows(
-   seen_non_nested_betas,
-   seeing_non_nested_betas,
-   seen_year_species_betas,
-   seeing_year_species_betas,
-   seen_region_cluster_betas,
-   seeing_region_cluster_betas,
-   did_betas %>% select(-year)
- ) %>%
-   as_data_frame()
-
- non_nested_beta_plot <- betas %>%
-   filter(str_detect(group, "non_nested")) %>%
-   ggplot() +
-   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
-   geom_pointrange(aes(x = variable,
-                       y = estimate,
-                       ymin = lower,
-                       ymax = upper)) +
-   facet_wrap(~group) +
-   coord_flip() +
-   theme(axis.text.y = element_text(size = 10))
-
-
- year_species_effects_plots <- betas %>%
-   filter(str_detect(group, "year_species_betas")) %>%
-   mutate(year = str_replace_all(variable,"\\D","") %>% as.numeric()) %>%
-   mutate(classcode = str_split(variable,'-', simplify = T)[,2]) %>%
-   ggplot() +
-   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
-   geom_ribbon(aes(x = year, ymin = lower, ymax = upper, fill = classcode), alpha = 0.25) +
-   geom_line(aes(x = year, y = estimate, color = classcode)) +
-   facet_wrap(~group)
-
-  region_cluster_plots <- betas %>%
-   filter(str_detect(group, "region_cluster_betas")) %>%
-   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
-   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
-   ggplot() +
-    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
-    geom_pointrange(aes(x = region,
-                        y = estimate,
-                        ymin = lower,
-                        ymax = upper, color = cluster)) +
-    facet_wrap(~group)
+model_runs <- model_runs %>%
+  mutate(processed_fits = map(tmb_fit, process_fits)) %>%
+  mutate(did_plot = map(processed_fits, "did_plot"))
 
 
 
- did_plot <- did_betas %>%
-   ggplot() +
-   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
- geom_hline(aes(yintercept = 0)) +
-   geom_pointrange(aes(
-     year,
-     y = estimate,
-     ymin = lower,
-     ymax = upper
-   ),
-   size = 1.5) +
-   labs(x = "Year", y = "MPA Effect",
-        title = 'Net Estimated Effect of MLPA',
-        caption = "'Effect' refers to effect of MLPA on log density of fished species")
-
-
- ggsave(filename = here::here(run_dir, 'mlpa_effect.pdf'),
-        did_plot, width = 8, height = 6)
 
 

@@ -23,10 +23,12 @@ make_c_worthy <- function(subdata,
       {
         .
       }
-    } %>%
-    mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2) #%>%
-    # mutate(targeted = subdata$targeted)
+    }
 
+  if (any(str_detect(non_nested_vars,"cumulative_n_obs"))){
+    x_non_nested <-  x_non_nested %>%
+      mutate(cumulative_n_obs_2 = cumulative_n_obs ^ 2) #%>%
+  }
 
  # x_enso <- subdata %>%
  #    select(classcode, enso) %>%
