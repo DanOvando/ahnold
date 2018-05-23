@@ -14,11 +14,9 @@ library(spasm)
 library(doParallel)
 library(tidyverse)
 
-if (("demons" %in% installed.packages()) == F) {
-  devtools::install_github('danovando/demons')
-}
+functions <- list.files(here::here("functions"))
 
-demons::load_functions('functions')
+walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
 run_name <- 'v1.0'
 

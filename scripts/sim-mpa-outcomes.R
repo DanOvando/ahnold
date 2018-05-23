@@ -6,6 +6,7 @@ library(FishLife)
 library(hrbrthemes)
 library(scales)
 library(doParallel)
+library(furrr)
 library(tidyverse)
 
 functions <- list.files(here::here("functions"))
@@ -25,11 +26,11 @@ run_experiments <- TRUE
 
 n_cores <- 1
 
-samps <- 1
+samps <- 25
 
 grid_search <-  FALSE
 
-in_clouds <- T
+in_clouds <- F
 
 if (in_clouds == T){
 
@@ -192,15 +193,19 @@ if (run_experiments == T) {
     ))
 
   # tune fleet objects
+
+  future::plan(future::multiprocess, workers = n_cores)
+
   sim_grid <- sim_grid %>%
-    mutate(tuned_fishery = pmap(
+    mutate(tuned_fishery = future_pmap(
       list(
         f_v_m = f_v_m,
         fish = fish,
         fleet = fleet
       ),
       tune_fishery,
-      num_patches = num_patches
+      num_patches = num_patches,
+      .progress = T
     )) %>%
     mutate(fish = map(tuned_fishery,"fish"),
            fleet = map(tuned_fishery,"fleet"))
