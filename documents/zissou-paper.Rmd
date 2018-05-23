@@ -2,8 +2,8 @@
 title: "Predicting and Detecting the Regional-Scale Conservation Impacts of Marine Protected Areas"
 author: "Dan Ovando"
 output: 
-  bookdown::pdf_document2:
   bookdown::html_document2:
+  bookdown::pdf_document2:
 bibliography: dissertation.bib
 linkcolor: blue
 biblio-style: apalike
@@ -42,24 +42,47 @@ num_patches <- 25
 
   samps <- 5000
  
-  run_name <- "v2.0"
+  run_name <- "v3.0"
 
 run_dir <- here::here("results", run_name)
 
 experiment_dir <- here::here("results",run_name, "experiments")
 
-load(file = here::here("results",run_name, "rawish_ahnold_data.Rdata"))
+load(file = here::here("results",run_name, "rawish_zissou_data.Rdata"))
 
-load(file = here::here("results",run_name, "tmb_runs.Rdata"))
+load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
+base_run <- model_runs %>% 
+  filter(var_names == "a", mpa_only == FALSE, center_scale == TRUE)
+  
 
-fitted_data <- tmb_runs$data[[1]]
+fitted_data <- base_run$data[[1]]
 
-ahnold_fit <- tmb_runs$tmb_fit[[1]]
+ahnold_fit <- base_run$tmb_fit[[1]]
 
-report <- tmb_runs$tmb_fit[[1]]$ahnold_estimates
+report <- base_run$tmb_fit[[1]]$ahnold_estimates
+
+site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  select(
+    site,
+    side,
+    mpagroup,
+    mpa_status,
+    reserve,
+    region,
+    year_mpa,
+    mpaareanm2,
+    lat_wgs84,
+    lon_wgs84
+  ) %>%
+  rename(lat_wgs84 = lon_wgs84,
+         lon_wgs84 = lat_wgs84) %>%
+  unique() %>%
+  mutate(eventual_mpa = (year_mpa > 0))
+
 
  seen_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
    filter(variable == "seen_non_nested_betas") %>%
@@ -162,7 +185,15 @@ report <- tmb_runs$tmb_fit[[1]]$ahnold_estimates
 
 ```
 
+# Key questions
 
+- How deep down the simulation testing rabbit hole?
+
+- How to talk about coefficients?
+
+- "Regional" term?
+
+- How big of a problem are synthetic controls?
 
 # Abstract
 
@@ -225,7 +256,7 @@ We first utilize a spatially explicit, age structured bio-economic model to gene
 ```{r}
 outcomes <- processed_grid %>%
   slice(1:samps) %>% 
-  select(-fish, -fleet,-tuned_fishery) %>%
+  select(-fish, -fleet) %>%
   unnest() %>% 
   mutate(year = year - burn_years) %>% 
   mutate(years_protected = year - year_mpa + 1) %>% 
@@ -396,7 +427,7 @@ The "causal interpretation" of the model is as follows then. While individual sp
 ```
 
 
-We do not detect a significant change in the density of fished species relative to the density of unfished species following the implementation of MPAs in the Channel Islands in 2003 (Fig.\@ref(fig:did-plot)). The mean estimated post MPA implementation divergence between the trends of targeted and non-targeted species was `r round(mean(did_betas$estimate))`, indicating a roughly 0% divergence. However, it is important to note that just because we cannot a reject a hypothesis of zero divergence between the targeted and non-targeted groups does not mean that we have precisely estimated the effect size to be zero. Post implementation, the upper limit of the estimated 95% confidence intervals was `r round(max(did_betas$upper),2)` , and the lower limit was `r round(min(did_betas$lower),2)`, meaning that the data has some support for up to an 80% increase or a 66% decrease. 
+We do not detect a significant change in the density of fished species relative to the density of unfished species following the implementation of MPAs in the Channel Islands in 2003 (Fig.\@ref(fig:did-plot)). The mean estimated post MPA implementation divergence between the trends of targeted and non-targeted species was `r round(mean(did_betas$estimate))`, indicating a roughly 0% divergence. However, it is important to note that just because we cannot a reject a hypothesis of zero divergence between the targeted and non-targeted groups does not mean that we have precisely estimated the effect size to be zero. Post implementation, the upper limit of the estimated 95% confidence intervals was `r round(max(did_betas$upper),2)` , and the lower limit was `r round(min(did_betas$lower),2)`.  
 
 
 ```{r did-plot, fig.cap = "Estimated divergence in densities of fished and unfished species in the Channel Islands. MPAs are implement in 2003 (red dashsed line). Estimates are from a regression on log(abundnace), and estimated effects roughyl correspond to percentage changes"}
@@ -404,6 +435,25 @@ We do not detect a significant change in the density of fished species relative 
 did_plot
 
 ```
+
+
+## Discussion
+
+- MPAs increasingly pointed to for "regional" benefits
+
+- Robust modeling indicates that regional benefits are highly variable and potentiallly small
+
+- Small effect + natural variability + obs error + lack of effective controls = low probability of empirical detection
+
+- Solutions
+  - Reliance on modeling
+  - Tailor monitoring towards key predictors of MPA performance
+  - Spatial stock assessment (net regional F)
+  - Synthetic controls?
+
+- So What?
+  - Tempered expectations
+  - Integrating MPAs with more direct controls 
 
 # Methods
 
@@ -448,11 +498,11 @@ filter_summary <- fitted_data %>%
   group_by(targeted) %>% 
   count() %>% 
   ungroup() %>% 
-  mutate(targeted = targeted == 1) %>% 
+  mutate(targeted = ifelse(targeted == 1,"yes","no")) %>% 
   spread(targeted, n)
 ```
 
-The regression analysis is a mixed-effects hierarchichal model. The raw data are estimated length compositions by species along a transect at a site. Lengths are converted to biomass per allometric relationshisp supplied by PISCO (see SI for summaries of the raw data). We performed some minimal data filtering to reduce noise in the data. We only include species that were observed at least twice in each year of the dataset (2000-2017) somewhere in the core(XX) Channel Islands (Anacapa, Santa Cruz, Santa Rosa, San Miguel). While some data are available from 1999, per consultation with PISCO we ommit those data due to changes in survey protocols. This filtering process results in `r filter_summary$FALSE` non-targeted species and `r filter_summary$TRUE` targeted species remaining in the analysis. 
+The regression analysis is a mixed-effects hierarchichal model. The raw data are estimated length compositions by species along a transect at a site. Lengths are converted to biomass per allometric relationshisp supplied by PISCO (see SI for summaries of the raw data). We performed some minimal data filtering to reduce noise in the data. We only include species that were observed at least twice in each year of the dataset (2000-2017) somewhere in the core(XX) Channel Islands (Anacapa, Santa Cruz, Santa Rosa, San Miguel). While some data are available from 1999, per consultation with PISCO we ommit those data due to changes in survey protocols. This filtering process results in `r filter_summary$no` non-targeted species and `r filter_summary$yes` targeted species remaining in the analysis. 
 
 The first stage of the regression is a delta log-normal hurdle model. The model estimates two regressions, the first is a logit glm estimating the probability of observing a given fish species at a observation *i* (transect at time *t*. The likehlihood for whether a given species was observed *o* at a given observation is distributed
 
@@ -559,8 +609,96 @@ targeted_trends
 
 # Supplementary Materials
 
+## Regression Diagnostics
 
-## Keep It Simple
+
+
+```{r}
+
+fit_report <- base_run$tmb_fit[[1]]$ahnold_report
+
+observed_seen <- base_run$tmb_fit[[1]]$zissou_data$log_density
+  
+observed_seeing <- base_run$tmb_fit[[1]]$zissou_data$any_seen
+
+seen_diagnostics <- data_frame(observed = observed_seen, predicted = as.numeric(fit_report$log_density_hat)) %>% 
+  mutate(residuals = predicted - observed)
+
+
+seeing_diagnostics <- data_frame(observed = observed_seeing, predicted = as.numeric(fit_report$prob_seeing)) 
+
+
+
+```
+
+
+```{r obs-v-pred, fig.cap="High level diagnostics for observed compontent of Delta-GLM, observed vs predicted log densities (A), predicted log density vs residuals (B), and a normal qq-plot of the residuals (C)"}
+
+obs_v_pred <- seen_diagnostics %>% 
+  ggplot(aes(observed, predicted)) + 
+  geom_point(alpha = 0.5) + 
+  geom_abline(aes(intercept = 0, slope = 1), linetype = 2, color = "red") + 
+  labs(caption = glue::glue("R^2 is {round(yardstick::rsq(data = seen_diagnostics, truth = observed, estimate = predicted),2)}"), title= "A") + 
+  theme(plot.margin = unit(rep(.1,4), units = "lines"))
+
+fit_v_resid <- seen_diagnostics %>% 
+  ggplot(aes(predicted, residuals)) + 
+  geom_point() + 
+  geom_hline(aes(yintercept = 0), linetype = 2, color = "red") + 
+  labs(title = "B") +
+    theme(plot.margin = unit(rep(.1,4), units = "lines"))
+
+qq_plot <- ggplot(seen_diagnostics, aes(sample = residuals)) +
+  stat_qq() +
+  stat_qq_line() + 
+  labs(title = "C") + 
+    theme(plot.margin = unit(rep(.1,4), units = "lines"))
+
+
+obs_v_pred/(fit_v_resid + qq_plot)
+
+
+```
+
+
+
+```{r, fig.cap = "Binned mean predicted probability of detection vs observed proportion of positive detections"}
+seeing_diagnostics %>% 
+  ungroup() %>% 
+  mutate(binned_prob = ntile(predicted, 20)) %>% 
+  arrange(binned_prob) %>% 
+  group_by(binned_prob) %>% 
+  summarise(mean_prob_seen = mean(predicted),
+            percent_observed = mean(observed))  %>% 
+  ggplot() +
+  geom_point(aes(mean_prob_seen, percent_observed)) + 
+  geom_abline(aes(intercept = 0, slope = 1), color = "red", linetype = 2) + 
+  labs(x = "Binned Predicted Probability of Detection", y = "Proportion of Positive Observations")
+  
+```
+
+
+## Data Summaries
+data coverage
+
+```{r, fig.cap = "Spatio-temporal sampling intensity. Points are sampling sites, size and opacity indicate number of years that site has been sampled. Color indicates whether the site is in an eventual MPA site"}
+
+site_summary <- pisco_data %>% 
+  left_join(site_data, by = c("site","side")) %>% 
+    filter(region %in% c("ANA","SCI","SRI","SMI")) %>% 
+  group_by(site) %>% 
+  summarise(nobs = length(log_density),
+            nyears = n_distinct(year),
+            pre_mpa = min(year) < 2003,
+            post_mpa = max(year) > 2003,
+            lat = mean(lat_wgs84, na.rm = T),
+            long = mean(lon_wgs84, na.rm = T),
+            mpa = unique(eventual_mpa))
+
+ggmap::qmplot(long, lat, size = nyears, alpha = nyears, color = mpa, data = site_summary) + 
+  theme_minimal()
+
+```
 
 
 Evidence of regional populations
@@ -569,7 +707,7 @@ Evidence of regional populations
 
 fitted_data %>% 
   group_by(region, year, classcode) %>% 
-  summarise(mean_density = mean(density_g_m2)) %>% 
+  summarise(mean_density = mean(exp(log_density))) %>% 
   mutate(log_mean_density = log(mean_density)) %>% 
   ungroup() %>% 
   ggplot(aes(year, mean_density, color = region)) + 
@@ -587,7 +725,7 @@ Standardized vs raw means
 ```{r raw-v-stand-plot, fig.cap = "Raw (points) and standardized (lines) indices of abundance for each of the species included in the analysis"}
 
 life_history <- fitted_data %>%
-  select(classcode, targeted, loo) %>%
+  select(classcode, targeted) %>%
   unique() %>%
   mutate(numeric_classcode = as.numeric(as.factor(classcode)))
 
@@ -599,16 +737,16 @@ numeric_species_key <-
 
 raw <- fitted_data %>%
   group_by(year, classcode, targeted) %>%
-  summarise(md = mean(density_g_m2)) %>%
+  summarise(md = mean(exp(log_density))) %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
   ungroup() %>%
   left_join(numeric_species_key, by = "classcode")
 
 
-ahnold_estimates <- tmb_runs$tmb_fit[[1]]$ahnold_estimates
+ahnold_estimates <- base_run$tmb_fit[[1]]$ahnold_estimates
 
-ahnold_report <- tmb_runs$tmb_fit[[1]]$ahnold_report
+ahnold_report <- base_run$tmb_fit[[1]]$ahnold_report
 
 years <- fitted_data$year %>% unique
   
@@ -667,7 +805,7 @@ Repeat basic analysis.
 
 raw <- fitted_data %>%
   group_by(year, classcode, targeted) %>%
-  summarise(md = mean(density_g_m2),
+  summarise(md = mean(exp(log_density)),
             mt = mean(temp_deviation)) %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
@@ -676,7 +814,7 @@ raw <- fitted_data %>%
 
 raw_region <- fitted_data %>%
   group_by(year, region,classcode, targeted) %>%
-  summarise(md = mean(density_g_m2),
+  summarise(md = mean(exp(log_density)),
             mt = mean(temp_deviation)) %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
@@ -687,7 +825,7 @@ raw_region <- fitted_data %>%
 raw_mpa_only <- fitted_data %>%
   filter(eventual_mpa == T) %>% 
   group_by(year, classcode, targeted) %>%
-  summarise(md = mean(density_g_m2),
+  summarise(md = mean(exp(log_density)),
             mt = mean(temp_deviation)) %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
@@ -697,7 +835,7 @@ raw_mpa_only <- fitted_data %>%
 raw_nompa_only <- fitted_data %>%
   filter(eventual_mpa == F) %>% 
   group_by(year, classcode, targeted) %>%
-  summarise(md = mean(density_g_m2),
+  summarise(md = mean(exp(log_density)),
             mt = mean(temp_deviation)) %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
@@ -759,7 +897,8 @@ basic_plus_region_plot <- basic_plus_region_model %>%
   geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error,
                       ymax = estimate + 1.96*std.error))
 
-raw_story <- raw %>% 
+
+ <- raw %>% 
   ungroup() %>% 
   ggplot(aes(year, md, color = targeted == 1, fill = targeted == 1)) + 
   geom_point(data = raw %>% group_by(year, targeted) %>% summarise(lmmd = (mean(md))), aes(year, lmmd, color = targeted == 1)) +
@@ -795,3 +934,8 @@ raw_nompa_story <- raw_nompa_only %>%
 - Show how things break down under the real world, i.e. what you'd need to collect to detect the thing
 - Illustrate with real world example of the fitting challenge
 - So what would you need to overcome this?
+
+
+**explain that experiment is the same as dif in dif**
+** raw data trends first**
+**couch parallel trends in single species modeling framework**
