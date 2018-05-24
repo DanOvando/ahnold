@@ -18,17 +18,17 @@ functions <- list.files(here::here("functions"))
 
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
-run_name <- 'v1.0'
+run_name <- 'v3.0'
 
 run_dir <- file.path('results', run_name)
 
-simulate_samples <- F
+simulate_samples <- T
 
-burn_years <- 10
+burn_years <- 25
 
-sim_years <- 100
+sim_years <- 75
 
-year_mpa <- 75
+year_mpa <- 30
 
 num_patches <-  2
 
@@ -49,7 +49,7 @@ theme_set(plot_theme)
 
 load(paste0(run_dir, '/abundance_data.Rdata'))
 
-load(paste0(run_dir, '/rawish_ahnold_data.Rdata'))
+load(paste0(run_dir, '/rawish_zissou_data.Rdata'))
 
 enso <- read_csv('data/enso.csv')
 
@@ -114,7 +114,7 @@ if (simulate_samples == T) {
     rec_driver = 'stochastic',
     enviro_strength = 1,
     sigma_r = 0,
-    cores = 4,
+    cores = 1,
     time_step = time_step
   )
 
@@ -150,14 +150,14 @@ simple_performance <-
   test_performance(
     simple_fish,
     year_mpa = year_mpa + burn_years,
-    min_year = 70,
+    min_year = 50,
     time_step = time_step
   )
 
 pisco_performance <-
   test_performance(pisco_fish,
                    year_mpa + burn_years,
-                   min_year = 70,
+                   min_year = 50,
                    time_step = time_step)
 
 save(file = 'about_time.Rdata', simple_performance, pisco_performance)

@@ -88,7 +88,6 @@ create_samples <- function(fishes,
   # ok now you need to think about how to set up your sampling regime.
   # The idea now is that you can send out a bunch of observers to monitor the population each year...
 
-
   go_sample <- function(pop, fish, divers, samples, cores = 1)
   {
     annual_data <- pop %>%

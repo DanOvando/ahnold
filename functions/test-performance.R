@@ -52,49 +52,22 @@ test_performance <-
          data = simple_data)
 
     if (n_distinct(simple_data$diver) > 1) {
-      # mixed_effect_model <- lme4::lmer(log_density ~ targeted + factor_year + targeted:factor_year + diver + (factor_year |classcode), data = simple_data)
-      # mixed_effect_model <-
-      #   rstanarm::stan_glm(
-      #     log_density ~  targeted + protected_block + targeted:protected_block + loo,
-      #     data = simple_data,
-      #     iter = 4000,
-      #     warmup = 2000,
-      #     cores = 1,
-      #     refresh = 25,
-      #     QR = TRUE,
-      #     control = list(max_treedepth = 10)
-      #   )
 
       mixed_effect_model <-
-        rstanarm::stan_glmer(
-          log_density ~  (1|classcode) + (protected_block - 1 | targeted:protected_block),
+        lme4::lmer(
+          log_density ~ (1|classcode) + diver + targeted*protected_block ,
           data = simple_data,
-          iter = 4000,
-          warmup = 2000,
-          cores = 1,
-          refresh = 25,
-          control = list(max_treedepth = 10)
+          verbose = 1
         )
-browser()
+
     } else
     {
-      # mixed_effect_model <-
-      #   lme4::lmer(
-      #     log_density ~ targeted + factor_year + targeted:factor_year + (factor_year |
-      #                                                                      classcode),
-      #     data = simple_data
-      #   )
+
       mixed_effect_model <-
-        rstanarm::stan_glm(
-          log_density ~ targeted + protected_block + targeted:protected_block + loo,
-          data = simple_data %>% select(log_density, targeted, protected_block,factor_year, classcode,loo),
-          iter = 4000,
-          warmup = 2000,
-          chains = 4,
-          cores = 4,
-          refresh = 1,
-          QR = TRUE,
-          control = list(max_treedepth = 8)
+        lme4::lmer(
+          log_density ~ (1|classcode) + targeted*protected_block ,
+          data = simple_data,
+          verbose = 1
         )
 
     }
@@ -111,6 +84,9 @@ browser()
     }
 
 
+    mean_effect <- true_effect %>%
+      group_by(year) %>%
+      summarise(mean_effect = mean(mpa_effect))
 
     bare_bones_did <- broom::tidy(bare_bones_model) %>%
       filter(str_detect(term, 'targeted:')) %>%
@@ -124,8 +100,9 @@ browser()
           ymax = estimate + 1.96 * std.error
         )
       ) +
-      geom_line(data = true_effect, aes(year - year_mpa, mpa_effect, color = classcode), show.legend = F) +
-      labs(title = 'bare bones')
+      geom_line(data = true_effect, aes(year - year_mpa, mpa_effect, color = classcode), show.legend = F, alpha = 0.5) +
+      labs(title = 'bare bones') +
+      geom_line(data = mean_effect, aes(year - year_mpa, mean_effect), color = "red", size = 1.5, linetype = 2)
 
     mixed_effect_did <- broom::tidy(mixed_effect_model) %>%
       filter(str_detect(term, 'targeted:')) %>%
@@ -140,7 +117,9 @@ browser()
         )
       ) +
       geom_line(data = true_effect, aes(year - year_mpa, mpa_effect, color = classcode), show.legend = F) +
-      labs(title = 'mixed effects')
+      labs(title = 'mixed effects') +
+      geom_line(data = mean_effect, aes(year - year_mpa, mean_effect), color = "red", size = 1.5, linetype = 2)
+
 
     check_block_did <- broom::tidy(pre_post_model) %>%
       filter(str_detect(term, 'targeted:')) %>%
