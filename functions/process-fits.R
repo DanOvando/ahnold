@@ -1,36 +1,35 @@
 process_fits <- function(zissou_fit){
-
-seen_non_nested_betas <- zissou_fit$ahnold_estimates %>%
+seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seen_non_nested_betas") %>%
   rename(group = variable) %>%
   mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
 
-seeing_non_nested_betas <- zissou_fit$ahnold_estimates %>%
+seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seeing_non_nested_betas") %>%
   rename(group = variable) %>%
   mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
 
-seen_year_species_betas <- zissou_fit$ahnold_estimates %>%
+seen_year_species_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seen_year_species_betas") %>%
   rename(group = variable) %>%
   mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
 
-seeing_year_species_betas <- zissou_fit$ahnold_estimates %>%
+seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seeing_year_species_betas") %>%
   rename(group = variable) %>%
   mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
 
-seen_region_cluster_betas <- zissou_fit$ahnold_estimates %>%
+seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seen_region_cluster_betas") %>%
   rename(group = variable) %>%
   mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
 
-seeing_region_cluster_betas <- zissou_fit$ahnold_estimates %>%
+seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seeing_region_cluster_betas") %>%
   rename(group = variable) %>%
   mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
 
-did_betas <- zissou_fit$ahnold_estimates %>%
+did_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "mpa_effect") %>%
   mutate(group = variable) %>%
   mutate(year = zissou_fit$did_data$year %>% unique())
@@ -94,9 +93,8 @@ did_plot <- did_betas %>%
     ymax = upper
   ),
   size = 1.5) +
-  labs(x = "Year", y = "MPA Effect",
-       title = 'Net Estimated Effect of MLPA',
-       caption = "'Effect' refers to effect of MLPA on log density of fished species")
+  labs(x = "Year", y = "Divergence",
+       caption = "'Divergence' refers to difference in mean density of targeted and non-targeted species")
 
 locals <- ls()
 

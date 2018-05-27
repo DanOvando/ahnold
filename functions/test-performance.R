@@ -55,7 +55,7 @@ test_performance <-
 
       mixed_effect_model <-
         lme4::lmer(
-          log_density ~ (1|classcode) + diver + targeted*protected_block ,
+          log_density ~ (1 + enso|classcode) + diver + targeted*protected_block ,
           data = simple_data,
           verbose = 1
         )
@@ -65,7 +65,7 @@ test_performance <-
 
       mixed_effect_model <-
         lme4::lmer(
-          log_density ~ (1|classcode) + targeted*protected_block ,
+          log_density ~ (1 + enso |classcode) + targeted*protected_block ,
           data = simple_data,
           verbose = 1
         )

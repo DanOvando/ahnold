@@ -22,11 +22,11 @@ burn_years <- 20
 
 num_patches <- 25
 
-run_experiments <- TRUE
+run_experiments <- FALSE
 
 n_cores <- 1
 
-samps <- 25
+samps <- 20000
 
 grid_search <-  FALSE
 
@@ -76,38 +76,15 @@ if (in_clouds == T){
 
 run_name <- "v3.0"
 
-run_dir <- here::here("results","zissou-results", run_name)
+run_dir <- here::here("results", run_name)
 
 experiment_dir <- file.path(run_dir, "experiments")
 
-load(file = file.path(run_dir, "rawish_ahnold_data.Rdata"))
+load(file = file.path(run_dir, "rawish_zissou_data.Rdata"))
 
-load(file = file.path(run_dir, "tmb_runs.Rdata"))
+load(file = file.path(run_dir, "model_runs.Rdata"))
 
-fitted_data <- tmb_runs$data[[1]]
-
-# cdfw_data <- read_csv(file = file.path("data", "cfdw-catches.csv"))
-#
-# has_timeseries <- cdfw_data %>%
-#   group_by(sci_name) %>%
-#   summarise(has_catch = min(year) <= 2000 & max(year) == 2015) %>%
-#   filter(has_catch == T)
-#
-# fill_catches <- function(min_year, max_year, catches) {
-#   full_frame <- data_frame(year = min_year:max_year) %>%
-#     left_join(catches, by = "year") %>%
-#     mutate(catch = zoo::na.approx(catch_lbs, rule = 2)) %>%
-#     select(-catch_lbs)
-# }
-#
-# cdfw_catches <- cdfw_data %>%
-#   filter(sci_name %in% unique(has_timeseries$sci_name)) %>%
-#   group_by(sci_name, year) %>%
-#   summarise(catch_lbs = sum(pounds_caught)) %>%
-#   group_by(sci_name) %>%
-#   nest(-sci_name, .key = "catches") %>%
-#   filter(is.na(sci_name) == F) %>%
-#   mutate(catches = map(catches, fill_catches, min_year = 2000, max_year = 2015))
+fitted_data <- model_runs$data[[1]]
 
 seen_species <- life_history_data %>%
   filter(classcode %in% (fitted_data$classcode %>% unique())) %>%
@@ -265,12 +242,27 @@ loadfoo <- function(experiment, experiment_dir, output = "mpa-effect") {
 
   if (output == "mpa-effect") {
     ex <- ex %>%
-      select(-mpa_experiment)
-  }
-  return(ex)
+      select(-mpa_experiment,-fish,-fleet,-tuned_fishery)}
+
+# out <- object.size(ex)
+
+  # format(object.size(ex), units = "Mb")
+
+return(ex)
 }
 
-processed_grid <- map_df(1:samps, loadfoo, experiment_dir = experiment_dir)
+future::plan(future::multiprocess, workers = 2)
+
+processed_grid <- future_map(1:samps, safely(loadfoo), experiment_dir = experiment_dir,
+                             .progress = T)
+
+grid_worked <- map(processed_grid, "error") %>% map_lgl(is_null)
+
+processed_grid <- processed_grid %>%
+  keep(grid_worked)
+
+processed_grid <- map(processed_grid, "result") %>%
+  bind_rows()
 
 
 processed_grid$mpa_effect[[1]] %>%

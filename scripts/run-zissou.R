@@ -24,14 +24,12 @@ library(hrbrthemes)
 library(caret)
 library(here)
 library(tidyverse)
+library(recipes)
 library(furrr)
 
+functions <- list.files(here::here("functions"))
 
-if (("demons" %in% installed.packages()) == F){
-  devtools::install_github('danovando/demons')
-}
-
-demons::load_functions('functions')
+walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
 run_name <- 'v3.0'
 
@@ -290,22 +288,43 @@ life_history_data <- life_history_data %>%
   left_join(caselle_fished_species, by = c('commonname' = 'mod_commonname')) %>%
   mutate(targeted = ifelse(is.na(caselle_targeted), targeted, caselle_targeted))
 
-ci_catches <-
-  read_csv(file = here::here(data_dir, 'cfdw-channel-islands-catches.csv')) %>% group_by(classcode, year) %>%
-  summarise(catch = sum(pounds_caught, na.rm = T))
+
+cdfw_catches <-
+  read_csv(file = here::here("processed_data", 'cdfw-catches.csv')) %>%
+  group_by(sci_name, year) %>%
+  summarise(catch = sum(pounds_caught, na.rm = T)) %>%
+  left_join(
+    life_history_data %>% select(taxa, classcode) %>% mutate(taxa = tolower(taxa)),
+    by = c("sci_name" = "taxa")
+  ) %>%
+  filter(!is.na(classcode))
 
 
-targeting_rank <- ci_catches %>%
-  group_by(classcode) %>%
+
+
+targeting_rank <- cdfw_catches %>%
+  group_by(sci_name) %>%
   summarise(total_catch = sum(catch)) %>%
   arrange(desc(total_catch)) %>%
   ungroup() %>%
   mutate(catch_rank = percent_rank(total_catch))
 
-
 fished_species <-
-  data_frame(classcode = unique(ci_catches$classcode),
+  data_frame(classcode = unique(cdfw_catches$classcode),
              fished = 1)
+
+c99 <- cdfw_catches %>%
+  ungroup() %>%
+  filter(year == min(year)) %>%
+  mutate(year = 1999)
+
+lag_catches <-  cdfw_catches %>%
+  bind_rows(c99) %>%
+  group_by(classcode) %>%
+  arrange(year) %>%
+  mutate(year = year + 1,
+         lag_catch = catch) %>%
+  select(-catch)
 
 if (use_cfdw_fished == T) {
   life_history_data <- life_history_data %>%
@@ -999,10 +1018,12 @@ site_data$rounded_lon <- site_data$lon_wgs84
 
 abundance_data <- pisco_data %>%
   left_join(site_data, by = c("site","side")) %>%
+  left_join(lag_catches %>% select(year, classcode, lag_catch), by = c('year', 'classcode')) %>%
   mutate(data_source = 'pisco') %>%
   nest(-data_source,-classcode) %>%
   bind_rows(kfm_data %>%  mutate(data_source = 'kfm') %>%
               left_join(site_data, by = c("site","side")) %>%
+              left_join(lag_catches %>% select(year, classcode, lag_catch), by = c('year', 'classcode')) %>%
               mutate(year_month = year + (month / 12 - .1),
                      site_side = site_id) %>%
               nest(-data_source,-classcode)
@@ -1016,6 +1037,7 @@ abundance_data <- pisco_data %>%
   mutate(data = map(data, ~ mutate(.x, month = as.numeric(as.character(factor_month))))) %>%
   mutate(data = map(data, ~ left_join(.x, enso, by = c('year', 'month')))) %>%
   mutate(data = map(data, ~ left_join(.x, pdo, by = c('year', 'month')))) %>%
+  mutate(data = map(data, ~ mutate(.x, lag_catch = ifelse(is.na(lag_catch), 0, lag_catch)))) %>%
   mutate(
     data = map2(
       data,
@@ -1051,17 +1073,6 @@ abundance_data <- abundance_data %>%
     .y,
     newdata = .x %>% mutate(quarter = (month/3) %>% ceiling()) %>%  select(year, quarter, rounded_lat, rounded_lon)
   ))))
-
-
-
-if (mpa_only == T){
-
-abundance_data <- abundance_data %>%
-  unnest() %>%
-  filter(eventual_mpa == T) %>%
-  nest(-data_source)
-
-}
 
 save(
   file = glue::glue("{run_dir}/abundance_data.Rdata"),
@@ -1138,6 +1149,7 @@ abundance_data <- abundance_data %>%
                                   mean_canopy,
                                   mean_vis,
                                   mean_depth,
+                                  lag_catch,
                                   factor_year,
                                   classcode,
                                   interp_kelp,
@@ -1150,7 +1162,6 @@ abundance_data <- abundance_data %>%
 
 script_name <- "fit_zissou"
 
-sfa <- safely(fit_zissou)
 
 
 var_options <-  data_frame(var_names = c("pisco_a","pisco_a","kfm"),
@@ -1213,8 +1224,9 @@ model_runs <- cross_df(
 
 if (run_tmb == T){
 
-  future::plan(future::multiprocess, workers = 2)
+  future::plan(future::multiprocess, workers = 3)
 
+  sfz <- safely(fit_zissou)
 
   model_runs <- model_runs %>%
   mutate(tmb_fit = future_pmap(
@@ -1224,7 +1236,7 @@ if (run_tmb == T){
      mpa_only = mpa_only,
      center_scale = center_scale
     ),
-    fit_zissou,
+    sfz,
     run_dir = run_dir,
     script_name = script_name,
     fixed_regions = FALSE,
@@ -1244,11 +1256,13 @@ save(file = paste0(run_dir, '/model_runs.Rdata'),
 }
 
 
-model_runs <- model_runs %>%
+models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
+
+a <- model_runs %>%
+  slice(models_worked) %>%
+  mutate(tmb_fit = map(tmb_fit,"result")) %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
   mutate(did_plot = map(processed_fits, "did_plot"))
-
-
 
 
 

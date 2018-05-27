@@ -10,6 +10,9 @@ fit_zissou <- function(data,
                          'mean_canopy',
                          'mean_depth'
                        ),
+                       non_nested_did_variables = c(
+                         "temp", "kelp", "lag_catch"
+                       ),
                        script_name,
                        seed = 42,
                        run_dir,
@@ -33,8 +36,8 @@ fit_zissou <- function(data,
   if (center_scale == T){
 
     data_recipe <- recipes::recipe(log_density ~ ., data = data) %>%
-      step_center(all_numeric(), -all_outcomes(),-year,-targeted,-geographic_cluster) %>%
-      step_scale(all_numeric(), -all_outcomes(),-year,-targeted,-geographic_cluster)
+      recipes::step_center(all_numeric(), -all_outcomes(),-year,-targeted,-geographic_cluster) %>%
+      recipes::step_scale(all_numeric(), -all_outcomes(),-year,-targeted,-geographic_cluster)
 
     prepped_data <- recipes::prep(data_recipe, data, retain = TRUE)
 
@@ -119,7 +122,8 @@ fit_zissou <- function(data,
     summarise(
               temp = mean(temp_deviation),
               targeted = unique(targeted),
-              kelp = mean(interp_kelp)) %>%
+              kelp = mean(interp_kelp),
+              lag_catch = mean(lag_catch)) %>%
     ungroup()
 
   did_data <- standard_year_species %>%
@@ -128,7 +132,7 @@ fit_zissou <- function(data,
     arrange(classcode, year)
 
   non_nested_did_data <- did_data %>%
-    select(temp, kelp) %>%
+    select(non_nested_did_variables) %>%
     # select(enso, pdo, temp) %>%
     mutate(intercept = 1)
 
