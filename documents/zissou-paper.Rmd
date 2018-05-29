@@ -2,8 +2,8 @@
 title: "Predicting and Detecting the Regional-Scale Conservation Impacts of Marine Protected Areas"
 author: "Dan Ovando"
 output: 
-  bookdown::html_document2:
   bookdown::pdf_document2:
+  bookdown::html_document2:
 bibliography: dissertation.bib
 linkcolor: blue
 biblio-style: apalike
@@ -22,6 +22,7 @@ library(patchwork)
 library(rpart)
 library(extrafont)
 library(caret)
+library(ggsci)
 library(tidyverse)
 extrafont::loadfonts()
 
@@ -55,15 +56,24 @@ load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
-base_run <- model_runs %>% 
-  filter(var_names == "a", mpa_only == FALSE, center_scale == TRUE)
-  
 
+models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
+
+model_runs <- model_runs %>%
+  slice(models_worked) %>%
+  mutate(tmb_fit = map(tmb_fit,"result")) %>%
+  mutate(processed_fits = map(tmb_fit, process_fits)) %>%
+  mutate(did_plot = map(processed_fits, "did_plot"))
+
+base_run <- model_runs %>% 
+  slice(1) #%>% 
+  # filter(var_names == "pisco_a", mpa_only == FALSE, center_scale == TRUE)
+  
 fitted_data <- base_run$data[[1]]
 
-ahnold_fit <- base_run$tmb_fit[[1]]
+zissou_fit <- base_run$tmb_fit[[1]]
 
-report <- base_run$tmb_fit[[1]]$ahnold_estimates
+report <- base_run$tmb_fit[[1]]
 
 site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
@@ -85,37 +95,37 @@ site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
   mutate(eventual_mpa = (year_mpa > 0))
 
 
- seen_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
+ seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seen_non_nested_betas") %>%
    rename(group = variable) %>%
-   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
+   mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
 
- seeing_non_nested_betas <- ahnold_fit$ahnold_estimates %>%
+ seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seeing_non_nested_betas") %>%
    rename(group = variable) %>%
-   mutate(variable  = ahnold_fit$seen_cdata$x_non_nested %>% colnames())
+   mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
 
- seen_year_species_betas <- ahnold_fit$ahnold_estimates %>%
+ seen_year_species_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seen_year_species_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
+   mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
 
- seeing_year_species_betas <- ahnold_fit$ahnold_estimates %>%
+ seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seeing_year_species_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_year_species %>% colnames())
+   mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
 
- seen_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
+ seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seen_region_cluster_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
+   mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
 
- seeing_region_cluster_betas <- ahnold_fit$ahnold_estimates %>%
+ seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seeing_region_cluster_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = ahnold_fit$seen_cdata$x_region_cluster %>% colnames())
+   mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
 
- did_betas <- ahnold_fit$ahnold_estimates %>%
+ did_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "mpa_effect") %>%
    mutate(group = variable) %>%
    mutate(year = fitted_data$year %>% unique())
@@ -581,22 +591,9 @@ Theory and simulation testing indicate then that while the regional-scale conser
 
 Our identification strategy for this case study is to use unfished species as our control for unaccounted for environmental trends before and after MPA implementation (in 2003). In short, the model works by estimating the difference in the trends between fished and unfished species post MPA (see nice infographic here). We fit this model using a hierarchichal mixed-effect framework in Template Model Builder [TMB, @Kristensen2016]. The model consists broadly of three levels, the first (starting from the "bottom") being transect-level densities of fish species observed by PISCO, which are standardized into an index of biomass abundance to account for both probability of detection and expected density as a result of both abundance and changes in covariates such as observer skill [see @Maunder2004]. For the second stage, we break the abundance indices into targeted and non-targeted speices (per the classifications in the PISCO data), and estimate the mean trend of each group. In the third step, we estimate the difference in the mean trend between the targeted and non-targeted species, which under the right set of circumstances should reflect the causal effect of the MPAs on the outcome of interest (in this case biomass density of fish). 
 
-The MPA effect is incorporated into the model as follows. While individual species in the survey have their own abundance trends, the model assumes that abundance of targeted and non-targeted species each come from a common distribution. Assuming parallel pre-treatment trend (pre-treatment correlation between targeted and non-targeted species is 0.6, Fig.\@ref(fig:cor-plot)), the trend in the underlying mean abundance of non-targeted species post MPA serves as our control for unobserved environmental variables that could also affect the trends in the mean density of targeted species. So, by this logic, we should see no significant divergence between the targeted and non-targeted abundance trends pre "treatment" (implementation of the MPAs), and then some divergence between the treated group (targeted species) and the non-treated group (non-targeted) post treament (if the treatment has an effect). 
+The MPA effect is incorporated into the model as follows. While individual species in the survey have their own abundance trends, the model assumes that abundance of targeted and non-targeted species each come from a common distribution. Assuming parallel pre-treatment trends, which visual (Fig.\@ref(fig:raw-trend)) and statistical (Fig.\@ref(fig:did-plot)) assessment do not rule out, the trend in the underlying mean abundance of non-targeted species post MPA serves as our control for unobserved environmental variables that could also affect the trends in the mean density of targeted species. So, by this logic, we should see no significant divergence between the targeted and non-targeted abundance trends pre "treatment" (implementation of the MPAs), and then some divergence between the treated group (targeted species) and the non-treated group (non-targeted) post treament (if the treatment has an effect). 
 
-Under these idealized circumstances, the magnitude of this divergence between the treated (targeted) and non-treated (non-targeted) groups post treatment is an estimate of the causal effect of the treatment (the implementation of MPAs). It is important to consider under what exactly this model controls for (and what it does not). Under the parallel trends assumption, we assume that both the targeted and non-targeted fishes respond the same way to non-modeled environmental drivers. For example, the Channel Islands region experienced a major El Niño event from 2014 to 2016. While we include variables like temperature and kelp in our model, these are clearly not the only factors affected by El Niño. However, if the parallel trends assumption is correct, the El Niño effects that are not explicitly included in the model are controlled for by the trend of the non-targeted fishes. However, this clearly does not control for differences in responses to non-modeled variables between the treated and non-treated groups. For example, the model contains data from the pre-MPA years of 2000 to 2002. The parallel trends assumption appears plausible over that time period (Fig.\@ref(fig:cor-plot)). However, this pre-treatment period does not include an El Niño, while the post-treatement period does. Therefore, while the parallel trends assumption looks plausible from the pre-treatment data, it is possible that targeted and non-targeted fishes respond in a systematically different manner to El Niño that are not explicitly included in the model, therefor violating the parallel trends assumption and invalidating the "causal" interpretation of the model. Similarly, the model cannot account for additional shocks to  the targeted species beyond the MPAs. For example, while we control for total landings of each targeted species in the Santa Barbara region, it is possible that within that region fishing effort became increasingly concentrated around the Islands, driving down local densities of fished species. The model cannot control for this unless the appropriate data are correctly incorporated into the model explicitly. The model also assumes that the targeted and non-targeted fishes do not directly affect each other. This assumption is clearly violated on some level: all the fishes in this analysis are part of the same ecosystem and therefore interact on some level. For example, if the protection of fished predatory fishes results in increased mortality of non-targeted fishes, the model would attribute that as an increased MPA effect (greater divergence between the abundance of targeted and non-targeted species). Given the time scale of analysis (15 years of protection), we do not feel that massive trophic cascades are likely to have developed yet (XX), and there is little evidence of negative correlations between individual targeted and non-targeted fishes. 
-
-
-With these caveats in place, prior to exmaining any model results, how should we interpret the resulting regression coefficients? 
-
-An alternative to this identification strategy would be to simply to compare densities of targeted species over time compared to their pre-MPA densities, controlling for observable potentially confounding factors (temperature, kelp, observer skill, etc). This approach does not depend on a parallel trends assumption, but instead requires that we assume that we have controlled for all other non-MPA variables that affect densities. xx do this analysis xx
-
-
-
-
-```{r}
-
-
-```
+Under these idealized circumstances, the magnitude of this divergence between the treated (targeted) and non-treated (non-targeted) groups post treatment is an estimate of the causal effect of the treatment (the implementation of MPAs). It is important to consider under what exactly this model controls for (and what it does not). Under the parallel trends assumption, we assume that both the targeted and non-targeted fishes respond the same way to non-modeled environmental drivers. For example, the Channel Islands region experienced a major El Niño event from 2014 to 2016. While we include variables like temperature and kelp in our model, these are clearly not the only factors affected by El Niño. However, if the parallel trends assumption is correct, the El Niño effects that are not explicitly included in the model are controlled for by the trend of the non-targeted fishes. However, this clearly does not control for differences in responses to non-modeled variables between the treated and non-treated groups. For example, the model contains data from the pre-MPA years of 2000 to 2002. The parallel trends assumption appears plausible over that time period (Fig.\@ref(fig:did-plot)). However, this pre-treatment period does not include an El Niño, while the post-treatement period does. Therefore, while the parallel trends assumption looks plausible from the pre-treatment data, it is possible that targeted and non-targeted fishes respond in a systematically different manner to El Niño that are not explicitly included in the model, therefor violating the parallel trends assumption and invalidating the "causal" interpretation of the model. Similarly, the model cannot account for additional shocks to  the targeted species beyond the MPAs. For example, while we control for total landings of each targeted species in the Santa Barbara region, it is possible that within that region fishing effort became increasingly concentrated around the Islands, driving down local densities of fished species. The model cannot control for this unless the appropriate data are correctly incorporated into the model explicitly. The model also assumes that the targeted and non-targeted fishes do not directly affect each other. This assumption is clearly violated on some level: all the fishes in this analysis are part of the same ecosystem and therefore interact on some level. For example, if the protection of fished predatory fishes results in increased mortality of non-targeted fishes, the model would attribute that as an increased MPA effect (greater divergence between the abundance of targeted and non-targeted species). Given the time scale of analysis (15 years of protection), we do not feel that massive trophic cascades are likely to have developed yet (XX, citation on time to trophic cascades), and there is little evidence of negative correlations between individual targeted and non-targeted fishes in the data (XX).
 
 
 Before examining regression results, we can graphically examine the trends in mean densities for targeted and non-targeted species over time. We centered and scaled the mean annual densities for each species included in the analysis in order to compare the trends across species groups. Grouping the species by targeted and non-targeted status, we see evidence of pre-treatment parallel trends in the abundance indicides, and of a divergence post MPA implementation. Beginning in around 2007 abundances of targeted species appear to start increaseing faster than non-targeted species. However, from 2012 onward abundances of targeted species appear to be declining relative to the trend in the non-targeted species. Not controlling for any other factors that may affect fish abundances, the data suggests a possible increase in targeted species abundance (relative to the "control" trend of the non-targeted species) at first, followed by a decrease in the most recent years (Fig.\@ref(fig:raw-trend)). 
@@ -614,7 +611,11 @@ base_run$data[[1]] %>%
   ggplot(aes(year, smd, color = targeted == 1, fill = targeted == 1)) + 
   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
   geom_line(aes(group = interaction(targeted, classcode)), alpha = 0.25) +
-  geom_smooth()
+  geom_smooth() + 
+  scale_color_d3(name = "Targeted?") + 
+  scale_fill_d3(name = "Targeted?") +
+  labs(y = "Centered and Scaled Mean Density", x = "Year")
+
   
 ```
 
@@ -630,6 +631,37 @@ did_plot
 
 
 ## Discussion
+
+MPAs are playing a growing role in the management of marine resources around the world. While the primary purpose of MPAs is often to protect species and habitats within their borders, they are also looked to to provide spillover benefits to the ecosystems and fisheries surrounding them. The existence and magintude of these spillover benefits has been a source of substantial debate for a some time, with the bulk of the conversation centered around qualitative or theoretical examinations of particular drivers of spillover [citations], or in detecting empirical evidence of the existence of spillover, but not the net population effects of MPAs. As many of the MPA networks around the world become mature enough for analysis, it is critical that we take a step to consider what evidence we can expect to observe, and what we have in fact seen in natural systems. 
+
+While a large body of literature has discussed the factors affecting the regional-scale conservation outcomes of MPAs [citations], we know of no other study that has synthesized much of the key theory predictions of the literature into a comprehensive simulation framework to address the cumulative impact of these drivers on the regional-scale conservation effects of MPAs. Our results present several important insights for undestanding what we might expect the effects of MPAs outside their borders to be. First, we see that incorporating a broad, but still limited, set of MPA and fishery characteristics, produces a vast array of potential outcomes, from actual net conservation losses (in cases for example of short-term constant-catch, moderate pre-MPA depletion, and smaller MPA sizes), to massive conservation gains (e.g large MPAs in a very depleted fishery). These wide ranges of outcomes persisted even in extreme cases though; small effects were possible in very depleted fisheries, and larger effects were possible in cases of moderate depletion. One important result of this analysis is that looking across the range of "smallerXX" MPAs (covering 25% or less of the region), the median MPA effect size was relatively small, both in percentage gains relative to BAU and in percentage of unfished biomas recovered, up until the fishery was strongly depleted (Fig.\@ref(fig:f-and-s-plot)-\@ref(fig:pop-f-and-s-plot)).
+
+This has important implications for our ability to empirically detect these effects in natural systems. Marine environments are complex and noisy systems, subject to both large amounts of natural variation and measurement error. Our simulation results suggest then that it will be relatively difficult to detect the regional-scale effects of MPAs in many cases of smaller MPAs and moderately depleted fisheries; separating out say the median simuated population effect of a `r median(short_term$pop_effect`% of unfished biomass is a difficult task even in a carefully studied environment. With that in mind then, we should not be surprised that our analys was unable to determine a clear regional divergence between the densities of targeted and non-targeted species throughout the Channel Islands in the 15 years since the newest set of MPAs were implemented in that region. 
+
+What can we then infer about the regional conservation effects of the Channel Island MPAs based on the available data and our analysis? At the simplest level, we cannot detect a significant divergence in densities of targeted and non-targeted fishes over the 15 years since the implementation of MPAs in the Channel Islands. However, it is important to note that we also cannot say that there is no divergence. The 95% confidence intervals surrounding our year-to-year estimates of the divergences have a mean range of XX, and cross zero in every year. Interpreting these coefficients as more or less percentage differences in the densities of targeted and non-targeted, we can then rule out up to a XX% increase, and a XX% decrease, as being unsupported by the data. The mean estimated effect size was XX, which corresponds closely with the median MPA effects predicted by our simulation analysis. 
+
+What to do?
+
+Access to heuristics and simulation analyses for data-poor fisheries
+
+Support monitoring and funding for data-rich; we need good data to back these tings up
+
+
+
+We do not yet address the question of fishery spillover
+
+
+
+Looking at the raw differences would lead one to think that MPAs may have caused a decrease in densities. But, the trend in the non-targeted species suggests that something environmental (or observational) was going on, therefore the identification strategy does provide value. 
+
+Ambitious to say though with confidence that this is the MPA effect. More so, that we can rule out massive increases or decreases in targeted species relative to non-targeted, and that the mean and range of effect sizes are consistent with what theory might tell us...
+
+So what?
+
+With these caveats in place, prior to exmaining any model results, how should we interpret the resulting regression coefficients? The coefficients of interest are the difference 
+
+An alternative to this identification strategy would be to simply to compare densities of targeted species over time compared to their pre-MPA densities, controlling for observable potentially confounding factors (temperature, kelp, observer skill, etc). This approach does not depend on a parallel trends assumption, but in order to identify the MPA effect instead requires that we assume that we have controlled for all other non-MPA variables that affect densities. We explore this anlysis in the SI (section XX)... 
+
 
 - MPAs increasingly pointed to for "regional" benefits
 
@@ -789,7 +821,7 @@ region_cluster_plots
 
 ```{r targ-plot, fig.cap = "Trends in standardized mean abundance of targeted and non-targeted species"}
 
-targeted_trends <- report %>% 
+targeted_trends <- report$zissou_estimates %>% 
   filter(str_detect(variable, "targeted_did")) %>% 
   group_by(variable) %>% 
   mutate(year = unique(fitted_data$year)) %>% 
@@ -811,7 +843,7 @@ targeted_trends
 
 ```{r}
 
-fit_report <- base_run$tmb_fit[[1]]$ahnold_report
+fit_report <- base_run$tmb_fit[[1]]$zissou_report
 
 observed_seen <- base_run$tmb_fit[[1]]$zissou_data$log_density
   
@@ -874,77 +906,6 @@ seeing_diagnostics %>%
 ```
 
 
-### Correlations
-
-FIX THIS
-
-```{r cor-plot, fig.cap = "Pre-MPA correlation of centered and scaled targeted and non-targeted fish abundance indicies"}
-life_history <- fitted_data %>%
-  select(classcode, targeted) %>%
-  unique() %>%
-  mutate(numeric_classcode = as.numeric(as.factor(classcode)))
-
-
-numeric_species_key <-
-  data_frame(classcode = unique(fitted_data$classcode)) %>%
-  arrange(classcode) %>%
-  mutate(numeric_classcode = 1:nrow(.))
-
-raw <- fitted_data %>%
-  group_by(year, classcode, targeted) %>%
-  summarise(md = mean(exp(log_density))) %>%
-  group_by(classcode) %>%
-  mutate(smd = (md - mean(md))/(sd(md))) %>%
-  ungroup() %>%
-  left_join(numeric_species_key, by = "classcode")
-
-
-ahnold_estimates <- base_run$tmb_fit[[1]]$ahnold_estimates
-
-zissou_report <- base_run$tmb_fit[[1]]$ahnold_report
-
-years <- fitted_data$year %>% unique
-  
-abundance_trends <- data_frame(abundance_hat = zissou_report$abundance_hat,
-                               classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
-  mutate(log_abundance_hat = log(abundance_hat)) %>%
-  group_by(classcode) %>%
-  mutate(year = 1999 + 1:length(abundance_hat)) %>%
-  mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
-  ungroup() %>%
-  rename(numeric_classcode = classcode) %>%
-  left_join(life_history, by = "numeric_classcode")
-
-pre_treat_corr <- abundance_trends %>% 
-  filter(year <= 2003) %>% 
-  select(year,targeted, scaled_abundance_hat) %>% 
-group_by(year, targeted) %>%   
-  mutate(id = 1:length(scaled_abundance_hat)) %>% 
-  spread(targeted, scaled_abundance_hat) %>% 
-  ungroup() %>% 
-  na.omit()
-
-pre_cor <- round(cor(x = pre_treat_corr$`1`, y = pre_treat_corr$`0`),2)
-
-pre_cor_plot <- pre_treat_corr %>% 
-  ggplot(aes(`0`,`1`)) + 
-  geom_point() + 
-  geom_abline(aes(intercept = 0, slope = 1), linetype = 2, color = "red") + 
-  labs(x = "Non-Targeted Abundance Index", y = "Targeted Abundance Index", caption = glue::glue("Pearson correlation coefficient = {pre_cor}"))
-
-pre_cor_plot
-
-```
-
-
-
-```{r}
-base_run$non_nested_variables
-
-```
-
-
-
 ## Data Summaries
 data coverage
 
@@ -992,7 +953,25 @@ Standardized vs raw means
 ```{r raw-v-stand-plot, fig.cap = "Raw (points) and standardized (lines) indices of abundance for each of the species included in the analysis"}
 
 
-ahnold_estimates %>% 
+
+life_history <- fitted_data %>%
+  select(classcode) %>%
+  unique() %>%
+  mutate(numeric_classcode = as.numeric(as.factor(classcode)))
+
+raw <- fitted_data %>%
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
+
+years <- unique(fitted_data$year)
+
+
+zissou_fit$zissou_estimates %>% 
   filter(str_detect(variable, "targeted_did_betas")) %>% 
   group_by(variable) %>% 
   mutate(year = years) %>% 
@@ -1000,7 +979,7 @@ ahnold_estimates %>%
   geom_line(aes(year, estimate, color = variable)) +
   geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable))
   
-abundance_trends <- data_frame(abundance_hat = zissou_report$abundance_hat,
+abundance_trends <- data_frame(abundance_hat = fit_report$abundance_hat,
                                classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
   mutate(log_abundance_hat = log(abundance_hat)) %>%
   group_by(classcode) %>%
@@ -1010,14 +989,14 @@ abundance_trends <- data_frame(abundance_hat = zissou_report$abundance_hat,
   rename(numeric_classcode = classcode) %>%
   left_join(life_history, by = "numeric_classcode" )
 
-abundance_trends %>%
-  ggplot(aes(year, log(abundance_hat), color = factor(classcode))) +
-  geom_line(show.legend = F) +
-  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
-  facet_wrap(~classcode) +
-  theme_minimal()
 
-
+# 
+# abundance_trends %>%
+#   ggplot(aes(year, log(abundance_hat), color = factor(classcode))) +
+#   geom_line(show.legend = F) +
+#   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+#   facet_wrap(~classcode) +
+#   theme_minimal()
 
 abundance_trends %>%
   ggplot(aes(year, scaled_abundance_hat, color = factor(classcode))) +
@@ -1029,6 +1008,32 @@ abundance_trends %>%
 
 ```
 
+
+
+Dealing with "missing" observations is a critical challenge in any field observation study. If no observations of a given fish species were recorded on a given transect, should the density of that species on that transect be marked as zero, and influence the estiamate of the overall mean density accordingly? The obvious answer seems to be yes, but what if that species simply does not live in the environment covered by a particular transect? Should...
+
+For our base runs, we assign a value of zero density on a given transect for any fish species that has been observed at least once at a given site at any time in our data but was not observed on that particular transect. If that species was never observed at that site, we do not include a zero for that species. Our rationale for this is that given the shifting nature of the sampled sites, and the intensity of sampling at those sites, we do not want to skew density trends by changes in the amound of suitable habitat for a given species sampled. However, this is clearly a strong assumption. For example, perhaps the decreasing trend in mean densities from 2000 to 2004 is due to increased number of sites (and therefore zeros) included in the data. To assess the potential importance of this choice, we can compare the mean densities of targeted and non-targeted species over time with the added zeros (Fig.\@ref(fig:raw-trend)) to the mean densities using only positive observations (i.e. not including any zeros in the data, (Fig.\@ref(fig:nozero-raw-trend)). The trends in the raw densities are nearly identical whether or not zeros are included, providing strong evidence that our choice of how to incorporate missing observations into the data are not strongly influencing our overall results. 
+
+```{r nozero-raw-trend, fig.cap = "Centered and scaled mean annual density, excluding zeros, of included species (points) and smoothed means of targeted and non-targeted groups (line) over time" }
+
+base_run$data[[1]] %>% 
+  filter(any_seen == T) %>% 
+  select(year, targeted,classcode, log_density, any_seen) %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  group_by(classcode,targeted, year) %>% 
+  summarise(md = mean(density)) %>% 
+  group_by(classcode,targeted) %>% 
+  mutate(smd = (md - mean(md)) / sd(md)) %>% 
+  ggplot(aes(year, smd, color = targeted == 1, fill = targeted == 1)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(aes(group = interaction(targeted, classcode)), alpha = 0.25) +
+  geom_smooth() +
+  scale_color_d3(name = "Targeted?") + 
+  scale_fill_d3(name = "Targeted?") +
+  labs(y = "Centered and Scaled Mean Density", x = "Year")
+
+
+```
 
 
 
@@ -1054,20 +1059,33 @@ base_run$data[[1]] %>%
 
 
 
-DiD fit to various forms of the raw means etc. 
 
-Repeat basic analysis. 
+## Selection on Observables
+
+Our proposed identification strategy attempts to control for non-MPA (and not directly modeled) related changes in abundances through the trend in the non-targeted species. However, a simpler alternative would be to simply compare densities before-and-after MPA implementation, while explicitly controlling for non-MPA related factors that we believe may have some effect on densities (a "selection on observables" strategy). To that end, we fit a simple mixed-effects regression that models log densities (of positive observations only for simplicities sake here) as a function of temperature deviations, kelp cover, observer experience, random effects for species and region, and fixed effects for each year in the data (omitting the year 2000). 
+
+Using this model, densities of targeted species appear to have been declining steadily since 2000, and appear to have plateued off since the implementation of MPAs in 2003. Without an identification strategy such as the one employed in this study then, all we could conclude is that densities appear to be lower post-MPA, and have not increased substantially over time (Fig.\@ref(fig:obs-plot)).  
+
+
+```{r obs-plot, fig.cap = "Selection on observables identification strategy. Plotted estiamtes are fixed effects on of year on log-density (relative to the year 2000), controlling for observer experience, temperature deviations, and kelp cover, with random effects for species and region"}
+
+test <- lme4::lmer(log_density~ factor_year + cumulative_n_obs  + temp_deviation + interp_kelp + (1|classcode) + (1|region), data = fitted_data %>% filter(targeted == 1, any_seen == T))
+
+broom::tidy(test) %>% 
+  filter(str_detect(term, "factor_year")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) + 
+  labs(y = "Estimated Difference", x = "Year")
+
+```
+
+## Repeat basic analysis. 
 
 ```{r, eval = F}
 
-raw <- fitted_data %>%
-  group_by(year, classcode, targeted) %>%
-  summarise(md = mean(exp(log_density)),
-            mt = mean(temp_deviation)) %>%
-  group_by(classcode) %>%
-  mutate(smd = (md - mean(md))/(sd(md))) %>%
-  ungroup() %>%
-  left_join(numeric_species_key, by = "classcode")
+
 
 raw_region <- fitted_data %>%
   group_by(year, region,classcode, targeted) %>%

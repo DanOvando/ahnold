@@ -23,9 +23,10 @@ library(extrafont)
 library(hrbrthemes)
 library(caret)
 library(here)
+library(doParallel)
 library(tidyverse)
 library(recipes)
-library(furrr)
+# library(furrr)
 
 functions <- list.files(here::here("functions"))
 
@@ -111,9 +112,7 @@ rstan_options(auto_write = TRUE)
 
 run_tmb <- TRUE
 
-n_cores <- 1
-
-future::plan(future::multiprocess, workers = n_cores)
+n_cores <- 3
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -1224,26 +1223,49 @@ model_runs <- cross_df(
 
 if (run_tmb == T){
 
-  future::plan(future::multiprocess, workers = 3)
+  # future::plan(future::multiprocess, workers = 4)
 
   sfz <- safely(fit_zissou)
 
-  model_runs <- model_runs %>%
-  mutate(tmb_fit = future_pmap(
-    list(
-      data = data,
-      non_nested_variables = non_nested_variables,
-     mpa_only = mpa_only,
-     center_scale = center_scale
-    ),
-    sfz,
-    run_dir = run_dir,
-    script_name = script_name,
-    fixed_regions = FALSE,
-    include_intercept = FALSE,
-    fixed_did = FALSE,
-    .progress = T
-  ))
+  doParallel::registerDoParallel(cores = n_cores)
+
+  fits <- foreach::foreach(i = 1:nrow(model_runs)) %dopar% {
+
+    write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
+          append = T)
+
+    result <- sfz(data = model_runs$data[[i]],
+                  non_nested_variables = model_runs$non_nested_variables[[i]],
+                  mpa_only = model_runs$mpa_only[[i]],
+                  center_scale = model_runs$center_scale[[i]],
+                  run_dir = run_dir,
+                  script_name = script_name,
+                  fixed_regions = FALSE,
+                  include_intercept = FALSE,
+                  fixed_did = FALSE
+    )
+
+  }
+
+  model_runs$tmb_fit <- fits
+
+  # model_runs <- model_runs %>%
+  #   slice(1) %>%
+  # mutate(tmb_fit = future_pmap(
+  #   list(
+  #     data = data,
+  #     non_nested_variables = non_nested_variables,
+  #    mpa_only = mpa_only,
+  #    center_scale = center_scale
+  #   ),
+  #   sfz,
+  #   run_dir = run_dir,
+  #   script_name = script_name,
+  #   fixed_regions = FALSE,
+  #   include_intercept = FALSE,
+  #   fixed_did = FALSE,
+  #   .progress = T
+  # ))
 
 
 save(file = paste0(run_dir, '/model_runs.Rdata'),
