@@ -15,7 +15,7 @@ make_c_worthy <- function(subdata,
         .
       }
     } %>%
-    spread_factors(drop_one = T) %>%{
+    spread_factors(drop_one = include_intercept) %>%{
       if (center_and_scale == T){
         purrrlyr::dmap(.,center_scale)
 
@@ -46,7 +46,7 @@ make_c_worthy <- function(subdata,
  #   select(-index) %>%
  #   set_names(paste0("pdo_",colnames(.)))
 
- x_non_nested <- x_non_nested #%>%
+ # x_non_nested <- x_non_nested %>%
    # bind_cols(x_enso,
    #           x_pdo)
 

@@ -112,7 +112,7 @@ rstan_options(auto_write = TRUE)
 
 run_tmb <- TRUE
 
-n_cores <- 3
+n_cores <- 4
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -1163,17 +1163,9 @@ script_name <- "fit_zissou"
 
 
 
-var_options <-  data_frame(var_names = c("pisco_a","pisco_a","kfm"),
+var_options <-  data_frame(var_names = c("pisco_a","kfm"),
                            non_nested_variables =
                              list(c(
-                               'site_side',
-                               'level',
-                               'factor_month',
-                               'cumulative_n_obs',
-                               'surge',
-                               'mean_vis',
-                               'mean_depth'
-                             ),c(
                                'site_side',
                                'level',
                                'factor_month',
@@ -1219,54 +1211,51 @@ model_runs <- cross_df(
   filter(!(data_source == "kfm" & str_detect(var_names,"pisco"))) %>%
   filter(!(data_source == "kfm" & mpa_only == TRUE))
 
+model_runs <- model_runs %>%
+  filter((data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE) |
+           data_source == "kfm" & center_scale == TRUE)
 
+# model_runs <- model_runs %>%
+#   filter(data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE)
 
 if (run_tmb == T){
 
+  if (file.exists("fit-progress.txt")){
+  file.remove("fit-progress.txt")
+  }
+
   # future::plan(future::multiprocess, workers = 4)
 
-  sfz <- safely(fit_zissou)
 
   doParallel::registerDoParallel(cores = n_cores)
-
+  #
   fits <- foreach::foreach(i = 1:nrow(model_runs)) %dopar% {
 
-    write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
-          append = T)
+  # fits <- list()
 
-    result <- sfz(data = model_runs$data[[i]],
+  # for (i in 1:nrow(model_runs)){
+
+    sfz <- safely(fit_zissou)
+
+    fits <- sfz(data = model_runs$data[[i]],
                   non_nested_variables = model_runs$non_nested_variables[[i]],
                   mpa_only = model_runs$mpa_only[[i]],
                   center_scale = model_runs$center_scale[[i]],
                   run_dir = run_dir,
                   script_name = script_name,
                   fixed_regions = FALSE,
-                  include_intercept = FALSE,
+                  include_intercept = TRUE,
                   fixed_did = FALSE
     )
 
-  }
+    write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
+          append = T)
+
+    out <- fits
+
+    } # close dopar
 
   model_runs$tmb_fit <- fits
-
-  # model_runs <- model_runs %>%
-  #   slice(1) %>%
-  # mutate(tmb_fit = future_pmap(
-  #   list(
-  #     data = data,
-  #     non_nested_variables = non_nested_variables,
-  #    mpa_only = mpa_only,
-  #    center_scale = center_scale
-  #   ),
-  #   sfz,
-  #   run_dir = run_dir,
-  #   script_name = script_name,
-  #   fixed_regions = FALSE,
-  #   include_intercept = FALSE,
-  #   fixed_did = FALSE,
-  #   .progress = T
-  # ))
-
 
 save(file = paste0(run_dir, '/model_runs.Rdata'),
      model_runs)
@@ -1280,7 +1269,7 @@ save(file = paste0(run_dir, '/model_runs.Rdata'),
 
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
-a <- model_runs %>%
+model_runs <- model_runs %>%
   slice(models_worked) %>%
   mutate(tmb_fit = map(tmb_fit,"result")) %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
