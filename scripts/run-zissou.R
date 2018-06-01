@@ -8,6 +8,7 @@
 
 
 # setup ---------------------------------------------------------------
+set.seed(42)
 library(scales)
 library(viridis)
 library(ggmap)
@@ -112,7 +113,7 @@ rstan_options(auto_write = TRUE)
 
 run_tmb <- TRUE
 
-n_cores <- 4
+n_cores <- 1
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -1211,9 +1212,9 @@ model_runs <- cross_df(
   filter(!(data_source == "kfm" & str_detect(var_names,"pisco"))) %>%
   filter(!(data_source == "kfm" & mpa_only == TRUE))
 
-model_runs <- model_runs %>%
-  filter((data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE) |
-           data_source == "kfm" & center_scale == TRUE)
+# model_runs <- model_runs %>%
+#   filter((data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE) |
+#            data_source == "kfm" & center_scale == TRUE)
 
 # model_runs <- model_runs %>%
 #   filter(data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE)
@@ -1226,8 +1227,7 @@ if (run_tmb == T){
 
   # future::plan(future::multiprocess, workers = 4)
 
-
-  doParallel::registerDoParallel(cores = n_cores)
+  doParallel::registerDoParallel(cores = 1)
   #
   fits <- foreach::foreach(i = 1:nrow(model_runs)) %dopar% {
 
@@ -1245,7 +1245,13 @@ if (run_tmb == T){
                   script_name = script_name,
                   fixed_regions = FALSE,
                   include_intercept = TRUE,
-                  fixed_did = FALSE
+                  fixed_did = FALSE,
+                non_nested_did_variables = c(
+                  "temp"
+                )
+
+
+
     )
 
     write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
@@ -1269,8 +1275,8 @@ save(file = paste0(run_dir, '/model_runs.Rdata'),
 
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
-model_runs <- model_runs %>%
-  slice(models_worked) %>%
+models_worked <- model_runs %>%
+  filter(models_worked) %>%
   mutate(tmb_fit = map(tmb_fit,"result")) %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
   mutate(did_plot = map(processed_fits, "did_plot"))

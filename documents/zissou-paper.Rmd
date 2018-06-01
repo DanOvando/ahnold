@@ -1,6 +1,5 @@
 ---
 title: "Predicting and Detecting the Regional-Scale Conservation Impacts of Marine Protected Areas"
-author: "Dan Ovando"
 output: 
   bookdown::pdf_document2:
   bookdown::html_document2:
@@ -37,10 +36,7 @@ burn_years <- 20
 num_patches <- 25
 
 
-  zissou_theme <- theme_ipsum(base_size = 10, axis_title_size = 14, strip_text_size = 14)
 
-  theme_set(zissou_theme)
-  
 
   samps <- 20000
  
@@ -52,10 +48,14 @@ experiment_dir <- here::here("results",run_name, "experiments")
 
 load(file = here::here("results",run_name, "rawish_zissou_data.Rdata"))
 
-load(file = here::here("results",run_name, "model_runs.Rdata"))
+load(file = here::here("results",run_name, "model_runs_good.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
+  zissou_theme <- theme_ipsum(base_size = 10, axis_title_size = 12, strip_text_size = 12)
+
+  theme_set(zissou_theme)
+  
 
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
@@ -321,7 +321,7 @@ big_effect <- round(100*median(short_term$mpa_effect[short_term$depletion > 0.5 
 ```
 
 
-Across this range of scenarios, we see that the median simulated equilibrium MPA effect (percentage change in total biomass) was `r round(100*median(eqo$mpa_effect))`%, with a min of `r round(100*min(eqo$mpa_effect))`% and a max of over `r round(100*max(eqo$mpa_effect))`%. We also see that while large percentage increases in biomass can accrue relatively rapidly under some circumstances, increases of over 10% took approximately 10 years to achieve for 50% of the simulated fisheries (Fig.\@ref(fig:trend-effect)). It is also clear from the simulations that even constrained by reasonable states of nature, a vast array of regional conservation MPA effects are possible. The exact expected MPA effect for a given fishery will depend on a complex set of interactions among fishery variables (XX regression tree analysis?). However, two of the most critical factors affecting the direction and magnitude of the MPA effect are the degree of overfishing present before (and continuing after) MPA implementation, and the size of the MPA, and so we focus on the effects of these two variables on regional MPA effects 15 years after MPA implementation (to mimic the time since implementation of the Channel Islands MPAs at the time of this publication). Across our simulated fisheries, the median 15 year simulated MPA effect was `r round(100*median(short_term$mpa_effect))`%. For cases where "small" MPAs (smaller than 25%) were implemented in relatively unexploited fisheries (depletion < 50%), the median MPA effect was `r small_effect`%. For moderate depletion (50% to 75%), MPA sizes from 1% to 50% produced median MPA effects of `r medium_effect`%, while for depletion above 75% the median MPA effect from was `r big_effect`% (Fig.\@ref(fig:f-and-s-plot)-A). The median MPA effect increased with both MPA size and depletion, but it is important to note that the ranges around these median values are extremely wide (Fig.\@ref(fig:f-and-s-plot)-B).
+Across this range of scenarios, we see that the median simulated equilibrium regional effect (percentage change in total biomass) was `r round(100*median(eqo$mpa_effect))`%, with a min of `r round(100*min(eqo$mpa_effect))`% and a max of over `r round(100*max(eqo$mpa_effect))`%. We also see that while large percentage increases in biomass can accrue relatively rapidly under some circumstances, increases of over 10% took approximately 10 years to achieve for 50% of the simulated fisheries (Fig.\@ref(fig:trend-effect)). It is also clear from the simulations that even constrained by reasonable states of nature, a vast array of regional conservation MPA effects are possible. The exact expected regional effect for a given fishery will depend on a complex set of interactions among fishery variables (XX regression tree analysis?). However, two of the most critical factors affecting the direction and magnitude of the regional effect are the degree of overfishing present before (and continuing after) MPA implementation, and the size of the MPA, and so we focus on the effects of these two variables on regional MPA effects 15 years after MPA implementation (to mimic the time since implementation of the Channel Islands MPAs at the time of this publication). Across our simulated fisheries, the median 15 year simulated regional effect was `r round(100*median(short_term$mpa_effect))`%. For cases where "small" MPAs (smaller than 25%) were implemented in relatively unexploited fisheries (depletion < 50%), the median regional effect was `r small_effect`%. For moderate depletion (50% to 75%), MPA sizes from 1% to 50% produced median MPA effects of `r medium_effect`%, while for depletion above 75% the median regional effect from was `r big_effect`% (Fig.\@ref(fig:f-and-s-plot)-A). The median regional effect increased with both MPA size and depletion, but it is important to note that the ranges around these median values are extremely wide (Fig.\@ref(fig:f-and-s-plot)-B).
 
 ```{r trend-effect, fig.cap = "Distribution of simulated regional MPA effects over time (A), and at equilibrium (B)"}
 
@@ -335,7 +335,7 @@ trend_plot <- outcomes %>%
   )) +
   geom_boxplot() +
   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
-  scale_y_continuous(labels = scales::percent, name = "Regional MPA Effect") + 
+  scale_y_continuous(labels = scales::percent, name = "Regional Effect") + 
   labs(x = "Years of MPA Protection")
 
 density_plot <- outcomes %>% 
@@ -355,7 +355,7 @@ mpa_plots
 ```
 
 
-```{r f-and-s-plot, fig.cap = "Median (A) and range (B) MPA effect after 15 years of protection across a range of pre-MPA depletions and MPA sizes"}
+```{r f-and-s-plot, fig.cap = "Median (A) and range (B) regional effect after 15 years of protection across a range of pre-MPA depletions and MPA sizes"}
 
 
 a = lm(mpa_effect ~ adult_movement*larval_movement + depletion + mpa_size + factor(density_dependence_form) + density_movement_modifier , data = outcomes)
@@ -382,7 +382,7 @@ depletion_plot <- outcomes %>%
   mutate(rounded_dep = plyr::round_any(depletion,.05)) %>% 
   ggplot(aes(rounded_dep, mpa_effect, group = rounded_dep)) + 
   geom_boxplot() + 
-  scale_y_continuous(labels = percent, name = 'MPA Effect') + 
+  scale_y_continuous(labels = percent, name = 'Regional Effect') + 
   scale_x_continuous(labels = percent, name = "Initial Depletion")
 
 size_plot <- outcomes %>% 
@@ -413,7 +413,7 @@ size_plot <- outcomes %>%
     scale_y_continuous(labels = percent) + 
     scale_x_continuous(labels = percent)
   
-  combo_plot <- (depletion_and_size_plot + labs(title = "A")) + ((size_plot + labs(title = "B")) / depletion_plot) * theme(plot.margin = unit(c(.1,.1,.1,.1), units = "lines"),axis.text.x = element_text(size = 12),                                                                        axis.text.y = element_text(size = 12)) + plot_layout(widths = c(2,1))
+  combo_plot <- (depletion_and_size_plot + labs(title = "A")) + ((size_plot + labs(title = "B")) / depletion_plot) * theme(plot.margin = unit(c(.1,.1,.1,.1), units = "lines"),axis.text.x = element_text(size = 10),                                                                        axis.text.y = element_text(size = 12)) + plot_layout(widths = c(2,1))
   
   combo_plot
 ```
@@ -434,7 +434,7 @@ pop_trend_plot <- outcomes %>%
   )) +
   geom_boxplot() +
   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
-  scale_y_continuous(labels = scales::percent, name = "Regional MPA Effect") + 
+  scale_y_continuous(labels = scales::percent, name = "Regional Effect") + 
   labs(x = "Years of MPA Protection")
 
 pop_density_plot <- outcomes %>% 
@@ -453,7 +453,7 @@ pop_mpa_plots
 
 ```
 
-```{r pop-f-and-s-plot, fig.cap = "Median (A) and range (B) MPA effect (expressed as percent of unfished biomass) after 15 years of protection across a range of pre-MPA depletions and MPA sizes"}
+```{r pop-f-and-s-plot, fig.cap = "Median (A) and range (B) regional effect (expressed as percent of unfished biomass) after 15 years of protection across a range of pre-MPA depletions and MPA sizes"}
 
 
 pop_depletion_plot <- outcomes %>% 
@@ -492,7 +492,7 @@ pop_size_plot <- outcomes %>%
     scale_y_continuous(labels = percent) + 
     scale_x_continuous(labels = percent)
   
-  pop_combo_plot <- (pop_depletion_and_size_plot + labs(title = "A")) + ((pop_size_plot + labs(title = "B")) / pop_depletion_plot) * theme(plot.margin = unit(c(.01,.01,.01,.01), units = "lines"),axis.text.x = element_text(size = 12),                                                                        axis.text.y = element_text(size = 12)) + plot_layout(widths = c(2,1))
+  pop_combo_plot <- (pop_depletion_and_size_plot + labs(title = "A")) + ((pop_size_plot + labs(title = "B")) / pop_depletion_plot) * theme(plot.margin = unit(c(.01,.01,.01,.01), units = "lines"),axis.text.x = element_text(size = 10),                                                                        axis.text.y = element_text(size = 12)) + plot_layout(widths = c(2,1))
   
   pop_combo_plot
 ```
@@ -518,9 +518,13 @@ short_term %>%
 
 ## Detecting MPA outcomes
 
-How in depth do we want to go here (both in the body and in the "SI")? 
+**How in depth do we want to go here (both in the body and in the "SI")? **
 
-At the simplest level, we can do a simple power analysis, thinking about for a given sample size, what is the highest variance that could exist around the mean to detect a given effect size (where "detect" means reject from zero). Somewhat appealing, but really abstract; what's the "sample size" we have (every transect? one per species per year)? What's a "reasonable" variance around the mean effect in a real system?
+This is just brainstorming text here
+
+At the simplest level, we do what I have here, which is just think through obvious shortcomings of the DiD analysis (e.g. if management besides MPA changes, or if parallel trends violated post treatment)
+
+Beyond that, we can do a simple power analysis, thinking about for a given sample size, what is the highest variance that could exist around the mean to detect a given effect size (where "detect" means reject from zero). Somewhat appealing, but really abstract; what's the "sample size" we have (every transect? one per species per year)? What's a "reasonable" variance around the mean effect in a real system?
 
 At the more complex level, I have a simulator built up where observers collect length comps from the data given various degrees of evolving skill etc. Can use it to demonstrate that a) the proposed identification strategy works just great under ideal circumstances, but that b) under even slightly realistic circumstances (stochastic auto-correlated recruitment with environmental forcing, evolving observer skill, different life history) you're back to selection on observables. I think this is probably an important point that warrants fleshing out, but it's challenging to implement well. How valuable do we feel that this step is?
 
@@ -566,7 +570,7 @@ Under these idealized circumstances, the magnitude of this divergence between th
 
 However, this clearly does not control for differences in responses to non-modeled variables between the treated and non-treated groups. For example, the model contains data from the pre-MPA years of 2000 to 2002. The parallel trends assumption appears plausible over that time period (Fig.\@ref(fig:did-plot)). But, this pre-treatment period does not include an El Niño, while the post-treatment period does. Therefore, while the parallel trends assumption looks plausible from the pre-treatment data, it is possible that targeted and non-targeted fishes respond in a systematically different manner to El Niño, therefore violating the parallel trends assumption and invalidating the "causal" interpretation of the model. Similarly, the model cannot account for additional shocks to  the targeted species beyond the MPAs. For example, while we control for total landings of each targeted species in the Santa Barbara region, it is possible that within that region fishing effort became increasingly concentrated around the Islands, driving down local densities of fished species. The model cannot control for this unless the appropriate data are correctly incorporated into the model explicitly. 
 
-The model also assumes that the targeted and non-targeted fishes do not directly affect each other. This assumption is clearly violated on some level: all the fishes in this analysis are part of the same ecosystem and therefore interact on some level. For example, if the protection of fished predatory fishes results in increased mortality of non-targeted fishes, the model would attribute that as an increased MPA effect (greater divergence between the abundance of targeted and non-targeted species). Given the time scale of analysis (15 years of protection), we do not feel that massive trophic cascades are likely to have developed yet (XX, citation on time to trophic cascades), and there is little evidence of negative correlations between individual targeted and non-targeted fishes in the data (XX).
+The model also assumes that the targeted and non-targeted fishes do not directly affect each other. This assumption is clearly violated on some level: all the fishes in this analysis are part of the same ecosystem and therefore interact on some level. For example, if the protection of fished predatory fishes results in increased mortality of non-targeted fishes, the model would attribute that as an increased regional effect (greater divergence between the abundance of targeted and non-targeted species). Given the time scale of analysis (15 years of protection), we do not feel that massive trophic cascades are likely to have developed yet (XX, citation on time to trophic cascades), and there is little evidence of negative correlations between individual targeted and non-targeted fishes in the data (XX).
 
 The proposed identification strategy serves to control for some unobserved factors influencing densities of targeted and non-targeted species, but is unlikely to account for all of them. Before examining regression results, we can graphically examine the trends in mean densities for targeted and non-targeted species over time. We centered and scaled the mean annual densities for each species included in the analysis in order to compare the trends across species groups. Grouping the species by targeted and non-targeted status, we see evidence of pre-treatment parallel trends in the abundance indices, and of a divergence post MPA implementation. Beginning in around 2007 abundances of targeted species appear to start increasing faster than non-targeted species. However, from 2012 onward abundances of targeted species appear to be declining relative to the trend in the non-targeted species. Not controlling for any other factors that may affect fish abundances, the data suggests a possible increase in targeted species abundance (relative to the "control" trend of the non-targeted species) at first, followed by a decrease in the most recent years (Fig.\@ref(fig:raw-trend)). 
 
@@ -595,7 +599,7 @@ Turning to our regression results, We do not detect a significant change in the 
 
 ```{r did-plot, fig.cap = "Estimated divergence in densities of fished and unfished species in the Channel Islands. MPAs are implement in 2003 (red dashsed line). Estimates are from a regression on log(abundnace), and estimated effects roughyl correspond to percentage changes"}
 
-did_plot + labs(y = "Estimate of Regional MPA Effect")
+did_plot + labs(y = "Estimate of Regional Effect")
 
 ```
 
@@ -604,14 +608,14 @@ did_plot + labs(y = "Estimate of Regional MPA Effect")
 
 MPAs are playing a growing role in the management of marine resources around the world. While the primary purpose of MPAs is often to protect species and habitats within their borders, they are also looked to to provide spillover benefits to the ecosystems and fisheries surrounding them. The existence and magnitude of these spillover benefits has been a source of substantial debate for a some time, with the bulk of the conversation centered around qualitative or theoretical examinations of particular drivers of spillover [citations], or in detecting empirical evidence of the existence of spillover [citations], but not the net regional effects of MPAs. As many of the MPA networks around the world become mature enough for analysis, it is critical that we take a step to consider what evidence we can expect to observe, and what we have in fact seen in natural systems. 
 
-While a large body of literature has discussed the factors affecting the regional-scale conservation outcomes of MPAs [citations], we know of no other study that has synthesized much of the key theory predictions of the literature into a comprehensive simulation framework to address the cumulative impact of these drivers on the regional effects of MPAs. Our results present several important insights for understanding what we might expect the effects of MPAs outside their borders to be. First, we see that incorporating a broad, but still limited, set of life history, MPA and fishery characteristics produces a vast array of potential regional effects, from actual net conservation losses (in cases for example of short-term constant-catch, moderate pre-MPA depletion, and smaller MPA sizes), to massive conservation gains (e.g large MPAs in a very depleted fishery). These wide ranges of outcomes persisted even in extreme cases though; small effects were possible in very depleted fisheries, and larger effects were possible in cases of moderate depletion. One important result of this analysis is that looking across the range of "smaller" MPAs (covering 25% or less of the region), the median MPA effect size was relatively small, both in percentage gains relative to the without-MPA scenario, and in percentage of unfished biomass recovered, up until the fishery was strongly depleted (Fig.\@ref(fig:f-and-s-plot)-\@ref(fig:pop-f-and-s-plot)).
+While a large body of literature has discussed the factors affecting the regional-scale conservation outcomes of MPAs [citations], we know of no other study that has synthesized much of the key theory predictions of the literature into a comprehensive simulation framework to address the cumulative impact of these drivers on the regional effects of MPAs. Our results present several important insights for understanding what we might expect the effects of MPAs outside their borders to be. First, we see that incorporating a broad, but still limited, set of life history, MPA and fishery characteristics produces a vast array of potential regional effects, from actual net conservation losses (in cases for example of short-term constant-catch, moderate pre-MPA depletion, and smaller MPA sizes), to massive conservation gains (e.g large MPAs in a very depleted fishery). These wide ranges of outcomes persisted even in extreme cases though; small effects were possible in very depleted fisheries, and larger effects were possible in cases of moderate depletion. One important result of this analysis is that looking across the range of "smaller" MPAs (covering 25% or less of the region), the median regional effect size was relatively small, both in percentage gains relative to the without-MPA scenario, and in percentage of unfished biomass recovered, up until the fishery was strongly depleted (Fig.\@ref(fig:f-and-s-plot)-\@ref(fig:pop-f-and-s-plot)).
 
 This has important implications for our ability to empirically detect these effects in natural systems. Marine environments are complex and noisy systems, subject to both large amounts of natural variation and measurement error. Our simulation results suggest then that it will be relatively difficult to detect the regional-scale effects of MPAs in many cases of smaller MPAs and moderately depleted fisheries; separating out say the median simulated population effect of a `r median(short_term$pop_effect)`% of unfished biomass is a difficult task even in a carefully studied environment. With that in mind then, we should not be surprised that our analysis was unable to determine a clear regional divergence between the densities of targeted and non-targeted species throughout the Channel Islands in the 15 years since the newest set of MPAs were implemented in that region. 
 
 
 What can we then infer about the regional effects of the Channel Island MPAs based on the available data and our analysis? At the simplest level, we cannot detect a significant divergence in densities of targeted and non-targeted fishes over the 15 years since the implementation of MPAs in the Channel Islands. However, it is important to note that we also cannot say that there has been no divergence. The 95% confidence intervals surrounding our year-to-year estimates of the divergences have a mean range of XX, and cross zero in every year (indicating that both positive and negative divergences have support from the data). Since the regression model is a log-linear model (predicting log density indices), we can interpret the the "divergence" coefficients roughly as percentage differences in the densities of targeted and non-targeted. The upper end of of our estimated confidence intervals corresponds to a roughly XX% increase in densities of targeted species relative to non-targeted, while at the lower end a XX% decrease is possible. Within these ranges though, the mean effect size was XX%, which corresponds closely with the median MPA effects predicted by our simulation analysis for moderately exploited species protected by a reserve network covering ~25% of the region's area. 
 
-Do these estimated divergences represent the true regional conservation MPA effect then? There are clear reasons why we might think not: differences in responses to environmental drivers such as El Niño between targeted and non-targeted species, as well as non-MPA related fishery changes, are both plausible and capable of distorting our results. Trophic interactions could also positively (if increases in targeted predators drive down densities of herbivorous non-targeted species for example) or negatively (if MPA mediated trophic cascades result in increases in both targeted and non-targeted densities) bias our results. However, while these concerns are important, they are not sufficient cause to dismiss our strategy for estimating the regional conservation effects of MPAs outright. 
+Do these estimated divergences represent the regional effect of the MPAs? There are clear reasons why we might think not: differences in responses to environmental drivers such as El Niño between targeted and non-targeted species, as well as non-MPA related fishery changes, are both plausible and capable of distorting our results. Trophic interactions could also positively (if increases in targeted predators drive down densities of herbivorous non-targeted species for example) or negatively (if MPA mediated trophic cascades result in increases in both targeted and non-targeted densities) bias our results. However, while these concerns are important, they are not sufficient cause to dismiss our strategy for estimating the regional conservation effects of MPAs outright. 
 
 First, the assumptions of our identification strategy and operating models (e.g. no trophic interactions) reflect the underlying assumptions of much of the theoretical and simulation based literature on MPA effects used to motivate much of modern MPA design [@Fulton2015; @Gaines2010]. This of course does not mean that these assumptions are correct, but dismissing our results purely on the basis of for example the potential for trophic interactions requires then that we also rethink much of the work on which MPA design is based. All else being equal, most standard models of MPA effects would predict faster and more substantial changes in densities of targeted fishes post MPA implementation than for non-targeted species, which is exactly what our model is designed to detect. 
 
@@ -628,7 +632,7 @@ Modeling effort such as this can then provide stakeholders with some idea of the
 
 Lastly, better integration of MPAs into stock assessment may help. Collect sufficient data to estimate a region-wide F, and see if it has gone up, down, or stayed the same post MPA. But critical to account for the size structure/densities inside and outside the MPA. From a population perspective [@Field2006]
 
-We focus exclusively on regional conservation gains in this paper. However, fisheries spillover is often another important factor to consider (i.e. are fisheries better off with the MPAs than they would have been without them). The fishery benefits of MPAs are just as (and likely more) intensely debated than the regional conservation outcomes [citations; @Hilborn2004]. While we do not address fishery outcomes here, our results do highlight potential tradeoffs on regional conservation and fishery outcomes. Our analysis suggest that relatively large MPAs may be needed to increase the probability of achieving substantial increases in population sizes relative to unfished biomass. However, other analyses have suggested that near-term fishery benefits are maximized at smaller MPA sizes [@Ovando2016; @Brown2015]. Our analysis lays the groundwork for an interesting synthesis study examining the parameter space of fishery and MPA characteristics the support both regional conservation and fishery gains. 
+We focus exclusively on regional conservation gains in this paper. However, fisheries spillover is often another important factor to consider (i.e. are fisheries better off with the MPAs than they would have been without them). The fishery benefits of MPAs are just as (and likely more) intensely debated than the regional conservation outcomes [citations; @Hilborn2004]. While we do not address fishery outcomes here, our results do highlight potential tradeoffs on regional conservation and fishery outcomes. Our analysis suggest that relatively large MPAs may be needed to increase the probability of achieving substantial increases in population sizes relative to unfished biomass. However, other analyses have suggested that near-term fishery benefits are maximized at smaller MPA sizes [@Ovando2016a; @Brown2015]. Our analysis lays the groundwork for an interesting synthesis study examining the parameter space of fishery and MPA characteristics the support both regional conservation and fishery gains. 
 
 MPAs are an important part of the marine resource management toolbox... fisheries, tourism, habitat, resilience, climate, etc. But despite their simple appearance, predicting and detecting their regional conservation effects is far from simple. **Insert catchy closing statement**
 
@@ -636,7 +640,7 @@ MPAs are an important part of the marine resource management toolbox... fisherie
 
 ## Simulation Model
 
-The simulation model used in this analysis is roughly the same as the one described in @Ovando2016. It is an age structured, spatially explicit, bio-economic model. Recruitment is assumed to have Beverton-Holt dynamics on average, though auto-correlated log-normal recruitment deviates can be specified. The timing of density dependence can be one of five forms presented in @Babcock2011, ranging from independent density dependence in each patch to density dependence in a shared larval stage across patches. The model allows for both adult and larval movement, where larval movement is assumed to follow a Gaussian dispersal kernel based on the distance of each patch to the source patch. Adult movement is also modeled using a Gaussian dispersal kernel, but with the added option of density dependent movement as well. In the adult density dependent movement scenario we calculate the density gradient between each patch and every other patch, where the density gradient is calculated as
+The simulation model used in this analysis is roughly the same as the one described in @Ovando2016a. It is an age structured, spatially explicit, bio-economic model. Recruitment is assumed to have Beverton-Holt dynamics on average, though auto-correlated log-normal recruitment deviates can be specified. The timing of density dependence can be one of five forms presented in @Babcock2011, ranging from independent density dependence in each patch to density dependence in a shared larval stage across patches. The model allows for both adult and larval movement, where larval movement is assumed to follow a Gaussian dispersal kernel based on the distance of each patch to the source patch. Adult movement is also modeled using a Gaussian dispersal kernel, but with the added option of density dependent movement as well. In the adult density dependent movement scenario we calculate the density gradient between each patch and every other patch, where the density gradient is calculated as
 
 $$g_{i,j} = \frac{b_i}{b_i^0} - \frac{b_j}{b_j^0} + 1$$
 
@@ -656,7 +660,7 @@ The operating model allows for time-varying and auto-correlated deviations in pr
 
 MPAs are implemented in the operating model by setting a specified percentage of the patches to be placed in a no-take MPA. Patches are then assigned to an MPA either in a linear fashion (left to right) or assigned at random throughout the patches. In all scenarios MPAs are implemented halfway through the simulated time series (allowing the pre-MPA fishing mortality to deplete the population to a desired level beforehand).
 
-Using this operating model, we simulated MPA effects across 20,000 fisheries, where the MPA effect is modeled by running the exact same fishery simulation with and without MPAs, and then calculating the difference in biomass in each year between the two scenarios (setting identical seeds for each simulation). The range of evaluated scenarios is presented in Table.XX
+Using this operating model, we simulated MPA effects across 20,000 fisheries, where the regional effect is modeled by running the exact same fishery simulation with and without MPAs, and then calculating the difference in biomass in each year between the two scenarios (setting identical seeds for each simulation). The range of evaluated scenarios is presented in Table.XX
 
 XX insert table of model runs XX
 
@@ -726,10 +730,10 @@ $$divergence_{year} =  \beta_{year,targeted = 1} - \beta_{year,targeted = 0}$$
 
 The model is fit in TMB to integrate the uncertainty across all levels of the model, with standard errors for each coefficient in the model estimated through the Laplace approximation. 
 
-```{r fe-plot, fig.cap = "Estimated coefficients for fixed effects in observation model (seeing) and observed model (seen)"}
+```{r fe-plot, fig.cap = "Estimated coefficients for non-spatial fixed effects in observation model (seeing) and observed model (seen)"}
 
  non_nested_beta_plot <- betas %>%
-   filter(str_detect(group, "non_nested")) %>%
+   filter(str_detect(group, "non_nested") & !str_detect(variable, "site_side")) %>%
    ggplot() +
    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
    geom_pointrange(aes(x = variable,
@@ -744,6 +748,27 @@ non_nested_beta_plot
 
 ```
 
+
+```{r site-plot, fig.cap = "Estimated coefficients for spatial fixed effects in observation model (seeing) and observed model (seen)"}
+
+ non_nested_site_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested") & str_detect(variable, "site_side")) %>%
+  mutate(variable = tolower(variable)) %>% 
+  mutate(variable = str_replace(variable, "site_side","")) %>% 
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+non_nested_site_beta_plot + 
+  theme(axis.text.y = element_text(size = 6))
+
+```
 
 ```{r region-plot, fig.cap="Random effects for region by cluster"}
 
@@ -773,7 +798,9 @@ targeted_trends <- report$zissou_estimates %>%
   ungroup() %>% 
   ggplot() + 
   geom_line(aes(year, estimate, color = variable),alpha = 0.5) +
-  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable))
+  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable)) + 
+scale_color_d3(name = "Targeted?") 
+
 
 targeted_trends
 
@@ -798,6 +825,21 @@ seen_diagnostics <- data_frame(observed = observed_seen, predicted = as.numeric(
 
 
 seeing_diagnostics <- data_frame(observed = observed_seeing, predicted = as.numeric(fit_report$prob_seeing)) 
+
+```
+
+
+```{r}
+
+a = base_run$tmb_fit[[1]]$seen_cdata$x_non_nested %>% 
+  select(contains("mean_")) %>% 
+  mutate(resid = seen_diagnostics$residuals) %>% 
+  gather(variable, value, -resid) %>% 
+  ggplot(aes(value, resid)) + 
+  geom_point() + 
+  facet_wrap(~variable)
+
+a
 
 ```
 
@@ -1025,9 +1067,17 @@ broom::tidy(test) %>%
 
 ## Repeat basic analysis. 
 
-```{r, eval = F}
+This analysis has a LOT of complicated moving parts. It's worth taking a step back and keeping it simple though: what does a simple classic difference in difference analysis say? i.e. `targeted + year + year:targeted`, aggregating up the densities to take care of the zeros. Results reflect the basic trends seen in the crazy complex analysis, but with much broader error bars (Fig.\@ref(fig:basic-plot)). The take home message here is that all the complicated business helps dial in the results a bit, but is not fundamentally changing the story from a simpler analysis. 
 
-
+```{r, include=F}
+raw <- fitted_data %>%
+  group_by(year, classcode, region, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
 
 raw_region <- fitted_data %>%
   group_by(year, region,classcode, targeted) %>%
@@ -1036,7 +1086,7 @@ raw_region <- fitted_data %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
   ungroup() %>%
-  left_join(numeric_species_key, by = "classcode")
+  left_join(life_history, by = "classcode")
 
 
 raw_mpa_only <- fitted_data %>%
@@ -1047,7 +1097,7 @@ raw_mpa_only <- fitted_data %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
   ungroup() %>%
-  left_join(numeric_species_key, by = "classcode")
+  left_join(life_history, by = "classcode")
 
 raw_nompa_only <- fitted_data %>%
   filter(eventual_mpa == F) %>% 
@@ -1057,9 +1107,35 @@ raw_nompa_only <- fitted_data %>%
   group_by(classcode) %>%
   mutate(smd = (md - mean(md))/(sd(md))) %>%
   ungroup() %>%
-  left_join(numeric_species_key, by = "classcode")
+  left_join(life_history, by = "classcode")
 
 basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
+
+
+```
+
+
+```{r basic-plot, fig.cap = "Simple DiD using aggregate Density Data"}
+
+
+
+basic_plot <- basic_model %>% 
+  broom::tidy() %>% 
+  filter(str_detect(term, ":targeted")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_hline(aes(yintercept = 0),linetype = 2, color = "black") +
+  geom_vline(aes(xintercept = 2003),linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error,
+                      ymax = estimate + 1.96*std.error))
+
+basic_plot
+
+```
+
+```{r, eval = F}
+basic_modeler <- rstanarm::stan_glmer(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted + (1|classcode), data = raw)
+
 
 basic_plus_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted + mt, data = raw)
 
@@ -1073,7 +1149,7 @@ basic_plus_region_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + ta
 
 
 
-basic_plot <- basic_model %>% 
+basic_plot <- basic_modeler %>% 
   broom::tidy() %>% 
   filter(str_detect(term, ":targeted")) %>% 
   mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
