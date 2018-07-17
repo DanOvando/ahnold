@@ -1,8 +1,8 @@
 ---
 title: "Predicting and Detecting the Regional-Scale Conservation Impacts of Marine Protected Areas"
 output: 
-  bookdown::pdf_document2:
   bookdown::html_document2:
+  bookdown::pdf_document2:
 bibliography: dissertation.bib
 linkcolor: blue
 biblio-style: apalike
@@ -48,7 +48,7 @@ experiment_dir <- here::here("results",run_name, "experiments")
 
 load(file = here::here("results",run_name, "rawish_zissou_data.Rdata"))
 
-load(file = here::here("results",run_name, "model_runs_good.Rdata"))
+load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
@@ -98,32 +98,33 @@ site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
  seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seen_non_nested_betas") %>%
    rename(group = variable) %>%
-   mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
+   mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested%>% colnames())
 
  seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seeing_non_nested_betas") %>%
    rename(group = variable) %>%
-   mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
+   mutate(variable  = zissou_fit$zissou_data$x_seeing_non_nested %>% colnames())
 
  seen_year_species_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seen_year_species_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
+   mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
 
  seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seeing_year_species_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
+   mutate(variable =zissou_fit$zissou_data$x_seeing_year_species %>% colnames())
 
  seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seen_region_cluster_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
+   mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
 
  seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "seeing_region_cluster_betas") %>%
    rename(group = variable) %>%
-   mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
+   mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+
 
  did_betas <- zissou_fit$zissou_estimates %>%
    filter(variable == "mpa_effect") %>%
@@ -606,6 +607,8 @@ did_plot + labs(y = "Estimate of Regional Effect")
 
 ## Discussion
 
+**ENVIRONMENT IS A STRONGER SIGNAL THAN MPAS**
+
 MPAs are playing a growing role in the management of marine resources around the world. While the primary purpose of MPAs is often to protect species and habitats within their borders, they are also looked to to provide spillover benefits to the ecosystems and fisheries surrounding them. The existence and magnitude of these spillover benefits has been a source of substantial debate for a some time, with the bulk of the conversation centered around qualitative or theoretical examinations of particular drivers of spillover [citations], or in detecting empirical evidence of the existence of spillover [citations], but not the net regional effects of MPAs. As many of the MPA networks around the world become mature enough for analysis, it is critical that we take a step to consider what evidence we can expect to observe, and what we have in fact seen in natural systems. 
 
 While a large body of literature has discussed the factors affecting the regional-scale conservation outcomes of MPAs [citations], we know of no other study that has synthesized much of the key theory predictions of the literature into a comprehensive simulation framework to address the cumulative impact of these drivers on the regional effects of MPAs. Our results present several important insights for understanding what we might expect the effects of MPAs outside their borders to be. First, we see that incorporating a broad, but still limited, set of life history, MPA and fishery characteristics produces a vast array of potential regional effects, from actual net conservation losses (in cases for example of short-term constant-catch, moderate pre-MPA depletion, and smaller MPA sizes), to massive conservation gains (e.g large MPAs in a very depleted fishery). These wide ranges of outcomes persisted even in extreme cases though; small effects were possible in very depleted fisheries, and larger effects were possible in cases of moderate depletion. One important result of this analysis is that looking across the range of "smaller" MPAs (covering 25% or less of the region), the median regional effect size was relatively small, both in percentage gains relative to the without-MPA scenario, and in percentage of unfished biomass recovered, up until the fishery was strongly depleted (Fig.\@ref(fig:f-and-s-plot)-\@ref(fig:pop-f-and-s-plot)).
@@ -831,7 +834,8 @@ seeing_diagnostics <- data_frame(observed = observed_seeing, predicted = as.nume
 
 ```{r}
 
-a = base_run$tmb_fit[[1]]$seen_cdata$x_non_nested %>% 
+a = base_run$tmb_fit[[1]]$zissou_data$x_seen_non_nested %>% 
+  as_data_frame() %>% 
   select(contains("mean_")) %>% 
   mutate(resid = seen_diagnostics$residuals) %>% 
   gather(variable, value, -resid) %>% 
@@ -921,8 +925,8 @@ site_summary <- pisco_data %>%
             long = mean(lon_wgs84, na.rm = T),
             mpa = unique(eventual_mpa))
 
-ggmap::qmplot(long, lat, size = nyears, alpha = nyears, color = mpa, data = site_summary) + 
-  theme_minimal()
+# ggmap::qmplot(long, lat, size = nyears, alpha = nyears, color = mpa, data = site_summary) + 
+#   theme_minimal()
 
 ```
 
@@ -936,7 +940,10 @@ fitted_data %>%
   summarise(mean_density = mean(exp(log_density))) %>% 
   mutate(log_mean_density = log(mean_density)) %>% 
   ungroup() %>% 
-  ggplot(aes(year, mean_density, color = region)) + 
+  group_by(classcode, region) %>% 
+  mutate(cs_mean_density = (mean_density - mean(mean_density)) / sd(mean_density)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, cs_mean_density, color = region)) + 
   geom_line() + 
   facet_wrap(~classcode, scales = "free_y") + 
   theme_minimal()

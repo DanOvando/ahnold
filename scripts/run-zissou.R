@@ -111,7 +111,7 @@ write(run_description,
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- TRUE
+run_tmb <- FALSE
 
 n_cores <- 1
 
@@ -1167,17 +1167,16 @@ script_name <- "fit_zissou"
 var_options <-  data_frame(var_names = c("pisco_a","kfm"),
                            non_nested_variables =
                              list(c(
-                               'site_side',
+                               "site_side",
                                'level',
                                'factor_month',
                                'cumulative_n_obs',
                                'surge',
                                'mean_depth',
-                               'mean_vis',
-                               'mean_canopy'
+                               'mean_vis'
                              ),
                              c(
-                               'site_side',
+                               "site_side",
                                'factor_month'
                              )
                              ))
@@ -1204,7 +1203,7 @@ model_runs <- cross_df(
     data_source = abundance_data$data_source,
     var_names = var_options$var_names,
     mpa_only = c(TRUE,FALSE),
-    center_scale = c(TRUE, FALSE)
+    center_scale = c(TRUE)
    )
   ) %>%
   left_join(var_options, by = "var_names") %>%
@@ -1227,7 +1226,7 @@ if (run_tmb == T){
 
   # future::plan(future::multiprocess, workers = 4)
 
-  doParallel::registerDoParallel(cores = 1)
+  doParallel::registerDoParallel(cores = n_cores)
   #
   fits <- foreach::foreach(i = 1:nrow(model_runs)) %dopar% {
 
@@ -1247,11 +1246,8 @@ if (run_tmb == T){
                   include_intercept = TRUE,
                   fixed_did = FALSE,
                 non_nested_did_variables = c(
-                  "temp"
+                  "temp", "kelp", "lag_catch"
                 )
-
-
-
     )
 
     write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
@@ -1261,7 +1257,11 @@ if (run_tmb == T){
 
     } # close dopar
 
-  model_runs$tmb_fit <- fits
+
+save(file = paste0(run_dir, '/model_fits.Rdata'),
+       fits)
+
+model_runs$tmb_fit <- fits
 
 save(file = paste0(run_dir, '/model_runs.Rdata'),
      model_runs)
@@ -1275,11 +1275,22 @@ save(file = paste0(run_dir, '/model_runs.Rdata'),
 
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
-models_worked <- model_runs %>%
+model_runs$tmb_fit %>% map_dbl(length)
+
+model_runs <- model_runs %>%
   filter(models_worked) %>%
   mutate(tmb_fit = map(tmb_fit,"result")) %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
   mutate(did_plot = map(processed_fits, "did_plot"))
+
+# bad <- map(a$tmb_fit,c("zissou_estimates","lower")) %>%
+#   map_lgl(~all(is.na(.x)))
+#
+# b <- a %>%
+#   filter(bad)
+#
+# d <- a %>%
+#   filter(!bad)
 
 
 

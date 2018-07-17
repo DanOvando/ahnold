@@ -2,32 +2,32 @@ process_fits <- function(zissou_fit){
 seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seen_non_nested_betas") %>%
   rename(group = variable) %>%
-  mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
+  mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested %>% colnames())
 
 seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seeing_non_nested_betas") %>%
   rename(group = variable) %>%
-  mutate(variable  = zissou_fit$seen_cdata$x_non_nested %>% colnames())
+  mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested %>% colnames())
 
 seen_year_species_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seen_year_species_betas") %>%
   rename(group = variable) %>%
-  mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
+  mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
 
 seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seeing_year_species_betas") %>%
   rename(group = variable) %>%
-  mutate(variable = zissou_fit$seen_cdata$x_year_species %>% colnames())
+  mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
 
 seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seen_region_cluster_betas") %>%
   rename(group = variable) %>%
-  mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
+  mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
 
 seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "seeing_region_cluster_betas") %>%
   rename(group = variable) %>%
-  mutate(variable = zissou_fit$seen_cdata$x_region_cluster %>% colnames())
+  mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
 
 did_betas <- zissou_fit$zissou_estimates %>%
   filter(variable == "mpa_effect") %>%

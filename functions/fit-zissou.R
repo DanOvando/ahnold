@@ -344,16 +344,14 @@ fit_zissou <- function(data,
 
   return(
     list(
-      seen_cdata = seen_cdata,
-      seeing_cdata = seeing_cdata,
       zissou_fit = zissou_fit,
-      zissou_model = zissou_model,
       zissou_report = zissou_report,
       zissou_sd_report = zissou_sd_report,
       zissou_estimates = zissou_estimates,
       did_data = did_data,
       diagnostics = diagnostics,
-      zissou_data = zissou_data
+      zissou_data = zissou_data,
+      seen_data = seen_data
     )
   )
 }
