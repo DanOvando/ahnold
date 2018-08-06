@@ -24,6 +24,8 @@ num_patches <- 25
 
 run_experiments <- FALSE
 
+create_grid <- FALSE
+
 n_cores <- 1
 
 samps <- 20000
@@ -108,6 +110,7 @@ seen_species <- life_history_data %>%
 if (run_experiments == T) {
 
 
+  if (create_grid == TRUE){
   if (grid_search == T) {
 
   sim_grid <- expand.grid(
@@ -188,6 +191,11 @@ if (run_experiments == T) {
            fleet = map(tuned_fishery,"fleet"))
 
   save(sim_grid, file = paste0(run_dir,"/sim_grid.Rdata"))
+  } else{
+
+    load(file = paste0(run_dir,"/sim_grid.Rdata"))
+
+  }
 
   doParallel::registerDoParallel(cores = n_cores)
 
@@ -237,24 +245,41 @@ if (run_experiments == T) {
   } # close dopar
 }
 
+calc_mpa_fishery_effect <- function(outcomes) {
+  mpa_effect <- outcomes %>%
+    group_by(year) %>%
+    mutate(mpa_size = max(percent_mpa)) %>%
+    ungroup() %>%
+    select(year, experiment, catch, mpa_size) %>%
+    spread(experiment, catch) %>%
+    mutate(mpa_effect = `with-mpa` / `no-mpa` - 1)
+}
+
 loadfoo <- function(experiment, experiment_dir, output = "mpa-effect") {
   ex <- readRDS(glue::glue("{experiment_dir}/experiment_{experiment}.rds"))
 
   if (output == "mpa-effect") {
+
+    ex$msy <- ex$tuned_fishery[[1]]$fish$msy
+
+    ex$b_msy <- ex$tuned_fishery[[1]]$fish$b_msy
+
+    ex <- ex %>%
+      mutate(fishery_effect = map(map(ex$mpa_experiment,"outcomes"),calc_mpa_fishery_effect))
+
     ex <- ex %>%
       select(-mpa_experiment,-fish,-fleet,-tuned_fishery)}
-
-# out <- object.size(ex)
-
-  # format(object.size(ex), units = "Mb")
 
 return(ex)
 }
 
 future::plan(future::multiprocess, workers = 2)
 
-processed_grid <- future_map(1:samps, safely(loadfoo), experiment_dir = experiment_dir,
-                             .progress = T)
+processed_grid <-
+  future_map(1:samps,
+             safely(loadfoo),
+             experiment_dir = experiment_dir,
+             .progress = T)
 
 grid_worked <- map(processed_grid, "error") %>% map_lgl(is_null)
 
@@ -263,11 +288,6 @@ processed_grid <- processed_grid %>%
 
 processed_grid <- map(processed_grid, "result") %>%
   bind_rows()
-
-
-processed_grid$mpa_effect[[1]] %>%
-  ggplot(aes(year, mpa_effect)) +
-  geom_line()
 
 
 save(processed_grid,file = paste0(run_dir,"/processed_grid.Rdata"))

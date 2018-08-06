@@ -284,6 +284,7 @@ We first utilize a spatially explicit, age structured bio-economic model to gene
 
 ```{r}
 outcomes <- processed_grid %>%
+  select(-fishery_effect) %>% 
   slice(1:samps) %>% 
   unnest() %>% 
   mutate(year = year - burn_years) %>% 
@@ -297,6 +298,24 @@ outcomes <- processed_grid %>%
 
 eqo <- outcomes %>% 
   filter(year == max(year))
+
+fishery_outcomes <- processed_grid %>%
+  select(-mpa_effect) %>% 
+  slice(1:samps) %>% 
+  unnest() %>% 
+  mutate(year = year - burn_years) %>% 
+  mutate(years_protected = year - year_mpa + 1) %>% 
+  mutate(fishery_effect = pmin(mpa_effect,1)) %>% 
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>% 
+  filter(fleet_model != "constant-catch") %>% 
+  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
+
+
+
+
+fishery_eqo <- fishery_outcomes %>% 
+  filter(year == max(year))
+
 
 ```
 
@@ -397,7 +416,7 @@ size_plot <- outcomes %>%
     filter(years_protected >= 0) %>%
     group_by(experiment) %>% 
     mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
-           mpa_size = plyr::round_any(mpa_size, .05)) %>% 
+           mpa_size = plyr::round_any(mpa_size, .025)) %>% 
     filter(years_protected == 15) %>% 
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(mpa_effect)) %>% 
@@ -499,7 +518,7 @@ size_plot <- outcomes %>%
   depletion_and_size_plot <- outcomes %>% 
     filter(years_protected >= 0) %>%
     group_by(experiment) %>% 
-    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .025),
            mpa_size = plyr::round_any(mpa_size, .05)) %>% 
     filter(years_protected == 15) %>% 
     group_by(depletion, mpa_size) %>% 
@@ -548,6 +567,154 @@ short_term %>%
 
 ```
 
+
+### Fishery Effects
+
+
+```{r catch-effects}
+
+depletion_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(depletion, fishery_effect), binwidth = c(.05, .05),
+             show.legend = FALSE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "Median Effect"
+  ) +
+  scale_x_continuous(labels = percent, name = "Initial Depletion") + 
+  scale_y_continuous(labels = percent, name = "MPA Effect")
+
+
+size_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(mpa_size, fishery_effect), binwidth = c(.05, .05), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "# of Sims"
+  ) +
+  scale_x_continuous(labels = percent, name = "Range in MPA") + 
+    scale_y_continuous(labels = percent, name = "Fishery Effect") + 
+  theme(legend.position = "right")
+
+
+
+  depletion_and_size_plot <- fishery_outcomes %>% 
+    filter(years_protected >= 0) %>%
+    group_by(experiment) %>% 
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
+           mpa_size = plyr::round_any(mpa_size, .025)) %>% 
+    filter(years_protected == 15) %>% 
+    group_by(depletion, mpa_size) %>% 
+    summarise(median_mpa_effect = median(fishery_effect)) %>% 
+    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
+    geom_raster(interpolate = T) + 
+    # geom_contour(aes(z = median_mpa_effect)) +
+    scale_fill_gradient2(midpoint = 0,
+                         low = "tomato",
+                         high = "steelblue",
+                         mid = "white",
+                         labels = percent,
+                       guide = guide_colorbar(frame.colour = "black",
+                                              frame.linewidth = 1,
+                                              barheight = unit(10,"lines")), 
+                       name = "Median Effect") +
+  labs(x = "Initial Depletion", y = "Range in MPA") + 
+    scale_y_continuous(labels = percent) + 
+    scale_x_continuous(labels = percent)
+  
+  fishery_combo_plot <-
+    (depletion_and_size_plot + labs(title = "A")) + ((size_plot + labs(title = "B")) / depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.x = element_text(size = 10),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    )
+    
+    fishery_combo_plot
+
+
+```
+
+
+```{r catch-msy-effects}
+
+depletion_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(depletion, msy_effect), binwidth = c(.05, .05),
+             show.legend = FALSE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "Median Effect"
+  ) +
+  scale_x_continuous(labels = percent, name = "Initial Depletion") + 
+  scale_y_continuous(labels = percent, name = "MPA Effect")
+
+
+size_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(mpa_size, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "# of Sims"
+  ) +
+  scale_x_continuous(labels = percent, name = "Range in MPA") + 
+    scale_y_continuous(labels = percent, name = "Fishery Effect") + 
+  theme(legend.position = "right")
+
+
+
+  depletion_and_size_plot <- fishery_outcomes %>% 
+    filter(years_protected >= 0,!is.na(msy)) %>%
+    group_by(experiment) %>% 
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
+           mpa_size = plyr::round_any(mpa_size, .025)) %>% 
+    filter(years_protected == 15) %>% 
+    group_by(depletion, mpa_size) %>% 
+    summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>% 
+    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
+    geom_raster(interpolate = T) + 
+    # geom_contour(aes(z = median_mpa_effect)) +
+    scale_fill_gradient2(midpoint = 0,
+                         low = "tomato",
+                         high = "steelblue",
+                         mid = "white",
+                         labels = percent,
+                       guide = guide_colorbar(frame.colour = "black",
+                                              frame.linewidth = 1,
+                                              barheight = unit(10,"lines")), 
+                       name = "Median Effect") +
+  labs(x = "Initial Depletion", y = "Range in MPA") + 
+    scale_y_continuous(labels = percent) + 
+    scale_x_continuous(labels = percent)
+  
+  msy_fishery_combo_plot <-
+    (depletion_and_size_plot + labs(title = "A")) + ((size_plot + labs(title = "B")) / depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.x = element_text(size = 10),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    )
+    
+    msy_fishery_combo_plot
+
+
+```
 
 ### Detecting MPA outcomes
 
