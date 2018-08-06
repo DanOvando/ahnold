@@ -57,14 +57,16 @@ load(file = here::here("results",run_name,"processed_grid.Rdata"))
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
 model_runs <- model_runs %>%
-  slice(models_worked) %>%
+  filter(models_worked) %>%
   mutate(tmb_fit = map(tmb_fit,"result")) %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
   mutate(did_plot = map(processed_fits, "did_plot"))
 
 base_run <- model_runs %>% 
-  slice(1) #%>% 
-  # filter(var_names == "pisco_a", mpa_only == FALSE, center_scale == TRUE)
+filter(var_names == "pisco_a", mpa_only == FALSE, center_scale == TRUE)
+
+kfm_run <- model_runs %>% 
+  filter(data_source == "kfm")
   
 fitted_data <- base_run$data[[1]]
 
@@ -800,6 +802,16 @@ Turning to our regression results, We do not detect a significant change in the 
 ```{r did-plot, fig.cap = "Estimated divergence in densities of fished and unfished species in the Channel Islands. MPAs are implement in 2003 (red dashsed line). Estimates are from a regression on log(abundnace), and estimated effects roughyl correspond to percentage changes"}
 
 did_plot + labs(y = "Estimate of Regional Effect")
+
+```
+
+
+```{r kfm-did}
+
+kfm_run$did_plot[[1]] + 
+     labs(x = "Year", y = "Estimate of Regional Effect",
+          caption = "")
+
 
 ```
 
