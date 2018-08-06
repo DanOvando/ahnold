@@ -462,23 +462,7 @@ kelp <- kelp %>%
   summarise(mean_kelp = mean(kelp_biomass, na.rm = T))
 
 
-# kelp %>%
-#   mutate(yq = year + quarter)  %>%
-#   ungroup() %>%
-#   ggplot(aes(year, mean_kelp)) +
-#   geom_point() +
-#   geom_smooth()
-
-
 kelp_recipe <- recipes::recipe(mean_kelp ~ ., data = kelp)
-
-#
-# kelp_reg <- caret::train(kelp_recipe,
-#                         data = kelp,
-#                         method = "knn",
-#                         tuneGrid = data.frame(k = c(2,5,7,10))
-# )
-#
 
 
 ## process kfm dat
@@ -556,7 +540,6 @@ observer_experience <- length_data %>%
 length_data <- length_data %>%
   left_join(observer_experience, by = c('year', 'month', 'observer'))
 
-# ggmap::qmplot(x = mean_longitude, y = mean_latitude,data = species_distributions)
 
 density_data <- read_csv(here::here(data_dir,"ci_reserve_data_final3 txt.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%

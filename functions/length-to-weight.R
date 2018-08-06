@@ -1,3 +1,28 @@
+#' length_to_weight
+#' Esimate weight from one row of observations in pisco data, where one
+#' observation is a defined by an integer count of fish of one species
+#' of a given length or within a range of lengths defined by a min, max
+#' and mean length
+#'
+#' @param mean_length the mean length of observations
+#' @param min_length min observed length
+#' @param max_length max observed length
+#' @param count total count for that observation
+#' @param weight_a a coefficient for weight
+#' @param weight_b b coefficient for weight
+#' @param length_units units of length, e.g. cm, mm
+#' @param weight_units output units for weight, e.g. kg
+#' @param length_for_weight_units units from length to weight relationship
+#' @param length_type_for_weight type of length, e.g. SL, TL
+#' @param tl_sl_a params for conversion to/from SL to TL
+#' @param tl_sl_b params for conversion to/from SL to TL
+#' @param tl_sl_type params for conversion to/from SL to TL
+#' @param tl_sl_formula params for conversion to/from SL to TL
+#' @param length_prob type of distirbution to use to generate multiple length comps
+#'
+#' @return a real number of total estiamted weight for that observation
+#' @export
+#'
 length_to_weight <-
   function(mean_length,
            min_length,
@@ -12,7 +37,8 @@ length_to_weight <-
            tl_sl_a,
            tl_sl_b,
            tl_sl_type,
-           tl_sl_formula) {
+           tl_sl_formula,
+           length_prob = "multinomial") {
     #
     # generate_lengths <- function(count,mean_length, min_length, max_length){
 
@@ -28,8 +54,22 @@ length_to_weight <-
         lengths <-  rep(mean_length, count)
 
       } else{
-        # lengths <-  pmax(min_length,pmin(max_length,rpois(count, lambda = mean_length)))
+
+        if(length_prob == "unif"){
+
         lengths <- runif(count, min = min_length, max = max_length)
+        } else {
+
+        probs <- rep(1, round(max_length) - round(min_length) + 1)
+
+        lengths <- as.numeric(rmultinom(1, count, prob = probs))
+
+        lengths <- data_frame(length = round(min_length):round(max_length), counts = lengths) %>%
+          mutate(lengths = map2(length, counts, ~rep(.x,.y)))
+
+        lengths <- unlist(lengths$lengths)
+
+        }
       }
 
       if (length_type_for_weight == 'SL') {
