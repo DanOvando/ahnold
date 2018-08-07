@@ -162,8 +162,6 @@ pisco_performance <-
 
 save(file = 'about_time.Rdata', simple_performance, pisco_performance)
 
-# tmb side ----------------------------------------------------------------
-
 
 bayes_model <-
   rstanarm::stan_glmer(

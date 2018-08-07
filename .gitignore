@@ -39,3 +39,4 @@ libs/
 _ignore/.*
 _ignore**/*.*
 data/zissou-data/
+.here

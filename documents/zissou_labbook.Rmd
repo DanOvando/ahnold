@@ -2710,3 +2710,209 @@ compare %>%
 
 ```
 
+# why the zero adding process?
+
+At the moment, you are adding in zeros for fish that have ever been seen at a site. What's the point of this, instead of either adding in zeros for every species in the database/by region/whatever?
+
+My reasoning was that sites blink on and off. So, what I don't want to do is add in a bunch of implausible zeros all of a sudden. If we had consistent sampling of each site over time, or random sampling of suitable habitat, then including all zeros all the time wouldn't matter all that much. But, if you're measuring polar bear densities, and all of a sudden start including Miami in your density counts, that's going to screw up your time series. So, that's why it's site specific. 
+
+```{r}
+
+pisco_data %>% 
+  left_join(site_data, by = c("site","side")) %>% 
+  filter(region %in% c("ANA", "SCI","SRI",'SMI')) %>% 
+  group_by(site, year) %>% 
+  count() %>% 
+  ggplot(aes(year, n, color = site)) +
+          geom_line(show.legend = FALSE)
+
+
+```
+
+
+
+# revisiting inside/outside MPA analysis
+
+So both Ray and Steve want to see differences and density trends inside and outside of MPAs. 
+
+First, can look at the data here, and compare trends and differentes just inside and just outside MPAs 
+
+Second, could do it by island to see if there are differences in trends 
+
+Third, if you want to, could identify knn in terms of lat/lon of nearest sites to each MPA
+
+4th, chould sequentially add/drop species from the mix and see how much things change. KISS
+
+
+
+
+```{r}
+
+a = pisco_data %>% 
+  group_by(site,year) %>% 
+  summarise(cn = n_distinct(classcode))
+
+
+consistent_sites <- pisco_data %>%
+  group_by(site) %>%
+  summarise(
+    num_years = length(unique(year)),
+    min_year = min(year),
+    max_year = max(year)
+  ) %>%
+  arrange(desc(num_years)) %>%
+  filter(num_years > 10)
+
+
+nobs_quantiles <- pisco_data %>%
+  filter(any_seen == T) %>%
+  group_by(year, classcode) %>%
+  summarise(nobs = sum(any_seen)) %>%
+  ungroup() %>%
+  {
+    quantile(.$nobs)
+  }
+
+well_observed_species <- pisco_data %>%
+  filter(year > 1999) %>%
+  group_by(year, classcode, commonname, targeted) %>%
+  summarise(nseen = sum(any_seen, na.rm = T)) %>%
+  group_by(commonname, classcode, targeted) %>%
+  summarise(min_seen = min(nseen, na.rm = T)) %>%
+  arrange(desc(min_seen)) %>%
+  ungroup() %>%
+  filter(min_seen > 2) %>%
+  # filter(min_seen > nobs_quantiles[3]) %>%
+  mutate(classcode = (classcode))
+
+top_species <- base_run$data[[1]]$classcode %>% unique()
+
+# top_species <- well_observed_species$classcode %>% unique()
+
+cip_data <- pisco_data %>% 
+  left_join(site_data, by = c("site","side")) %>% 
+  filter(is.na(eventual_mpa) == F) %>% 
+  filter(region %in% c("ANA", "SCI","SRI",'SMI'),
+         classcode %in% top_species,
+         site %in% unique(consistent_sites$site))
+
+
+inside_outside <- cip_data %>% 
+  group_by(year, eventual_mpa) %>% 
+  summarise(sum_density = sum(density_g_m2, na.rm = T),
+            mean_density = mean(density_g_m2, na.rm = T),
+            median_density = median(density_g_m2, na.rm = T))
+
+inside_outside %>% 
+  ggplot(aes(year, mean_density, color = eventual_mpa)) + 
+  geom_line()
+
+
+inside_outside_targeted <-  cip_data %>% 
+  group_by(year, eventual_mpa, targeted) %>% 
+  summarise(sum_density = sum(density_g_m2, na.rm = T),
+            mean_density = mean(density_g_m2, na.rm = T),
+            median_density = median(density_g_m2, na.rm = T))
+
+inside_outside_targeted %>% 
+  ggplot(aes(year, mean_density, color = eventual_mpa)) + 
+  geom_line() + 
+  facet_wrap(~targeted)
+
+
+inside_outside_targeted %>% 
+  ggplot(aes(year, mean_density, color = targeted == 1)) + 
+  geom_line() + 
+  facet_wrap(~eventual_mpa)
+
+```
+
+
+So the plot on the right there should mirror 
+
+
+What about displaying the noise...
+
+
+```{r}
+cip_data %>% 
+  group_by(year, classcode, eventual_mpa, targeted) %>% 
+  summarise(mean_density = mean(density_g_m2, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(targeted = targeted == 1) %>% 
+  group_by(classcode, eventual_mpa) %>% 
+  mutate(cs_density = (mean_density - mean(mean_density)) / sd(mean_density)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, cs_density, color = targeted, fill = targeted)) + 
+  geom_line(aes(group = interaction(classcode, targeted)),alpha = 0.5) + 
+  geom_smooth() +
+  facet_wrap(~eventual_mpa)
+  
+  
+```
+
+```{r}
+cip_data %>% 
+  group_by(year, classcode, eventual_mpa, targeted) %>% 
+  summarise(mean_density = mean(density_g_m2, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(targeted = targeted == 1) %>% 
+  group_by(classcode, eventual_mpa) %>% 
+  mutate(cs_density = (mean_density - mean(mean_density)) / sd(mean_density)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, mean_density, color = targeted, fill = targeted)) + 
+  geom_line(aes(group = interaction(classcode, targeted)),alpha = 0.5) + 
+  geom_smooth() +
+  facet_wrap(~eventual_mpa)
+```
+
+
+
+```{r}
+mpa_run <- model_runs %>% 
+  filter(data_source == "pisco",
+         var_names == "pisco_a",
+         mpa_only == TRUE)
+
+  mpa_run$data[[1]] %>% 
+  select(year, targeted,classcode, log_density, any_seen) %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  group_by(classcode,targeted, year) %>% 
+  summarise(md = mean(density)) %>% 
+  group_by(classcode,targeted) %>% 
+  mutate(smd = (md - mean(md)) / sd(md)) %>% 
+  ggplot(aes(year, smd, color = targeted == 1, fill = targeted == 1)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(aes(group = interaction(targeted, classcode)), alpha = 0.25) +
+  geom_smooth() + 
+  scale_color_d3(name = "Targeted?") + 
+  scale_fill_d3(name = "Targeted?") +
+  labs(y = "Centered and Scaled Mean Density", x = "Year")
+
+  
+```
+
+```{r}
+
+mpa_run$did_plot[[1]]
+
+```
+
+
+Can you redo the MPA analysis using exact methods as jen for aggregation?
+
+
+```{r}
+
+a = cip_data %>% 
+  group_by(targeted, region,site,side, transect, year, eventual_mpa) %>% 
+  summarise(density = sum(density_g_m2)) %>% 
+  group_by(targeted, region,site, year, eventual_mpa) %>% 
+  summarise(mean_density = mean(density)) %>% 
+  ggplot(aes(year, mean_density, color = targeted == 1, fill =  targeted == 1)) + 
+  geom_smooth() + 
+  facet_wrap(~eventual_mpa)
+
+
+```
+
