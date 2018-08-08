@@ -2748,11 +2748,6 @@ Third, if you want to, could identify knn in terms of lat/lon of nearest sites t
 
 ```{r}
 
-a = pisco_data %>% 
-  group_by(site,year) %>% 
-  summarise(cn = n_distinct(classcode))
-
-
 consistent_sites <- pisco_data %>%
   group_by(site) %>%
   summarise(
@@ -2915,4 +2910,7 @@ a = cip_data %>%
 
 
 ```
+
+
+MPAs are playing a growing role in the management of marine resources around the world. While the primary purpose of MPAs is often to protect species and habitats within their borders, they are also looked to to provide spillover benefits to the ecosystems and fisheries surrounding them. The existence and magnitude of these spillover benefits has been a source of substantial debate for a some time, with the bulk of the conversation centered around qualitative or theoretical examinations of particular drivers of spillover [@Gaines2003; @Botsford2008;@Hilborn2004; @Hilborn1992; @Walters2004; @Hastings2003;@Gerber2003; @Gerber2005; @Hilborn2004a; @Gaines2010], or in detecting empirical evidence of the existence of spillover [e.g. @Halpern2009; @Russ1996], but not the net regional effects of MPAs. As many of the MPA networks around the world become mature enough for analysis, it is critical that we take a step to consider what evidence we can expect to observe, and what we have in fact seen in natural systems.
 
