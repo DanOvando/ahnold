@@ -538,7 +538,7 @@ size_plot <- outcomes %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(mpa_effect)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-    geom_raster(interpolate = T) + 
+    geom_raster(interpolate = FALSE) + 
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_viridis(labels = percent,
                        guide = guide_colorbar(frame.colour = "black",
@@ -641,7 +641,7 @@ size_plot <- outcomes %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(pop_effect)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-    geom_raster(interpolate = T) + 
+    geom_raster(interpolate = FALSE) + 
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_viridis(labels = percent,
                        guide = guide_colorbar(frame.colour = "black",
@@ -745,7 +745,7 @@ size_plot <- fishery_outcomes %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(fishery_effect)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-    geom_raster(interpolate = T) + 
+    geom_raster(interpolate = FALSE) + 
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_gradient2(midpoint = 0,
                          low = "tomato",
@@ -819,7 +819,7 @@ size_plot <- fishery_outcomes %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-    geom_raster(interpolate = T) + 
+    geom_raster(interpolate = FALSE) + 
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_gradient2(midpoint = 0,
                          low = "tomato",
@@ -961,11 +961,7 @@ embed_plot
 
 Focusing on just these two groups then, we can test for a causal relationship through Takens theorem using convergent cross mapping. Generalizations of Takens' theorem indicate that if two variables (in our case, species or physical variables) are part of the same dynamic system, their individual dynamics should reflect their relative causal influence. In other words, if one variable is causally forced by another, that forcing should leave a signature on the first time series. Convergent cross mapping (CCM) tests for causation by using the attractor/manifold built from the time series of one variable to predict another (hence the "cross-mapping"). In simple terms, the *causal effect of A on B is determined by how well B cross-maps A*.
 
-There are two criteria for CCM to establish causality: 
-
-- First, and most obviously, predictive cross-map skill using all available data should be significantly greater than zero. 
-
-- Second, that predictability should be convergent.  Convergence means that cross-mapped estimates improve with library length (the number of state-space vectors used to build the attractor), because the attractor is more fully resolved and therefore estimation error should decline. Convergence is key to distinguishing causation from simple or spurious correlation. If two variables are spuriously correlated and not causally linked, CCM should fail to satisfy this second criterion. Based on these criteria, there is some slight evidence that herbivores may be driving carnivore densities, but no evidence that carnivores drive herbivores (Fig.\@ref(fig:cross-map)). This analysis provides evidence that trophic cascades are unlikely to be a significant driver of our results. It is important to note though that this analysis does not mean that trophic cascades could not evolve, rather that we do not detect them with these data at this time. 
+There are two criteria for CCM to establish causality:  First, and most obviously, predictive cross-map skill using all available data should be significantly greater than zero. Second, that predictability should be convergent.  Convergence means that cross-mapped estimates improve with library length (the number of state-space vectors used to build the attractor), because the attractor is more fully resolved and therefore estimation error should decline. Convergence is key to distinguishing causation from simple or spurious correlation. If two variables are spuriously correlated and not causally linked, CCM should fail to satisfy this second criterion. Based on these criteria, there is some slight evidence that herbivores may be driving carnivore densities, but no evidence that carnivores drive herbivores (Fig.\@ref(fig:cross-map)). This analysis provides evidence that trophic cascades are unlikely to be a significant driver of our results. It is important to note though that this analysis does not mean that trophic cascades could not evolve, rather that we do not detect them with these data at this time. 
 
 ```{r cross-map, fig.cap = "Cross mapping of effect of herbivores on carnivores (A) and carnivores on herbivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
 tempE <- 8
