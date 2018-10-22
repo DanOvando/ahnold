@@ -40,3 +40,5 @@ _ignore/.*
 _ignore**/*.*
 data/zissou-data/
 .here
+*.eps
+*.tiff
