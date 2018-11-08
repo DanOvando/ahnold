@@ -1,0 +1,899 @@
+---
+title: Regional Effects of Marine Protected Areas May Be Small and Difficult to Detect
+
+# Use letters for affiliations, numbers to show equal authorship (if applicable) and to indicate the corresponding author
+author:
+  - name: Daniel Ovando
+    affiliation: a,1,2
+  - name: Bob Security
+    affiliation: a,b
+address:
+  - code: a
+    address: University of Washington, School of Aquatic and Fishery Science
+  - code: b
+    address: Another University Department, Street, City, State, Zip
+
+corresponding_author:
+  - code: 2
+    text: "To whom correspondence should be addressed. E-mail: danovan@uw.edu"
+
+# For footer text
+lead_author_surname: Ovando
+
+
+author_contributions: |
+  Please provide details of author contributions here.
+
+## Remove this if not required
+conflict_of_interest: |
+  Please declare any conflict of interest here.
+
+abstract: |
+  Please provide an abstract of no more than 250 words in a single paragraph. Abstracts should explain to the general reader the major contributions of the article. References in the abstract must be cited in full within the abstract itself and cited in the text.
+
+  Make the case clearer why this is important to know, can't design and monitor what you don't understand
+
+  Marine Protected Areas (MPAs) cover XX% of the worlds oceans, a XX% increase in area over the last XX years. The XX goals call for a further increase to XX% by XX. This expansion is driven by a desire to achieve conservation benefits inside and outside of MPA borders, as well as economic benefits through tourism and fisheries spillover. While the conservation effects of MPAs inside their borders are well demonstrated, the effects of MPAs on the broader ecosystems and fisheries around them are far less understood. We utilize theory and data to ask, what should we expect the regional effects of MPAs to be, and how can we detect them? We integrated multiple theories of MPA effects into a cohesive bio-economic simulator that allows us to explore the regional conservation and fishery effects of MPAs across range of realistic fishery scenarios. The mean effect of MPAs on total population sizes (inside and outside of MPAs) was a XX% increase in biomass, relative to a world in which the MPAs did not exist (equivalent to recovering xx% of unfished biomass). We demonstrate the challenges of estimating an effect of this size in natural systems using 15xx years of data on the density of fishes inside and outside of MPAs within the Channel Islands National Marine Sanctuary. We find no detectable effect of MPAs throughout the study region, though we can rule out conservation benefits above XX (or losses below XX). Our results show that the regional effects of MPAs may be much smaller than previously thought, requiring us to think carefully about their role in marine resource management.
+
+significance: |
+
+
+  Authors must submit a 120-word maximum statement about the significance of their research paper written at a level understandable to an undergraduate educated scientist outside their field of speciality. The primary goal of the Significance Statement is to explain the relevance of the work in broad context to a broad readership. The Significance Statement appears in the paper itself and is required for all research papers.
+
+acknowledgements: |
+  Please include your acknowledgments here, set in a single paragraph. Please do not include any acknowledgments in the Supporting Information, or anywhere else in the manuscript.
+
+keywords:
+  - Marine Protected Areas
+  - Conservation
+  - Fisheries
+  - optional
+  - optional
+
+## must be one of: pnasresearcharticle (usual two-column layout), pnasmathematics (one column layout), or pnasinvited (invited submissions only)
+pnas_type: pnasresearcharticle
+
+bibliography: pnas-sample.bib
+csl: pnas.csl
+
+## change to true to add optional line numbering
+lineno: false
+
+watermark: false
+
+output: rticles::pnas_article
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dev = "CairoPDF", dpi = 600)
+# knitr::opts_knit$set(root.dir = "/Users/danovando/PhD/zissou") # not entirely reprodcible hack to deal with knit child in dissertation.. not idealk
+
+```
+
+
+```{r, include=FALSE}
+library(sf)
+library(ggmap)
+library(viridis)
+library(hrbrthemes)
+library(scales)
+library(patchwork)
+library(rpart)
+library(extrafont)
+library(caret)
+library(ggsci)
+library(rEDM)
+library(tidyverse)
+extrafont::loadfonts()
+functions <- list.files(here::here("functions"))
+
+walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
+save_plots <- TRUE
+
+sim_years <- 50
+
+burn_years <- 20
+
+num_patches <- 25
+
+  samps <- 20000
+ 
+  run_name <- "v3.0"
+
+run_dir <- here::here("results", run_name)
+
+experiment_dir <- here::here("results",run_name, "experiments")
+
+load(file = here::here("results",run_name, "rawish_zissou_data.Rdata"))
+
+load(file = here::here("results",run_name, "model_runs.Rdata"))
+
+load(file = here::here("results",run_name,"processed_grid.Rdata"))
+
+load(file = here::here("results",run_name,"about_time.Rdata"))
+
+channel_islands <- readRDS(here::here("data","channel_islands_map.RDS"))
+
+ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>% 
+  rmapshaper::ms_simplify() %>% 
+  sf::st_transform(crs = 4326)
+
+
+  zissou_theme <- theme_ipsum(base_size = 12, axis_title_size = 12, strip_text_size = 12)
+
+  theme_set(zissou_theme)
+  
+
+models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
+
+model_runs <- model_runs %>%
+  filter(models_worked) %>%
+  mutate(tmb_fit = map(tmb_fit,"result")) %>%
+  mutate(processed_fits = map(tmb_fit, process_fits)) %>%
+  mutate(did_plot = map(processed_fits, "did_plot"))
+
+base_run <- model_runs %>% 
+filter(var_names == "pisco_a", mpa_only == FALSE, center_scale == TRUE)
+
+mpa_run <- model_runs %>% 
+  filter(data_source == "pisco",
+         var_names == "pisco_a",
+         mpa_only == TRUE)
+
+kfm_run <- model_runs %>% 
+  filter(data_source == "kfm")
+  
+fitted_data <- base_run$data[[1]]
+
+zissou_fit <- base_run$tmb_fit[[1]]
+
+report <- base_run$tmb_fit[[1]]
+
+site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  select(
+    site,
+    side,
+    mpagroup,
+    mpa_status,
+    reserve,
+    region,
+    year_mpa,
+    mpaareanm2,
+    lat_wgs84,
+    lon_wgs84
+  ) %>%
+  rename(lat_wgs84 = lon_wgs84,
+         lon_wgs84 = lat_wgs84) %>%
+  unique() %>%
+  mutate(eventual_mpa = (year_mpa > 0))
+
+
+ seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "seen_non_nested_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested%>% colnames())
+
+ seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "seeing_non_nested_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable  = zissou_fit$zissou_data$x_seeing_non_nested %>% colnames())
+
+ seen_year_species_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "seen_year_species_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
+
+ seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "seeing_year_species_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable =zissou_fit$zissou_data$x_seeing_year_species %>% colnames())
+
+ seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "seen_region_cluster_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+
+ seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "seeing_region_cluster_betas") %>%
+   rename(group = variable) %>%
+   mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+
+
+ did_betas <- zissou_fit$zissou_estimates %>%
+   filter(variable == "mpa_effect") %>%
+   mutate(group = variable) %>%
+   mutate(year = fitted_data$year %>% unique())
+
+
+ betas <- bind_rows(
+   seen_non_nested_betas,
+   seeing_non_nested_betas,
+   seen_year_species_betas,
+   seeing_year_species_betas,
+   seen_region_cluster_betas,
+   seeing_region_cluster_betas,
+   did_betas %>% select(-year)
+ ) %>%
+   as_data_frame()
+
+ non_nested_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested")) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+
+ year_species_effects_plots <- betas %>%
+   filter(str_detect(group, "year_species_betas")) %>%
+   mutate(year = str_replace_all(variable,"\\D","") %>% as.numeric()) %>%
+   mutate(classcode = str_split(variable,'-', simplify = T)[,2]) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_ribbon(aes(x = year, ymin = lower, ymax = upper, fill = classcode), alpha = 0.25) +
+   geom_line(aes(x = year, y = estimate, color = classcode)) +
+   facet_wrap(~group)
+
+  region_cluster_plots <- betas %>%
+   filter(str_detect(group, "region_cluster_betas")) %>%
+   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
+   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
+   ggplot() +
+    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+    geom_pointrange(aes(x = region,
+                        y = estimate,
+                        ymin = lower,
+                        ymax = upper, color = cluster)) +
+    facet_wrap(~group)
+
+
+
+ did_plot <- did_betas %>%
+   ggplot() +
+   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+ geom_hline(aes(yintercept = 0)) +
+   geom_pointrange(aes(
+     year,
+     y = estimate,
+     ymin = lower,
+     ymax = upper
+   ),
+   size = 1.5) +
+   labs(x = "Year", y = "Targeted Trend Divergence")
+
+top_species <- base_run$data[[1]]$classcode %>% unique()
+
+cip_data <- pisco_data %>% 
+  left_join(site_data, by = c("site","side")) %>% 
+  filter(is.na(eventual_mpa) == F) %>% 
+  filter(region %in% c("ANA", "SCI","SRI",'SMI'),
+         classcode %in% top_species)
+
+# process outcomes
+
+outcomes <- processed_grid %>%
+  select(-fishery_effect) %>% 
+  slice(1:samps) %>% 
+  unnest() %>% 
+  mutate(year = year - burn_years) %>% 
+  mutate(years_protected = year - year_mpa + 1) %>% 
+  mutate(mpa_effect = pmin(mpa_effect,2)) %>% 
+  group_by(experiment) %>% 
+  mutate(b0 = `no-mpa`[year == min(year)]) %>% 
+  mutate(depletion = 1 - `no-mpa`/b0) %>% 
+  ungroup() %>% 
+  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
+
+eqo <- outcomes %>% 
+  filter(year == max(year))
+
+fishery_outcomes <- processed_grid %>%
+  select(-mpa_effect) %>% 
+  slice(1:samps) %>% 
+  unnest() %>% 
+  mutate(year = year - burn_years) %>% 
+  mutate(years_protected = year - year_mpa + 1) %>% 
+  mutate(fishery_effect = pmin(mpa_effect,1)) %>% 
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>% 
+  filter(fleet_model != "constant-catch") %>% 
+  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
+
+fishery_eqo <- fishery_outcomes %>% 
+  filter(year == max(year))
+
+
+facet_labels <- c(
+  mpa_size = "Range in MPA",
+  depletion = "Pre-MPA Depletion"
+)
+
+```
+
+
+Why should we care about MPAs?
+
+what is currently known?
+
+theory and evidence
+
+what do we contribute
+
+novelty of simulation method
+
+identifications strategy
+
+
+
+Results and Discussion {.unnumbered}
+========================================
+
+We find... do we want to tackle both fisheries and conservation here?
+
+uhhhh.
+
+notes on figure size you dumbass. The resolution is in pixels per inch, and you specify width in pixels, so you can use that to calculate the size in inches for a given number of pixels. i.e. high resolution means that 100px wide will be smaller in absolute size .
+
+want a PDF with at least 600dpi
+
+Expected MPA Effects {#theory .unnumbered}
+-------------------
+
+
+Many authors find it useful to organize their manuscripts with the
+following order of sections; Title, Author Affiliation, Keywords,
+Abstract, Significance Statement, Results, Discussion, Materials and
+methods, Acknowledgments, and References. Other orders and headings are
+permitted.
+
+illustration figure showing outcomes under a few different realistic scenarios  
+
+
+```{r example, fig.cap = "Example trajectories of biomass with and without MPAs under a range of MPA sizes (A), and resulting MPA conservation effect (B)", include=FALSE}
+
+trajectories <-  processed_grid %>% 
+  mutate(rounded_f = plyr::round_any(f_v_m, 0.5)) %>% 
+  mutate(rounded_mpa = plyr::round_any(mpa_size, 0.25)) %>% 
+  filter(rounded_f == 1.5) %>% 
+  select(experiment, rounded_mpa, mpa_effect) %>% 
+  unnest() %>% 
+  group_by(year, rounded_mpa) %>% 
+  summarise(mean_no_mpa = mean(`no-mpa`), 
+            mean_wi_mpa = mean(`with-mpa`)) %>% 
+  ungroup() %>% 
+  mutate(mean_effect = (mean_wi_mpa - mean_no_mpa) / mean_no_mpa) %>% 
+  mutate(years_protected = year - 45)
+
+net_effect_plot <- trajectories %>% 
+  filter(years_protected >= -5) %>% 
+  ggplot(aes(years_protected, mean_effect, color = factor(rounded_mpa))) + 
+  geom_line(size = 1.5) + 
+  scale_color_viridis_d(labels = paste0(seq(0,100, by = 25),"%"),
+                        name = "") + 
+  scale_y_continuous(position = "right", labels = percent, name = "Conservation Effect") + 
+  labs(x = "Years Protected", caption = "Facets (A) and color (B) are % of region in MPAs")
+
+labelfoo <- function(x){
+  paste0(100*as.numeric(x),"%")
+  
+}
+
+
+traj_plot <- trajectories %>% 
+  filter(rounded_mpa %in% c(0.25,075)) %>% 
+  select(-mean_effect) %>% 
+  gather(world, biomass, mean_no_mpa, mean_wi_mpa) %>% 
+  mutate(years_protected = year - 45) %>% 
+  ungroup() %>% 
+  filter(years_protected >= -5) %>% 
+  ggplot(aes(years_protected, biomass, color = world)) + 
+  geom_line(size = 1.5, show.legend = FALSE) + 
+  facet_wrap(~rounded_mpa, labeller = labeller(rounded_mpa = labelfoo)) + 
+  scale_color_manual(values = c("#009ACD", "#548B54") ,name = element_blank(),
+                     labels = c("Without MPA","With MPA")) + 
+  labs(y = "Biomass", x = "")
+
+
+example_mpa_plot <- traj_plot + 
+  net_effect_plot  +  
+  plot_annotation(tag_levels = "A") +
+  plot_layout(ncol = 2,
+              nrow = 1,widths = c(1.5, 1)) & 
+  theme(
+    plot.margin = unit(c(.2, .2, .2, .2), unit = "lines"),
+    panel.spacing = unit(.2, unit = "lines"),
+    legend.position = "top",
+    strip.text = element_text(size = 2)
+    )
+
+# ggsave("figs/example.pdf",traj_plot, width = 4, height = 4, units = "in") 
+  
+pdf(file =  "figs/example.pdf",width = 4, height = 3, useDingbats = TRUE)
+print(example_mpa_plot)
+dev.off()
+
+  
+```
+
+
+Figure \@ref(fig:example) is an example of putting a frog in somewhere. 
+
+
+\begin{figure}%[tbhp]
+\centering
+\includegraphics[width=1\linewidth]{figs/example.pdf}
+\caption{Placeholder image of a frog with a long example caption to show justification setting.}
+\label{fig:example}
+\end{figure}
+
+
+Fig.\ref{fig:example} shows a thing
+
+figure 2.4 showing distribution of effects after XX years (15?) 
+
+```{r conservation-effect, fig.cap = "Median (A) and range (B) regional MPA conservation effect (expressed as percent of unfished biomass) after 15 years of protection across a range of pre-MPA depletions and MPA sizes", include = FALSE}
+
+
+pop_depletion_plot <- outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(depletion, pop_effect), binwidth = c(.05, .05),
+             show.legend = FALSE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "Median Effect"
+  ) +
+  scale_x_continuous(labels = percent, name = "Pre-MPA Depletion") + 
+  scale_y_continuous(labels = percent, name = "")
+
+
+pop_size_plot <- outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(mpa_size, pop_effect), binwidth = c(.05, .05), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "# of Sims"
+  ) +
+  scale_x_continuous(labels = percent, name = "Range in MPA") + 
+    scale_y_continuous(labels = percent, name = "Conservation Effect") + 
+  theme(legend.position = "right")
+
+
+ pop_facet_effect_plot <- outcomes %>%
+  filter(years_protected == 15) %>%
+   select(pop_effect, mpa_size, depletion) %>% 
+   gather(measure, value, -pop_effect) %>% 
+   ggplot() +
+   geom_bin2d(aes(value, pop_effect), binwidth = c(.05, .05), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,barheight = unique(10, "lines")),
+  name = "# of Sims"
+  ) + 
+   facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") + 
+   scale_x_percent(name = "") + 
+   scale_y_percent(name = "Conservation Effect")
+
+
+  pop_depletion_and_size_plot <- outcomes %>% 
+    filter(years_protected >= 0) %>%
+    group_by(experiment) %>% 
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
+           mpa_size = plyr::round_any(mpa_size, .05)) %>% 
+    filter(years_protected == 15) %>% 
+    group_by(depletion, mpa_size) %>% 
+    summarise(median_mpa_effect = median(pop_effect)) %>% 
+    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
+    geom_tile() + 
+    # geom_contour(aes(z = median_mpa_effect)) +
+    scale_fill_viridis(labels = percent,
+                       guide = guide_colorbar(frame.colour = "black",
+                                              frame.linewidth = 1,
+                                              barheight = unit(10,"lines")), 
+                       name = "Median Effect") +
+  labs(x = "Pre-MPA Depletion", y = "Range in MPA") + 
+    scale_y_continuous(labels = percent) + 
+    scale_x_continuous(labels = percent)
+  
+  pop_combo_plot <-
+    (pop_depletion_and_size_plot + labs(title = "A")) + ((pop_size_plot + labs(title = "B")) / pop_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.x = element_text(size = 8),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    )
+    
+  
+  pdf(file =  "figs/conservation-effect.pdf",width = 8, height = 5, useDingbats = TRUE)
+print(pop_combo_plot)
+dev.off()
+  
+```
+
+
+Hello there, what's up
+
+\begin{figure*}%[tbhp]
+\centering
+\includegraphics[width=1\linewidth]{figs/conservation-effect.pdf}
+\caption{Placeholder image of a frog with a long example caption to show justification setting.}
+\label{fig:conservation-effect}
+\end{figure*}
+
+
+And some more things down here
+
+
+```{r fishery-effects,fig.cap = "Median (A) and range (B) MPA fishery effects, expressed as the difference in catch with and without MPAs  as a proportion of MSY, after 15 years of protection across a range of pre-MPA depletions and MPA sizes", include = FALSE}
+
+msy_depletion_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(depletion, msy_effect), binwidth = c(.05, .05),
+             show.legend = FALSE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "Median Effect"
+  ) +
+  scale_x_continuous(labels = percent, name = "Pre-MPA Depletion") + 
+  scale_y_continuous(labels = percent, name = "Fishery Effect")
+
+
+msy_size_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+  ggplot() +
+  geom_bin2d(aes(mpa_size, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "# of Sims"
+  ) +
+  scale_x_continuous(labels = percent, name = "Range in MPA") + 
+    scale_y_continuous(labels = percent, name = "Fishery Effect") + 
+  theme(legend.position = "right")
+
+msy_facet_effect_plot <- fishery_outcomes %>%
+  filter(years_protected == 15) %>%
+   select(msy_effect, mpa_size, depletion) %>% 
+   gather(measure, value, -msy_effect) %>% 
+   ggplot() +
+   geom_bin2d(aes(value, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,barheight = unique(10, "lines")),
+  name = "# of Sims"
+  ) + 
+   facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") + 
+   scale_x_percent(name = "") + 
+   scale_y_percent(name = "Fishery Effect")
+
+
+  msy_depletion_and_size_plot <- fishery_outcomes %>% 
+    filter(years_protected >= 0,!is.na(msy)) %>%
+    group_by(experiment) %>% 
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
+           mpa_size = plyr::round_any(mpa_size, .05)) %>% 
+    filter(years_protected == 15) %>% 
+    group_by(depletion, mpa_size) %>% 
+    summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>% 
+    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
+    geom_tile() + 
+    # geom_contour(aes(z = median_mpa_effect)) +
+    scale_fill_gradient2(midpoint = 0,
+                         low = "tomato",
+                         high = "steelblue",
+                         mid = "white",
+                         labels = percent,
+                       guide = guide_colorbar(frame.colour = "black",
+                                              frame.linewidth = 1,
+                                              barheight = unit(10,"lines")), 
+                       name = "Median Effect") +
+  labs(x = "Pre-MPA Depletion", y = "Range in MPA") + 
+    scale_y_continuous(labels = percent) + 
+    scale_x_continuous(labels = percent)
+  
+  msy_fishery_combo_plot <-
+    (msy_depletion_and_size_plot + labs(title = "A")) + ((msy_size_plot + labs(title = "B")) / msy_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.x = element_text(size = 8),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    )
+    
+pdf(file =  "figs/fishery-effect.pdf",width = 8, height = 5, useDingbats = TRUE)
+print(msy_fishery_combo_plot)
+dev.off()
+  
+```
+
+
+And here's a map of the channel islands
+
+\begin{figure}%[tbhp]
+\centering
+\includegraphics[width=1\linewidth]{figs/channel-islands.pdf}
+\caption{Placeholder image of a frog with a long example caption to show justification setting.}
+\label{fig:channel-islands}
+\end{figure}
+
+
+
+```{r ci-map, fig.cap = "Map of study region and sampling locations. Shaded polygons indicate location of MPAs. Points represent sampling locations, and color indicates the number of observations recorded at a given point", include = FALSE}
+
+ci_map <- pisco_data %>% 
+  left_join(site_data, by = c("site","side")) %>% 
+  filter(is.na(eventual_mpa) == F) %>% 
+  filter(region %in% c("ANA", "SCI","SRI",'SMI'),
+         classcode %in% top_species) %>% 
+  group_by(lat_wgs84, lon_wgs84, site, region, eventual_mpa) %>% 
+  count()
+
+
+
+ci_map <-  ci_map %>%
+  dplyr::mutate(geometry = purrr::map2(lon_wgs84, lat_wgs84, ~ sf::st_point(x = c(.x, .y), dim = 'XY'))) %>%
+  ungroup() %>%
+  mutate(geometry = sf::st_sfc(geometry, crs = 4326)) %>%
+  sf::st_sf()
+
+
+bbox <- sf::st_bbox(ci_map)
+
+pisco_ci_map_plot <-  ggmap(channel_islands) +
+  geom_sf(data = ca_mpas, inherit.aes = FALSE, alpha = 0.5) +
+  geom_sf(data = ci_map,inherit.aes = FALSE,
+  aes(color = n),
+  alpha = 0.75,
+  size = 1) +
+  coord_sf(xlim = c(bbox['xmin'] - .3, bbox['xmax'] + .06),
+  ylim = c(bbox['ymin'] - .1, bbox['ymax'] + .4)) +
+  scale_color_gradient(low = "white", high = "orangered",
+  guide = guide_colorbar(frame.colour = "black",frame.linewidth = 1,
+  barheight = unit(13, "lines")),
+  name = "Samples") + 
+  ggthemes::theme_map()
+
+pdf(file =  "figs/channel-islands.pdf",width = 8, height = 5, useDingbats = TRUE)
+print(pisco_ci_map_plot)
+dev.off()
+
+
+```
+
+Or more things
+
+results {#results .unnumbered}
+------
+
+```{r did-plot, fig.cap = "Estimated divergence in biomass densities of targeted and non-targeted fishes throughout the Channel Islands (i.e. integrated across inside and outside of MPAs). MPAs are implemented in 2003 (red dashed line). Estimates are from a regression on log(abundance index), so estimated effects roughly correspond to percentage changes", include = FALSE}
+
+did_plot <- did_plot + 
+  scale_y_continuous(name = "~Divergence from Non-Targeted", labels = percent)
+
+pdf(file =  "figs/did_plot.pdf",width = 8, height = 5, useDingbats = TRUE)
+print(did_plot)
+dev.off()
+
+```
+
+
+
+\begin{figure}%[tbhp]
+\centering
+\includegraphics[width=1\linewidth]{figs/did_plot.pdf}
+\caption{Estimated divergence in biomass densities of targeted and non-targeted fishes throughout the Channel Islands (i.e. integrated across inside and outside of MPAs). MPAs are implemented in 2003 (red dashed line). Estimates are from a regression on log(abundance index), so estimated effects roughly correspond to percentage changes.}
+\label{fig:did}
+\end{figure}
+
+Many authors find it useful to organize their manuscripts with the
+following order of sections; Title, Author Affiliation, Keywords,
+Abstract, Significance Statement, Results, Discussion, Materials and
+methods, Acknowledgments, and References. Other orders and headings are
+permitted.
+
+Manuscript Length {#manuscript-length .unnumbered}
+-----------------
+
+PNAS generally uses a two-column format averaging 67 characters,
+including spaces, per line. The maximum length of a Direct Submission
+research article is six pages and a PNAS PLUS research article is ten
+pages including all text, spaces, and the number of characters displaced
+by figures, tables, and equations. When submitting tables, figures,
+and/or equations in addition to text, keep the text for your manuscript
+under 39,000 characters (including spaces) for Direct Submissions and
+72,000 characters (including spaces) for PNAS PLUS.
+
+References {#references .unnumbered}
+----------
+
+References should be cited in numerical order as they appear in text;
+this will be done automatically via bibtex, e.g. @belkin2002using and
+@berard1994embedding [@coifman2005geometric]. All references, including
+for the SI, should be included in the main manuscript file. References
+appearing in both sections should not be duplicated. SI references
+included in tables should be included with the main reference section.
+
+Data Archival {#data-archival .unnumbered}
+-------------
+
+PNAS must be able to archive the data essential to a published article.
+Where such archiving is not possible, deposition of data in public
+databases, such as GenBank, ArrayExpress, Protein Data Bank, Unidata,
+and others outlined in the Information for Authors, is acceptable.
+
+
+
+Language-Editing Services {#language-editing-services .unnumbered}
+-------------------------
+
+Prior to submission, authors who believe their manuscripts would benefit
+from professional editing are encouraged to use a language-editing
+service (see list at www.pnas.org/site/authors/language-editing.xhtml).
+PNAS does not take responsibility for or endorse these services, and
+their use has no bearing on acceptance of a manuscript for publication.
+
+\begin{figure*}%[tbhp]
+\centering
+\includegraphics[width=.8\linewidth]{frog}
+\caption{Placeholder image of a frog with a long example caption to show justification setting.}
+\label{fig:frog}
+\end{figure*}
+
+Digital Figures {#sec:figures .unnumbered}
+---------------
+
+Only TIFF, EPS, and high-resolution PDF for Mac or PC are allowed for
+figures that will appear in the main text, and images must be final
+size. Authors may submit U3D or PRC files for 3D images; these must be
+accompanied by 2D representations in TIFF, EPS, or high-resolution PDF
+format. Color images must be in RGB (red, green, blue) mode. Include the
+font files for any text.
+
+Figures and Tables should be labelled and referenced in the standard way
+using the `\label{}` and `\ref{}` commands.
+
+Figure \ref{fig:frog} shows an example of how to insert a column-wide
+figure. To insert a figure wider than one column, please use the
+`\begin{figure*}...\end{figure*}` environment. Figures wider than one
+column should be sized to 11.4 cm or 17.8 cm wide.
+
+Single column equations {#single-column-equations .unnumbered}
+-----------------------
+
+Authors may use 1- or 2-column equations in their article, according to
+their preference.
+
+To allow an equation to span both columns, options are to use the
+`\begin{figure*}...\end{figure*}` environment mentioned above for
+figures, or to use the `\begin{widetext}...\end{widetext}` environment
+as shown in equation \[eqn:example\] below.
+
+Please note that this option may run into problems with floats and
+footnotes, as mentioned in the [cuted package
+documentation](http://texdoc.net/pkg/cuted). In the case of problems
+with footnotes, it may be possible to correct the situation using
+commands `\footnotemark` and `\footnotetext`.
+
+$$\begin{aligned}
+(x+y)^3&=(x+y)(x+y)^2\\
+       &=(x+y)(x^2+2xy+y^2) \label{eqn:example} \\
+       &=x^3+3x^2y+3xy^3+x^3. 
+\end{aligned}$$
+
+
+
+<!-- pandoc writes all tables using longtable, which fails in 2-column mode
+
+  Species                    CBS     CV     G3
+  ----------------------- ------ ------ ------
+  1\. Acetaldehyde           0.0    0.0    0.0
+  2\. Vinyl alcohol          9.1    9.6   13.5
+  3\. Hydroxyethylidene     50.8   51.2   54.0
+
+  : Comparison of the fitted potential energy surfaces and ab initio
+  benchmark electronic energy calculations
+
+-->
+
+Supporting Information (SI) {#supporting-information-si .unnumbered}
+---------------------------
+
+
+The main text of the paper must stand on its own without the SI. Refer
+to SI in the manuscript at an appropriate point in the text. Number
+supporting figures and tables starting with S1, S2, etc. Authors are
+limited to no more than 10 SI files, not including movie files. Authors
+who place detailed materials and methods in SI must provide sufficient
+detail in the main text methods to enable a reader to follow the logic
+of the procedures and results and also must reference the online
+methods. If a paper is fundamentally a study of a new method or
+technique, then the methods must be described completely in the main
+text. Because PNAS edits SI and composes it into a single PDF, authors
+must provide the following file formats only.
+
+### SI Text {#si-text .unnumbered}
+
+Supply Word, RTF, or LaTeX files (LaTeX files must be accompanied by a
+PDF with the same file name for visual reference).
+
+### SI Figures {#si-figures .unnumbered}
+
+Provide a brief legend for each supporting figure after the supporting
+text. Provide figure images in TIFF, EPS, high-resolution PDF, JPEG, or
+GIF format; figures may not be embedded in manuscript text. When saving
+TIFF files, use only LZW compression; do not use JPEG compression. Do
+not save figure numbers, legends, or author names as part of the image.
+Composite figures must be pre-assembled.
+
+### 3D Figures {#d-figures .unnumbered}
+
+Supply a composable U3D or PRC file so that it may be edited and
+composed. Authors may submit a PDF file but please note it will be
+published in raw format and will not be edited or composed.
+
+### SI Tables {#si-tables .unnumbered}
+
+Supply Word, RTF, or LaTeX files (LaTeX files must be accompanied by a
+PDF with the same file name for visual reference); include only one
+table per file. Do not use tabs or spaces to separate columns in Word
+tables.
+
+### SI Datasets {#si-datasets .unnumbered}
+
+Supply Excel (.xls), RTF, or PDF files. This file type will be published
+in raw format and will not be edited or composed.
+
+### SI Movies {#si-movies .unnumbered}
+
+Supply Audio Video Interleave (avi), Quicktime (mov), Windows Media
+(wmv), animated GIF (gif), or MPEG files and submit a brief legend for
+each movie in a Word or RTF file. All movies should be submitted at the
+desired reproduction size and length. Movies should be no more than 10
+MB in size.
+
+### Still images {#still-images .unnumbered}
+
+Authors must provide a still image from each video file. Supply TIFF,
+EPS, high-resolution PDF, JPEG, or GIF files.
+
+### Appendices {#appendices .unnumbered}
+
+PNAS prefers that authors submit individual source files to ensure
+readability. If this is not possible, supply a single PDF file that
+contains all of the SI associated with the paper. This file type will be
+published in raw format and will not be edited or composed.
+
+
+\matmethods{Please describe your materials and methods here. This can be more than one paragraph, and may contain subsections and equations as required. Authors should include a statement in the methods section describing how readers will be able to access the data in the paper. 
+
+\subsection*{Subsection for Method}
+Example text for subsection.
+}
+
+<!-- Leave these lines as they are at the end of your .Rmd file to ensure placement of methods & acknowledgements sections before the references-->
+\showmatmethods
+\showacknow
+\pnasbreak
+
+

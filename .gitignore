@@ -42,3 +42,8 @@ data/zissou-data/
 .here
 *.eps
 *.tiff
+*.o
+*.so
+*.csv
+*.tex
+*.png
