@@ -44,3 +44,7 @@ data/zissou-data/
 *.tiff
 *.o
 *.so
+*.csv
+*.tex
+*.png
+test_files/

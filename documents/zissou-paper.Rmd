@@ -955,7 +955,7 @@ pop_size_plot <- outcomes %>%
   option = "A",
   trans = "log10",
   guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,barheight = unique(10, "lines")),
+  frame.linewidth = 1,barheight = unit(10, "lines")),
   name = "# of Sims"
   ) + 
    facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") + 
