@@ -274,6 +274,11 @@ readability. If this is not possible, supply a single PDF file that
 contains all of the SI associated with the paper. This file type will be
 published in raw format and will not be edited or composed.
 
+\matmethods{Please describe your materials and methods here. This can be more than one paragraph, and may contain subsections and equations as required. Authors should include a statement in the methods section describing how readers will be able to access the data in the paper. 
+
+\subsection*{Subsection for Method}
+Example text for subsection.
+}
 
 <!-- Leave these lines as they are at the end of your .Rmd file to ensure placement of methods & acknowledgements sections before the references-->
 \showmatmethods
