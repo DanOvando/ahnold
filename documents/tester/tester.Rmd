@@ -6,14 +6,14 @@ author:
   - name: Alice Anonymous
     affiliation: a,1,2
   - name: Bob Security
-    affiliation: a,b
+    affiliation: a,b,1
 address:
   - code: a
     address: Some Institute of Technology, Department, Street, City, State, Zip
   - code: b
     address: Another University Department, Street, City, State, Zip
 
-corresponding_author:
+correspondingauthor:
   - code: 2
     text: "To whom correspondence should be addressed. E-mail: bob@email.com"
 
@@ -31,7 +31,7 @@ author_contributions: |
 
 ## Remove this if not required
 conflict_of_interest: |
-  Please declare any conflict of interest here.
+  anybody home?
 
 abstract: |
   Please provide an abstract of no more than 250 words in a single paragraph. Abstracts should explain to the general reader the major contributions of the article. References in the abstract must be cited in full within the abstract itself and cited in the text.
@@ -89,7 +89,8 @@ ZIP/postal code, for each author. Use lower case letters to match
 authors with institutions, as shown in the example. Authors with an
 ORCID ID may supply this information at submission.
 
-### Submitting Manuscripts {#submitting-manuscripts .unnumbered}
+Submitting Manuscripts {#submitting-manuscripts .unnumbered}
+----------------------
 
 All authors must submit their articles at
 [PNAScentral](http://www.pnascentral.org/cgi-bin/main.plex). If you are
