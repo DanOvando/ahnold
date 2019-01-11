@@ -48,3 +48,4 @@ data/zissou-data/
 *.tex
 *.png
 test_files/
+*.bib

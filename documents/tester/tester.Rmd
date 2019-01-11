@@ -89,8 +89,7 @@ ZIP/postal code, for each author. Use lower case letters to match
 authors with institutions, as shown in the example. Authors with an
 ORCID ID may supply this information at submission.
 
-Submitting Manuscripts {#submitting-manuscripts .unnumbered}
-----------------------
+### Submitting Manuscripts {#submitting-manuscripts .unnumbered}
 
 All authors must submit their articles at
 [PNAScentral](http://www.pnascentral.org/cgi-bin/main.plex). If you are
@@ -147,12 +146,8 @@ service (see list at www.pnas.org/site/authors/language-editing.xhtml).
 PNAS does not take responsibility for or endorse these services, and
 their use has no bearing on acceptance of a manuscript for publication.
 
-\begin{figure*}%[tbhp]
-\centering
-\includegraphics[width=.8\linewidth]{frog}
-\caption{Placeholder image of a frog with a long example caption to show justification setting.}
-\label{fig:frog}
-\end{figure*}
+![Placeholder image of a frog with a long example caption to show
+justification setting.<span data-label="fig:frog"></span>](frog.png)
 
 Digital Figures {#sec:figures .unnumbered}
 ---------------
@@ -167,7 +162,7 @@ font files for any text.
 Figures and Tables should be labelled and referenced in the standard way
 using the `\label{}` and `\ref{}` commands.
 
-Figure \ref{fig:frog} shows an example of how to insert a column-wide
+Figure \[fig:frog\] shows an example of how to insert a column-wide
 figure. To insert a figure wider than one column, please use the
 `\begin{figure*}...\end{figure*}` environment. Figures wider than one
 column should be sized to 11.4 cm or 17.8 cm wide.
