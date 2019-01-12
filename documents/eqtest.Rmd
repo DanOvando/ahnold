@@ -1,0 +1,49 @@
+---
+title: "eqtest"
+output:
+  bookdown::pdf_document2: default
+  bookdown::html_document2: default
+  bookdown::word_document2: default
+---
+
+
+
+\begin{equation}
+  n_{t,a}=\begin{cases}
+      = BH(ssb_{t-1}) & \text{if $a = 1$}\\
+     = n_{t-1,a-1}e^{-(m + f*s_{a-1})}, & \text{if $1< a < max(age)$}\\
+     =  n_{t-1,a}e^{-(m + f*s_a)} + n_{t-1,a-1}e^{-(m + f*s_{a-1})}, & \text{if $a = max(a)$}
+  \end{cases}
+  (\#eq:pop)
+\end{equation}
+
+were *ssb* represents spawning stock biomass, by first
+
+\begin{equation}
+  l_{a} = l_{\infty}\left(1 - e^{-k(a - a_0)}\right)
+  (\#eq:vbk)
+\end{equation}
+
+\begin{equation}
+  b_{a} = w_a \times l_{a}^{w_b}
+  (\#eq:weight)
+\end{equation}
+
+
+\begin{equation}
+  E_{t} = E_{t-1}\times\theta{Profits_{t-1}}
+  (\#eq:oa)
+\end{equation}
+
+\begin{equation}
+  Profits_{t} = pCatch - cE_{t}^\beta
+  \label{eqn:example}
+\end{equation}
+
+
+
+
+
+
+
+
