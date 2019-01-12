@@ -71,6 +71,13 @@ Note: please start your introduction without including the word
 Physical Sciences section); this heading is implied in the first
 paragraphs.
 
+\begin{equation}
+  d_{i} = \beta_0 + \beta_1T_{i} +  \beta_2MPA_{i} + \beta_{3}T_iMPA_i + e_{i}
+\label{eq:did}
+\end{equation}
+
+While Equation.\ref{eq:did}
+
 Guide to using this template {.unnumbered}
 ========================================
 
@@ -159,6 +166,15 @@ size. Authors may submit U3D or PRC files for 3D images; these must be
 accompanied by 2D representations in TIFF, EPS, or high-resolution PDF
 format. Color images must be in RGB (red, green, blue) mode. Include the
 font files for any text.
+
+\begin{figure*}%[tbhp]
+  \centering
+  \includegraphics[width=.9\linewidth]{frog.png}
+  \caption{Median (A) and range (B) regional MPA conservation effect (expressed as percent of unfished biomass) after 15 years of protection across a range of pre-MPA depletion and MPA sizes}
+  \label{berp}
+\end{figure*}
+
+Figure.\ref{berp}
 
 Figures and Tables should be labelled and referenced in the standard way
 using the `\label{}` and `\ref{}` commands.
