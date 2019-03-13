@@ -3027,6 +3027,37 @@ MPA effects are going to be hard to detect. Both because they are small and beca
 
 
 
+# departmental semindar blurb
 
+Marine Protected Areas offering varying levels of protection (MPAs) cover between 3-7% of the worlds oceans, up from less than 1% at the turn of the century. The Convention on Biological Diversity calls for 10% of coastal waters to be protected inside MPAs by 2020, with other bodies calling for at least 30% of the oceans to be placed in MPAs. This expansion is driven by a desire to achieve conservation benefits inside and outside of MPA borders, as well as economic benefits through for example tourism and fisheries spillover. While the potential conservation effects of MPAs inside their borders are well demonstrated, the effects of MPAs on the broader ecosystems and fisheries around them are far less understood. As MPAs play an increasing role in marine resource management portfolios, it is critically important that we develop a better understanding of the magnitude and drivers of regional-scale MPA effects. To address this gap, this study examines two critical questions: 1) What do we expect the regional-scale conservation and fishery effects of MPAs to be and 2) When (and how) can we expect to detect these effects? We address these questions using a simulation analysis to frame the theoretical regional conservation and fishery impacts of MPAs. From there, we present an empirical assessment of the evidence for regional-level conservation effects of MPAs resulting from a network of closures put in the Channel Islands National Marine Sanctuary.
 
+# notes from Jen's edits
+
+Interesting, should you add in a scenario where you specify whether the MPA is a network or a blob? Need to double check how you're doing that at this point. 
+
+Chamge MPA to marine reserve maybe
+
+Make text and axes labels consistent
+
+# march 2013 call
+
+Currently at 7,414 words and 9 pages, so a lot ahs to go. Excluding figures and tables you're at 47,000 characters. 
+
+https://www.pnas.org/sites/default/files/advanced-pages/iforc.pdf
+
+An online   submission   tool   provides   authors   with   an   estimation  of  whether  their  manuscript  fits  within  the  PNAS  length requirements (see Length Estimate Guidelines and FAQ). When submitting tables, figures, and/or equations in addition to  text,  keep  the  text  for  your  manuscript  under  39,000  char-acters (including spaces) for 6-page articles and 65,000 for 10-page articles.
+
+Manuscript  Length.PNAS  generally  uses  a  two-column  for-mat  averaging  67  characters,  including  spaces,  per  line.  The  maximum length of a regular research article is 6 pages (or 10 pages for PNAS Plus articles), including all text, spaces, and the number  of  characters  displaced  by  figures,  tables,  and  equa-tions.
+
+## is this the right message for PNAS?
+
+## Go through and suggest improvements to figures
+
+## Identify critical additional analyses to run
+
+## What can/needs to be removed
+
+this is a biggy. Can obviously cut a lot down, I tend to be wordy, but still it's a lot of content. Fisheries is some low hanging fruit. You don't have an empirical example for it, and the paper would be a bit more streamlined without it. But, makes it a stronger reference I think with it, and was a lot of work... though could write an almost identical companion paper if we can get the damn logbook data for the Channel islands fisheries. 
+
+## What are the critical technical details to include in methods
 
