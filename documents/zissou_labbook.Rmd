@@ -3049,6 +3049,58 @@ An online   submission   tool   provides   authors   with   an   estimation  of 
 
 Manuscript  Length.PNAS  generally  uses  a  two-column  for-mat  averaging  67  characters,  including  spaces,  per  line.  The  maximum length of a regular research article is 6 pages (or 10 pages for PNAS Plus articles), including all text, spaces, and the number  of  characters  displaced  by  figures,  tables,  and  equa-tions.
 
+Tends to emphasize the negative results over the bigger message. Still thinking about this from a single species standpoint. If you've got an array of species with a mix of characteristics, small negative-positive effects, potentially large positive effects. So, you can get the big benefits for the species when you have the biggest gain, with minimal losses. Most are going to be a mix of species. 
+
+Can we rework the title? Might not be hard to detect in a place with a the med. Those aren't the places that should be the focus of MPAs in the first place. 
+
+Needs a takehome message for PNAS, need a key result. 
+
+1. Here's why no-one is ever able to detect regional effects. 
+  - A table of the papers on detecting MPA outcomes
+2. When would you be able to detect an effect? Only when it matters
+  - if you detect an effect, it must mean there was a big impact
+3. You implement a bunch of species, you're going to detect for some but not others
+
+we're just now starting to think about regional effects
+
+if here's how you want to do the system wide effect, here's how, and here's why it's hard
+
+inside outside can't give us insight to this answer. You've also got an estimate of inside vs outside effect and show how different that is. 
+
+a statement about where the next generation of MPA science. We have established that we can do inside anda outside measurements.If we're really thinking about network effects, then the way that we measure them in the past is wrong. Here's a roadmap to the future. 
+
+What if we forget. Is an inside outside comparison an illustration of the system wide effects? Can we continue to rely on inside-outside comparisons. THe main message is you need more comprehensive studies. PLot of inside outside to regional effect. 
+
+It becomes a valuable solution to an ensemble. The cool thing that comes out of the right analysis are also places where you're not going to get huge fisheries cost. 
+
+What can be learned from inside outside
+
+
+plot: inside outside wedge vs distribution of conservation and fishery gains
+
+Got to be a new story. 
+
+virtually never designed for one species. 
+
+You're just redistributing where the fish are. 
+
+Can make the point that inside outside ratio vs projected benefit, have a kind of ratio that suggest maybe system wide benefits. 
+
+when and where are the response ratios 
+
+Why you can't rely on inside outside ratios 
+
+Saving that place or reef 
+
+What if we said, the main way that people measure the eficacy of MPAs is thorugh inside and outside comparisons. To the extent that we're implementing MPAs for system wide benefits, when can we rely on inside-outside benefits, to generalize to the region. Two issues arrise 1) SUTVA, but we assume 2) that this has been done, how do you scale up unbiased inside outside to regional and 3) we show a practical approach. 
+
+Two reasonably ways of looking at this. 
+
+**The system wide effects of MPA Networks**
+
+If you look at your axes of stock status, if you're managing your fisheries well, not going to see a fisheries benefit. 
+
+
 ## is this the right message for PNAS?
 
 ## Go through and suggest improvements to figures
@@ -3061,3 +3113,50 @@ this is a biggy. Can obviously cut a lot down, I tend to be wordy, but still it'
 
 ## What are the critical technical details to include in methods
 
+
+# version 2.0
+
+
+  Marine Protected Areas (MPAs) with varying levels of protection cover between 3-7% of the worlds oceans, up from less than 1% in the year 2000. The Convention on Biological Diversity's Strategic Plan for Biodiversity  calls for 10% of coastal waters to be protected inside MPAs by 2020, with other bodies calling for at least 30% of the oceans to be placed in MPAs. This expansion is driven by a desire to achieve conservation benefits inside and outside of MPA borders, and in some cases produce economic benefits to fisheries. Despite the expanding role of MPAs in marine resource management, we lack a clear understanding of what the regional effects of these protected areas might be and how to detect them. We used a bio-economic simulation model to demonstrate how the regional effects of MPAs are affected by suite of theoretical drivers, and show how commonly used to measure MPA effectivness can fail to capture the the true regional impacts. Lastly, we present am empirical strategy for estimating regional MPA effects on biomass density using 16 years of data from inside and outside of MPAs within the Channel Islands, California, USA. We find no detectable conservation effect of MPAs on total biomass densities of targeted finfish throughout the study region. The next generation of MPA science must address the challenge of understanding and estimating the regional effects of MPAs.
+  
+  
+  
+# how ready are you to explore density ratios and gradients?
+
+after loading data for paper, and pulling in a random experiment
+
+```{r}
+
+library(tidyverse)
+library(here)
+library(gganimate)
+
+a <- readRDS(here("results","v3.0","experiments","experiment_10210.rds"))
+
+b <- a$mpa_experiment[[1]]$raw_outcomes
+
+
+d <- b %>% 
+  group_by(year,patch, experiment) %>% 
+  summarise(mpa = unique(mpa),
+            biomass = sum(biomass))
+
+
+d %>% 
+  ggplot(aes(patch, biomass, color = mpa)) + 
+  geom_point() + 
+  transition_time(year) +
+  ease_aes('linear') + 
+  facet_wrap(~experiment)
+
+
+```
+
+OK so you've got the data to do this, but going ot take some wranglign from the experiments. 
+
+Points to a couple of things you might want to do better in the actual experiments though. Really not liking these edge effects at all, adds an unneeded layer of complexity. Also, thought you were allowing for random MPA placement. Let's go back through and actually look through spasm and see what can be done here. Might be a good time to revisit how you run this whole thing. 
+
+
+
+
+  
