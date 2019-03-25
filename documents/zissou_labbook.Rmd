@@ -3157,6 +3157,37 @@ OK so you've got the data to do this, but going ot take some wranglign from the 
 Points to a couple of things you might want to do better in the actual experiments though. Really not liking these edge effects at all, adds an unneeded layer of complexity. Also, thought you were allowing for random MPA placement. Let's go back through and actually look through spasm and see what can be done here. Might be a good time to revisit how you run this whole thing. 
 
 
+# what are you doing about the constant catch scenarios that crash the population?
+
+after loading in processed grid
+
+OK solutino, let it run, but filter out any runs that bave biomass less than min biomass before MPA year
+
+```{r}
+
+wtf <- processed_grid %>% 
+  filter(fleet_model == "constant-catch")
+
+woof <- wtf %>% 
+  select(experiment, mpa_effect) %>% 
+  unnest() %>% 
+  group_by(experiment) %>% 
+  mutate(s = `no-mpa` / max(`no-mpa`))
+
+woof %>% 
+  ggplot(aes(year,s, group = experiment)) + 
+  geom_line()
+
+a = woof %>% 
+  group_by(experiment) %>% 
+  summarise(mb = min(`no-mpa`)) %>% 
+  ggplot(aes(mb)) + 
+  geom_histogram()
+
+mean(a$mb > 100)
+
+
+```
 
 
   

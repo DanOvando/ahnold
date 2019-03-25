@@ -18,8 +18,13 @@ tune_fishery <- function( f_v_m,
                                fish,
                                fleet,
                                sim_years = 50,
-                               burn_years = 10,
-                               num_patches = 1){
+                               burn_years = 1,
+                               num_patches = 10,
+                          sprinkler = sprinkler,
+                          mpa_habfactor = mpa_habfactor){
+
+
+
   if (fleet$fleet_model == "constant-catch"){
 
     tol <- 100
@@ -69,7 +74,8 @@ tune_fishery <- function( f_v_m,
 
     } # close golden while
 
-    msy_fit <- nlminb(mean(c(lower, upper)), estimate_msy, fish = fish, fleet = fleet, lower = 0)
+    msy_fit <- nlminb(mean(c(lower, upper)), estimate_msy, fish = fish, fleet = fleet, lower = 0,
+                      num_patches = 1)
 
     fleet$e_msy <- msy_fit$par
 
@@ -142,6 +148,8 @@ tune_fishery <- function( f_v_m,
 
     fleet$e_msy <- msy_fit$par
 
+    fleet$initial_effort <- fleet$e_msy
+
     fish$msy <- -msy_fit$objective
 
     fish$b_msy <- estimate_msy(fleet$e_msy, fish = fish, fleet = fleet, use = "other")
@@ -154,7 +162,7 @@ tune_fishery <- function( f_v_m,
 
     lower <- 0
 
-    upper <- 100
+    upper <- 1
 
     golden <- (sqrt(5) -1)/2
 
@@ -176,25 +184,51 @@ tune_fishery <- function( f_v_m,
 
       x2 <- upper - constant
 
-      ss_1 <- estimate_costs(cost = x1,
-                             fish = fish,
-                             fleet = fleet,
-                             msy = fish$msy,
-                             e_msy = fleet$e_msy,
-                             b_msy = fish$b_msy,
-                             p_response = fleet$theta,
-                             b_v_bmsy_oa = pmax(.05,2 - f_v_m),
-                             sim_years = 100)
+      # ss_1 <- estimate_costs(cost = x1,
+      #                        fish = fish,
+      #                        fleet = fleet,
+      #                        msy = fish$msy,
+      #                        e_msy = fleet$e_msy,
+      #                        b_msy = fish$b_msy$b_msy,
+      #                        p_response = fleet$max_perc_change_f,
+      #                        b_v_bmsy_oa = pmax(.05,2 - f_v_m),
+      #                        sim_years = 100)
 
-      ss_2 <- estimate_costs(cost = x2,
-                             fish = fish,
-                             fleet = fleet,
-                             msy = fish$msy,
-                             e_msy = fleet$e_msy,
-                             b_msy = fish$b_msy,
-                             p_response = fleet$theta,
-                             b_v_bmsy_oa = pmax(.05,2 - f_v_m),
-                             sim_years = 100)
+      ss_1 <-
+          estimate_costs(
+          max_cr_ratio = x1,
+          fish = fish,
+          fleet = fleet,
+          b_ref_oa = pmax(.05,(2 - f_v_m) / 2),
+          lags = 10,
+          num_patches = num_patches,
+          sim_years = sim_years,
+          burn_years = burn_years,
+        )
+
+
+      # ss_2 <- estimate_costs(cost = x2,
+      #                        fish = fish,
+      #                        fleet = fleet,
+      #                        msy = fish$msy,
+      #                        e_msy = fleet$e_msy,
+      #                        b_msy = fish$b_msy$b_msy,
+      #                        p_response = fleet$max_perc_change_f,
+      #                        b_v_bmsy_oa = pmax(.05,2 - f_v_m),
+      #                        sim_years = 100)
+
+      ss_2 <-
+        estimate_costs(
+          max_cr_ratio = x2,
+          fish = fish,
+          fleet = fleet,
+          b_ref_oa = pmax(.05,(2 - f_v_m) / 2),
+          lags = 10,
+          num_patches = num_patches,
+          sim_years = sim_years,
+          burn_years = burn_years,
+        )
+
 
       delta_best <-  (0 -  min(ss_1,ss_2))^2
 
@@ -219,22 +253,54 @@ tune_fishery <- function( f_v_m,
 
     } # close golden while
 
-    cost_fit <-         nlminb(
-      mean(c(lower, upper)),
-      estimate_costs,
-      fish = fish,
-      fleet = fleet,
-      lower = 0,
-      msy = fish$msy,
-      e_msy = fleet$e_msy,
-      b_msy = fish$b_msy,
-      p_response = fleet$theta,
-      b_v_bmsy_oa =  pmax(.05,2 - f_v_m)
+
+    crs <- seq(0.01,0.8, by = 0.05)
+
+    huh <- map_dbl(crs, estimate_costs, fish = fish,
+                   fleet = fleet,
+                   b_ref_oa = pmax(.05,(2 - f_v_m) / 2),
+                   lags = 1,
+                   num_patches = num_patches,
+                   sim_years = sim_years,
+                   burn_years = burn_years
     )
 
-    fleet$cost <- cost_fit$par
+    cost_fit <-
+      nlminb(
+        crs[huh == min(huh)],
+        estimate_costs,
+        fish = fish,
+        fleet = fleet,
+        b_ref_oa = pmax(.05,(2 - f_v_m) / 2),
+        lower = 1e-3,
+        upper = 0.8,
+        lags = 1,
+        num_patches = num_patches,
+        sim_years = sim_years,
+        burn_years = burn_years,
+        sprinkler = sprinkler,
+        mpa_habfactor = mpa_habfactor
+      )
+    # browser()
 
-    fleet$p_msy <- fish$price * fish$msy - fleet$cost * fleet$e_msy ^ fleet$beta
+
+
+    # cost_fit <-         nlminb(
+    #   mean(c(lower, upper)),
+    #   estimate_costs,
+    #   fish = fish,
+    #   fleet = fleet,
+    #   lower = 0,
+    #   msy = fish$msy,
+    #   e_msy = fleet$e_msy,
+    #   b_msy = fish$b_msy$b_msy,
+    #   p_response = fleet$max_perc_change_f,
+    #   b_v_bmsy_oa =  pmax(.05,2 - f_v_m)
+    # )
+
+    fleet$max_cr_ratio <- cost_fit$par
+
+    # fleet$p_msy <- fish$price * fish$msy - fleet$cost * fleet$e_msy ^ fleet$beta
 
 
   } else if (fleet$fleet_model == "supplied-catch"){

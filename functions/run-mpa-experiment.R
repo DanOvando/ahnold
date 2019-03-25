@@ -5,6 +5,8 @@ comp_foo <- function(fish,
                      sim_years,
                      num_patches,
                      burn_years,
+                     sprinkler = FALSE,
+                     mpa_habfactor = 1,
                      enviro = NA,
                      enviro_strength = NA,
                      rec_driver = 'stochastic',
@@ -18,15 +20,18 @@ comp_foo <- function(fish,
       manager = create_manager(year_mpa = year_mpa, mpa_size = 0),
       sim_years = sim_years,
       num_patches = num_patches,
-      burn_year = burn_years,
+      burn_years = burn_years,
       enviro = enviro,
       enviro_strength = enviro_strength,
-      rec_driver = rec_driver
+      rec_driver = rec_driver,
+      sprinkler = sprinkler,
+      mpa_habfactor = mpa_habfactor,
+      tune_costs = FALSE,
+      est_msy = FALSE
     ) %>%
     mutate(experiment = 'no-mpa')
 
   set.seed(simseed)
-
   wi_mpa <-
     sim_fishery(
       fish = fish,
@@ -34,10 +39,14 @@ comp_foo <- function(fish,
       manager = create_manager(year_mpa = year_mpa, mpa_size = mpa_size),
       sim_years = sim_years,
       num_patches = num_patches,
-      burn_year = burn_years,
+      burn_years = burn_years,
       enviro = enviro,
       enviro_strength = enviro_strength,
-      rec_driver = rec_driver
+      rec_driver = rec_driver,
+      sprinkler = sprinkler,
+      mpa_habfactor = mpa_habfactor,
+      tune_costs = FALSE,
+      est_msy = FALSE
     ) %>%
     mutate(experiment = 'with-mpa')
 

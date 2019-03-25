@@ -33,11 +33,9 @@ functions <- list.files(here::here("functions"))
 
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
-run_name <- 'v3.0'
+run_name <- 'v4.0'
 
-run_description <-
-  'Fixed model runs to run all the damn options at once instead of as stupid toggles'
-
+run_description <- "post defense improvements and author feedback. Ideally publication version"
 in_clouds <- F
 
 if (in_clouds == F){
@@ -214,6 +212,13 @@ yoy_foo <- function(classcode, fish_tl) {
 
 length_data <- length_data %>%
   mutate(classcode = map2_chr(classcode, fish_tl, yoy_foo))
+
+# flip situations where min_tl is greater than max_tl
+
+flipped <- length_data$max_tl < length_data$min_tl & !is.na(length_data$max_tl) & !is.na(length_data$min_tl)
+
+length_data[flipped,c("min_tl","max_tl")] <-  length_data[flipped,c("max_tl","min_tl")]
+
 
 # add in covariates -------------------------------------------------------
 
@@ -398,11 +403,6 @@ num_clusters <- data_frame(clusters = 1:20) %>%
       iter.max = 1000
     )$withinss
   )))
-
-# num_clusters %>%
-#   ggplot(aes(clusters, within_ss)) +
-#   geom_point() +
-#   geom_line()
 
 cluster_classcodes <-
   kmeans(
@@ -628,7 +628,6 @@ if (file.exists('processed_data/pisco-data.Rdata') == F |
       ),
       length_to_weight
     ))
-
 
   pisco_data <- length_example %>%
     mutate(
