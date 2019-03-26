@@ -25,17 +25,15 @@ num_patches <- 50
 
 run_experiments <- TRUE
 
-create_grid <- FALSE
+create_grid <- TRUE
 
 n_cores <- 6
 
-samps <- 100
+samps <- 10000
 
 grid_search <-  FALSE
 
 in_clouds <- F
-
-logged <- TRUE
 
 if (in_clouds == T) {
   system("umount results/zissou-results")
@@ -183,8 +181,6 @@ if (run_experiments == T) {
         create_fish,
         price = 10
       ))
-
-    browser()
 
 
     # create fleet objects

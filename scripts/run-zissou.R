@@ -110,15 +110,15 @@ write(run_description,
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- TRUE
+run_tmb <- FALSE
 
-n_cores <- 1
+n_cores <- 5
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
 max_generations <- 4
 
-run_length_to_density <-  TRUE
+run_length_to_density <-  FALSE
 
 run_vast <- FALSE # run VAST, best to leave off for now
 
@@ -1220,7 +1220,7 @@ if (run_tmb == T){
 
     sfz <- safely(fit_zissou)
 
-    fits <- fit_zissou(data = model_runs$data[[i]],
+    fits <- sfz(data = model_runs$data[[i]],
                   non_nested_variables = model_runs$non_nested_variables[[i]],
                   mpa_only = model_runs$mpa_only[[i]],
                   center_scale = model_runs$center_scale[[i]],
@@ -1253,7 +1253,7 @@ save(file = paste0(run_dir, '/model_runs.Rdata'),
 
 } else {
 
-  load(file = paste0(run_dir, '/model_runs.Rdata'))
+  load(file = file.path(run_dir, 'model_runs.Rdata'))
 }
 
 
@@ -1267,14 +1267,6 @@ model_runs <- model_runs %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
   mutate(did_plot = map(processed_fits, "did_plot"))
 
-# bad <- map(a$tmb_fit,c("zissou_estimates","lower")) %>%
-#   map_lgl(~all(is.na(.x)))
-#
-# b <- a %>%
-#   filter(bad)
-#
-# d <- a %>%
-#   filter(!bad)
 
 
 
