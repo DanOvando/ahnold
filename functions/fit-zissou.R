@@ -89,7 +89,6 @@ fit_zissou <- function(data,
 
   # prepare data for c++ ----------------------------------------------------
 
-
   seen_cdata <-
     make_c_worthy(seen_data,
                   non_nested_vars = non_nested_variables,

@@ -36,6 +36,7 @@ walk(functions, ~ here::here("functions", .x) %>% source()) # load local functio
 run_name <- 'v4.0'
 
 run_description <- "post defense improvements and author feedback. Ideally publication version"
+
 in_clouds <- F
 
 if (in_clouds == F){
@@ -109,7 +110,7 @@ write(run_description,
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- FALSE
+run_tmb <- TRUE
 
 n_cores <- 1
 
@@ -117,7 +118,7 @@ tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
 max_generations <- 4
 
-run_length_to_density <-  FALSE
+run_length_to_density <-  TRUE
 
 run_vast <- FALSE # run VAST, best to leave off for now
 
@@ -153,10 +154,11 @@ theme_set(plot_theme)
 
 # load data ---------------------------------------------------------------
 
-length_data <- read_csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
+length_data <- read.csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   mutate(classcode = tolower(classcode)) %>%
-  mutate(observer = ifelse(is.na(observer), 'unknown', observer))
+  mutate(observer = as.character(observer)) %>%
+  mutate(observer = ifelse(observer == '', 'unknown', observer))
 
 # Filter data per operations in Fish size biomass processing CIMPA.sas file
 
@@ -1218,7 +1220,7 @@ if (run_tmb == T){
 
     sfz <- safely(fit_zissou)
 
-    fits <- sfz(data = model_runs$data[[i]],
+    fits <- fit_zissou(data = model_runs$data[[i]],
                   non_nested_variables = model_runs$non_nested_variables[[i]],
                   mpa_only = model_runs$mpa_only[[i]],
                   center_scale = model_runs$center_scale[[i]],

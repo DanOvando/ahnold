@@ -3190,4 +3190,31 @@ mean(a$mb > 100)
 ```
 
 
+# double check fishery tuning
+
+
+```{r}
+
+i = 12
+
+temp <- sim_grid %>% 
+  filter(fleet_model == "open-access",
+         mpa_reaction == "leave")
+
+a = spasm::sim_fishery(
+  fish = temp$fish[[i]],
+  fleet = temp$fleet[[i]],
+  manager = create_manager(mpa_size = .8),
+  sprinkler = temp$sprinkler[i],
+  mpa_habfactor = temp$mpa_habfactor[i],
+  sim_years = 50,
+  burn_years = 1,
+  num_patches = 50
+)
+
+plot_spasm(a, type = "totals")
+
+```
+
+
   

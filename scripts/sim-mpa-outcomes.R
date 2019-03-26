@@ -25,11 +25,11 @@ num_patches <- 50
 
 run_experiments <- TRUE
 
-create_grid <- TRUE
+create_grid <- FALSE
 
 n_cores <- 6
 
-samps <- 1000
+samps <- 100
 
 grid_search <-  FALSE
 
@@ -184,6 +184,9 @@ if (run_experiments == T) {
         price = 10
       ))
 
+    browser()
+
+
     # create fleet objects
     sim_grid <- sim_grid %>%
       mutate(fleet = pmap(
@@ -202,6 +205,7 @@ if (run_experiments == T) {
 
     future::plan(future::multiprocess, workers = n_cores)
 
+    message("starting fishery tuning")
     sim_grid <- sim_grid %>%
       mutate(
         tuned_fishery = future_pmap(
@@ -224,27 +228,14 @@ if (run_experiments == T) {
         fleet = map(tuned_fishery, "fleet")
       )
 
-    # i <- 10
-    # check <- spasm::sim_fishery(
-    #   manager = create_manager(
-    #     mpa_size = sim_grid$mpa_size[i],
-    #     year_mpa = sim_grid$year_mpa[i]
-    #   ),
-    #   fish = sim_grid$fish[[i]],
-    #   fleet = sim_grid$fleet[[i]],
-    #   sim_years = 50,
-    #   sprinkler = sim_grid$sprinkler[[i]],
-    #   mpa_habfactor = sim_grid$mpa_habfactor[[i]],
-    #   num_patches = 50
-    # )
-
-    # plot_spasm(check)
-
     save(sim_grid, file = paste0(run_dir, "/sim_grid.Rdata"))
+    message("finished fishery tuning")
+
   } else{
     load(file = paste0(run_dir, "/sim_grid.Rdata"))
 
   }
+
 
 
   doParallel::registerDoParallel(cores = n_cores)
@@ -260,8 +251,7 @@ if (run_experiments == T) {
 
   # library(progress)
 
-  logged <- TRUE
-
+  message("starting mpa experiments")
   mpa_experiments <-
     foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
       # pb$tick()
@@ -353,18 +343,16 @@ if (run_experiments == T) {
         )
 
 
-      if (logged == TRUE) {
+      # if (logged == TRUE) {
         filename <- glue::glue("experiment_{i}.rds")
 
         saveRDS(results, file = glue::glue("{experiment_dir}/{filename}"))
-
-      } else {
-        results
-      } # close ifelse
     } # close dopar
 
 
 } # close run experiments
+
+message("finished mpa experiments")
 
 
 
@@ -386,7 +374,7 @@ loadfoo <-
   }
 
 
-if (logged == TRUE) {
+# if (logged == TRUE) {
   future::plan(future::multiprocess, workers = n_cores)
 
   processed_grid <-
@@ -395,10 +383,10 @@ if (logged == TRUE) {
                experiment_dir = experiment_dir,
                .progress = T)
 
-} else {
+# } else {
   # processed_grid
 
-}
+# }
 
 grid_worked <- map(processed_grid, "error") %>% map_lgl(is_null)
 
