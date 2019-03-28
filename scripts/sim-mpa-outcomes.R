@@ -29,7 +29,7 @@ create_grid <- TRUE
 
 n_cores <- 6
 
-samps <- 10000
+samps <- 5000
 
 grid_search <-  FALSE
 
@@ -81,6 +81,9 @@ experiment_dir <- file.path(run_dir, "experiments")
 load(file = file.path(run_dir, "rawish_zissou_data.Rdata"))
 
 load(file = file.path(run_dir, "model_runs.Rdata"))
+
+load(file = file.path(run_dir, "abundance_data.Rdata"))
+
 
 fitted_data <- model_runs$data[[1]]
 
@@ -137,10 +140,10 @@ if (run_experiments == T) {
             samps,
             replace = T
           ),
-          year_mpa = sample(5:(sim_years / 2), samps, replace = T),
+          year_mpa = sample(5:(sim_years / 1.5), samps, replace = T),
           sprinkler = sample(c(TRUE, FALSE), samps, replace = TRUE),
           mpa_reaction   =  sample(c("stay", "leave"), samps, replace = TRUE),
-          min_size = runif(samps, min = 0.01, max = 1),
+          min_size = runif(samps, min = 0.01, max = 0.75),
           mpa_habfactor = sample(c(1, 4), samps, replace = TRUE),
           size_limit = runif(samps, 0.1, 1.25)
         )

@@ -3217,4 +3217,238 @@ plot_spasm(a, type = "totals")
 ```
 
 
+# revisit simplified analysis
+
+just ot have in back pocket, revisit the idea of a super simple difference in difference, aggregating up etc. 
+
+Starting at the point of run_tmb in run_zissou.R
+
+simplest possible idea: mean biomass density by targeted and non targeted over time
+
+```{r}
+library(rstanarm)
+year_mpa <- 2003 
+
+data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+supersimple <- data %>% 
+  group_by(year, targ) %>% 
+  summarise(mean_density = mean(density)) %>% 
+     mutate(mpa = year > year_mpa) %>% 
+  ungroup()
+
+supersimple %>% 
+  ggplot(aes(year, mean_density, color = targ)) + 
+  geom_line()
+
+
+supersimple_reg <- stan_glm(log(mean_density) ~ targ*mpa, data = supersimple)
+
+plot(supersimple_reg)
+
+
+```
+
+
+so next step then, look at it over time. So now, you need multiple observations per time steps, so going to look at each classcode
+
+
+```{r}
+year_mpa <- 2002 
+
+data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+sortasimple <- data %>% 
+  group_by(year, classcode) %>% 
+  summarise(mean_density = mean(density),
+            targ = unique(targ)) %>% 
+     mutate(mpa = year > year_mpa) %>% 
+  ungroup() %>% 
+  mutate(fyear = factor(year)) %>% 
+  mutate(fyear = relevel(fyear, ref = "2003"))
+
+sortasimple %>% 
+  filter(targ == "Targeted") %>% 
+  ggplot(aes(year, mean_density, color = classcode)) + 
+  geom_point() + 
+  geom_label(aes(year,mean_density, label = classcode) ) +
+  facet_wrap(~targ)
+
+
+sortasimple_reg <- stan_glm(log(mean_density + 1e-3) ~ targ*fyear, data = sortasimple, cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                      regex_pars = ":fyear")
+
+
+
+sortasimple2_reg <- stan_glmer(log(mean_density + 1e-3) ~ targ*fyear + (1|classcode), data = sortasimple, cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple2_reg),
+                      regex_pars = ":fyear") + 
+  scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+  coord_flip()
+
+
+```
+
+
+huh interesitng, didn't notice that before, sheephead and kelp bass seem to be heading up a bit more clearly in the recent years, while the other ones are headed down. 
+
+
+```{r}
+
+year_mpa <- 2002
+
+data <-
+  abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+  mutate(density = exp(log_density) * any_seen) %>%
+  mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+sortasimple <- data %>%
+  filter(classcode %in% c("pcla", "spul") |
+           targ == "Non-Targeted") %>%
+  group_by(year, classcode) %>%
+  summarise(mean_density = mean(density),
+            targ = unique(targ)) %>%
+  mutate(mpa = year > year_mpa) %>%
+  ungroup() %>%
+  mutate(fyear = factor(year)) %>%
+  mutate(fyear = relevel(fyear, ref = "2003"))
+
+sortasimple %>%
+  ggplot(aes(year, mean_density, color = classcode)) +
+  geom_point() +
+  # geom_label(aes(year,mean_density, label = classcode) ) +
+  facet_wrap( ~ targ)
+
+
+sortasimple_reg <-
+  stan_glm(log(mean_density + 1e-3) ~ targ * fyear,
+           data = sortasimple,
+           cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                      regex_pars = ":fyear")
+
+
+
+sortasimple2_reg <-
+  stan_glmer(
+    log(mean_density + 1e-3) ~ targ * fyear + (1 |
+                                                 classcode),
+    data = sortasimple,
+    cores = 4
+  )
+
+bayesplot::mcmc_areas(as.matrix(sortasimple2_reg),
+                      regex_pars = ":fyear") +
+  scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+  coord_flip()
+
+```
+
   
+And one more time but now treating sites as replicates to increase sample size
+
+
+```{r}
+
+year_mpa <- 2002 
+
+data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+sortasimple <- data %>% 
+  group_by(year, classcode, region) %>% 
+  summarise(mean_density = mean(density),
+            targ = unique(targ)) %>% 
+     mutate(mpa = year > year_mpa) %>% 
+  ungroup() %>% 
+  mutate(fyear = factor(year)) %>% 
+  mutate(fyear = relevel(fyear, ref = "2003"))
+
+sortasimple %>% 
+  filter(targ == "Targeted") %>% 
+  ggplot(aes(year, mean_density, color = classcode)) + 
+  geom_point() + 
+  # geom_label(aes(year,mean_density, label = classcode) ) +
+  facet_wrap(~targ)
+
+
+sortasimple_reg <- stan_glm(log(mean_density + 1e-3) ~ targ*fyear, data = sortasimple, cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                      regex_pars = ":fyear")
+
+
+
+sortasimple2_reg <- stan_glmer(log(mean_density + 1e-3) ~ targ*fyear + (1|classcode), data = sortasimple, cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple2_reg),
+                      regex_pars = ":fyear") + 
+  scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+  coord_flip()
+
+```
+
+
+```{r}
+
+library(gapminder)
+data(gapminder)
+
+test <- stan_glm(lifeExp ~ factor(year), data = gapminder)
+
+plot(test)
+
+```
+
+
+MPA only
+
+```{r}
+year_mpa <- 2002 
+
+data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+sortasimple <- data %>% 
+  filter(eventual_mpa == TRUE) %>% 
+  group_by(year, classcode) %>% 
+  summarise(mean_density = mean(density),
+            targ = unique(targ)) %>% 
+     mutate(mpa = year > year_mpa) %>% 
+  ungroup() %>% 
+  mutate(fyear = factor(year)) %>% 
+  mutate(fyear = relevel(fyear, ref = "2003"))
+
+sortasimple %>% 
+  # filter(targ == "Targeted") %>% 
+  ggplot(aes(year, mean_density, color = classcode)) + 
+  geom_point() + 
+  facet_wrap(~targ)
+
+
+sortasimple_reg <- stan_glm(log(mean_density + 1e-3) ~ targ*fyear, data = sortasimple, cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                      regex_pars = ":fyear")
+
+
+
+sortasimple2_reg <- stan_glmer(log(mean_density + 1e-3) ~ targ*fyear + (1|classcode), data = sortasimple, cores = 4)
+
+bayesplot::mcmc_areas(as.matrix(sortasimple2_reg),
+                      regex_pars = ":fyear") + 
+  scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+  coord_flip()
+
+
+```

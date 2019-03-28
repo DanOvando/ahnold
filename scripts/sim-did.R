@@ -18,17 +18,17 @@ functions <- list.files(here::here("functions"))
 
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
-run_name <- 'v3.0'
+run_name <- 'v4.0'
 
 run_dir <- file.path('results', run_name)
 
-simulate_samples <- T
+simulate_samples <- TRUE
 
-burn_years <- 25
+burn_years <- 1
 
 sim_years <- 75
 
-year_mpa <- 30
+year_mpa <- 50
 
 num_patches <-  2
 
@@ -65,7 +65,7 @@ n_groups <- 5
 
 simple_fish <-
   data_frame(
-    loo = c(rnorm(n_groups, 120, 10), rnorm(n_groups, 100, 10)),
+    loo = c(rnorm(n_groups, 120, 0.001), rnorm(n_groups, 100, 0.001)),
     k = 0.4,
     lm = .75 * loo,
     m = 0.2,
@@ -114,7 +114,7 @@ if (simulate_samples == T) {
     rec_driver = 'stochastic',
     enviro_strength = 1,
     sigma_r = 0,
-    cores = 1,
+    cores = 4,
     time_step = time_step
   )
 
@@ -129,7 +129,7 @@ if (simulate_samples == T) {
     samples = n_samples,
     rec_driver = 'environment',
     enviro_strength = 1,
-    sigma_r = 0.25,
+    sigma_r = 0.1,
     cores = 4,
     time_step = time_step
   )
@@ -145,84 +145,96 @@ if (simulate_samples == T) {
 
 # fit simple model --------------------------------------------------------
 
+a <- pisco_fish %>%
+  select(classcode, targeted, pisco_samples) %>%
+  unnest() %>%
+  select(-pop, -diver_stats, -sampled_lengths) %>%
+  group_by(classcode) %>%
+  mutate(density = scale(density))
+
+a %>%
+  ggplot(aes(year, density, color = classcode)) +
+  geom_smooth() +
+  facet_wrap(~targeted, scales = "free_y")
+
 
 simple_performance <-
   test_performance(
     simple_fish,
     year_mpa = year_mpa + burn_years,
-    min_year = 50,
+    min_year = 45,
     time_step = time_step
   )
 
 pisco_performance <-
   test_performance(pisco_fish,
                    year_mpa + burn_years,
-                   min_year = 50,
+                   min_year = 45,
                    time_step = time_step)
 
-save(file = 'about_time.Rdata', simple_performance, pisco_performance)
+save(file = 'simulated_did.Rdata', simple_performance, pisco_performance)
 
 
-bayes_model <-
-  rstanarm::stan_glmer(
-    log_density ~ logical_targeted + factor_year +  logical_targeted:factor_year + (1 |
-                                                                                      classcode),
-    data = simple_data %>% slice(1:400) ,
-    chains = 1,
-    cores = 4
-  )
-
-
-check_stan_did <- broom::tidy(test) %>%
-  filter(str_detect(term, 'logical_targetedTRUE:')) %>%
-  mutate(year = str_replace_all(term, '\\D', '') %>% as.numeric()) %>%
-  ggplot() +
-  geom_pointrange(
-    aes(
-      x = year,
-      y = estimate,
-      ymin = estimate - 1.96 * std.error,
-      ymax = estimate + 1.96 * std.error
-    )
-  ) +
-  geom_point(data = true_effect, aes(year, mpa_effect), color = 'red')
-
-
-
-script_name <- "fit_simmpa"
-
-sfa <- safely(fit_sim_mpa)
-
-
-tmb_runs <-
-  data_frame(
-    data = list(simple_data),
-    non_nested_variables = list(c('targeted')),
-    include_intercept = c(TRUE),
-    fixed_did = c(TRUE)
-  )
-
-
-tmb_runs <- tmb_runs %>%
-  mutate(tmb_fit = pmap(
-    list(
-      data = data,
-      non_nested_variables = non_nested_variables,
-      include_intercept = include_intercept,
-      fixed_did = fixed_did
-    ),
-    sfa,
-    run_dir = run_dir,
-    script_name = script_name,
-    fixed_regions = T
-  ))
-
-huh <- tmb_runs$tmb_fit[[1]]$result
-
-a <- huh$ahnold_estimates %>%
-  filter(variable == 'net_did')
-
-a %>%
-  mutate(year = simple_data$year %>% unique()) %>%
-  ggplot(aes(year, estimate)) +
-  geom_point()
+# bayes_model <-
+#   rstanarm::stan_glmer(
+#     log_density ~ logical_targeted + factor_year +  logical_targeted:factor_year + (1 |
+#                                                                                       classcode),
+#     data = simple_fish %>% slice(1:400) ,
+#     chains = 1,
+#     cores = 4
+#   )
+#
+#
+# check_stan_did <- broom::tidy(test) %>%
+#   filter(str_detect(term, 'logical_targetedTRUE:')) %>%
+#   mutate(year = str_replace_all(term, '\\D', '') %>% as.numeric()) %>%
+#   ggplot() +
+#   geom_pointrange(
+#     aes(
+#       x = year,
+#       y = estimate,
+#       ymin = estimate - 1.96 * std.error,
+#       ymax = estimate + 1.96 * std.error
+#     )
+#   ) +
+#   geom_point(data = true_effect, aes(year, mpa_effect), color = 'red')
+#
+#
+#
+# script_name <- "fit_simmpa"
+#
+# sfa <- safely(fit_sim_mpa)
+#
+#
+# tmb_runs <-
+#   data_frame(
+#     data = list(simple_data),
+#     non_nested_variables = list(c('targeted')),
+#     include_intercept = c(TRUE),
+#     fixed_did = c(TRUE)
+#   )
+#
+#
+# tmb_runs <- tmb_runs %>%
+#   mutate(tmb_fit = pmap(
+#     list(
+#       data = data,
+#       non_nested_variables = non_nested_variables,
+#       include_intercept = include_intercept,
+#       fixed_did = fixed_did
+#     ),
+#     sfa,
+#     run_dir = run_dir,
+#     script_name = script_name,
+#     fixed_regions = T
+#   ))
+#
+# huh <- tmb_runs$tmb_fit[[1]]$result
+#
+# a <- huh$ahnold_estimates %>%
+#   filter(variable == 'net_did')
+#
+# a %>%
+#   mutate(year = simple_data$year %>% unique()) %>%
+#   ggplot(aes(year, estimate)) +
+#   geom_point()
