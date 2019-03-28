@@ -38,7 +38,6 @@ create_samples <- function(fishes,
       fleet_q = fleet_q
     ))
 
-
   simple_fish <- simple_fish %>%
     mutate(
       mpa_experiment = pmap(
@@ -88,7 +87,7 @@ create_samples <- function(fishes,
   # ok now you need to think about how to set up your sampling regime.
   # The idea now is that you can send out a bunch of observers to monitor the population each year...
 
-  go_sample <- function(pop, fish, divers, samples, cores = 1)
+  go_sample <- function(pop, fish, divers, samples, cores = 1, cv = 0.1)
   {
     annual_data <- pop %>%
       nest(-year, -experiment, .key = 'pop')
@@ -124,7 +123,7 @@ create_samples <- function(fishes,
           diver = pisco_samples$diver_stats[[i]],
           patches = pisco_samples$patches[i],
           effort = 1,
-          cv = 0.1,
+          cv = cv,
           fish = fish
         )
 
@@ -145,7 +144,8 @@ create_samples <- function(fishes,
         go_sample,
         divers = divers,
         samples = samples,
-        cores = cores
+        cores = cores,
+        cv = 0.001
       )
     )
 

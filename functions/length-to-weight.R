@@ -60,7 +60,7 @@ length_to_weight <-
         lengths <- runif(count, min = min_length, max = max_length)
         } else {
 
-        probs <- rep(1, round(max_length) - round(min_length) + 1)
+          probs <- rep(1, round(max_length) - round(min_length) + 1)
 
         lengths <- as.numeric(rmultinom(1, count, prob = probs))
 

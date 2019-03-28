@@ -89,7 +89,6 @@ fit_zissou <- function(data,
 
   # prepare data for c++ ----------------------------------------------------
 
-
   seen_cdata <-
     make_c_worthy(seen_data,
                   non_nested_vars = non_nested_variables,
@@ -296,8 +295,13 @@ fit_zissou <- function(data,
 
     # save(file = here::here(run_dir, "zissou-onestage-tmb-model.Rdata"),
     #      zissou_model)
-
-    a <- Sys.time()
+# browser()
+#
+#
+#     fit <- tmbstan::tmbstan(zissou_model, cores = 1,
+#                             chains = 2000)
+#
+    # a <- Sys.time()
     set.seed(seed)
     zissou_fit <-
       nlminb(
@@ -306,7 +310,7 @@ fit_zissou <- function(data,
         zissou_model$gr,
         control = list(iter.max = 4000, eval.max = 5000)
       )
-    Sys.time() - a
+    # Sys.time() - a
 
     # save(file = here::here(run_dir, "zissou-onestage-tmb-fit.Rdata"),
     #      zissou_fit)

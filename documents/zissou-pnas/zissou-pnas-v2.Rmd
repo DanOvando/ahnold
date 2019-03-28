@@ -89,7 +89,7 @@ num_patches <- 25
 
   samps <- 20000
  
-  run_name <- "v3.0"
+  run_name <- "v4.0"
 
 run_dir <- here::here("results", run_name)
 
@@ -110,10 +110,16 @@ ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>%
   sf::st_transform(crs = 4326)
 
 
-  zissou_theme <- theme_ipsum(base_size = 12, axis_title_size = 12, strip_text_size = 12)
 
-  theme_set(zissou_theme)
-  
+zissou_theme <-
+  theme_ipsum(
+    base_size = 12,
+    axis_title_size = 12,
+    strip_text_size = 12
+  )
+
+theme_set(zissou_theme)
+
 
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
@@ -160,41 +166,44 @@ site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
   mutate(eventual_mpa = (year_mpa > 0))
 
 
- seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "seen_non_nested_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested%>% colnames())
+seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seen_non_nested_betas")) %>%
+  rename(group = variable) %>%
+  mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested %>% colnames())
 
- seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "seeing_non_nested_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable  = zissou_fit$zissou_data$x_seeing_non_nested %>% colnames())
+seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seeing_non_nested_betas")) %>%
+  rename(group = variable) %>%
+  mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested %>% colnames())
 
- seen_year_species_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "seen_year_species_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
+seen_year_species_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seen_year_species_betas")) %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
 
- seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "seeing_year_species_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable =zissou_fit$zissou_data$x_seeing_year_species %>% colnames())
+seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seeing_year_species_betas")) %>%
+  # filter(variable == "seeing_year_species_betas") %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
 
- seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "seen_region_cluster_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seen_region_cluster_betas")) %>%
+  # filter(variable == "seen_region_cluster_betas") %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
 
- seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "seeing_region_cluster_betas") %>%
-   rename(group = variable) %>%
-   mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seeing_region_cluster_betas")) %>%
+  # filter(variable == "seeing_region_cluster_betas") %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
 
-
- did_betas <- zissou_fit$zissou_estimates %>%
-   filter(variable == "mpa_effect") %>%
-   mutate(group = variable) %>%
-   mutate(year = fitted_data$year %>% unique())
+did_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "mpa_effect")) %>%
+  # filter(variable == "mpa_effect") %>%
+  mutate(group = variable) %>%
+  mutate(year = zissou_fit$did_data$year %>% unique())
 
 
  betas <- bind_rows(
@@ -269,10 +278,12 @@ cip_data <- pisco_data %>%
 # process outcomes
 
 outcomes <- processed_grid %>%
-  select(-fishery_effect) %>% 
+  select(-fishery_effect, -density_ratio) %>% 
   slice(1:samps) %>% 
   unnest() %>% 
-  mutate(year = year - burn_years) %>% 
+  group_by(experiment) %>% 
+  mutate(year = 1:length(year)) %>% 
+  ungroup() %>% 
   mutate(years_protected = year - year_mpa + 1) %>% 
   mutate(mpa_effect = pmin(mpa_effect,2)) %>% 
   group_by(experiment) %>% 
@@ -285,15 +296,28 @@ eqo <- outcomes %>%
   filter(year == max(year))
 
 fishery_outcomes <- processed_grid %>%
-  select(-mpa_effect) %>% 
+  select(-mpa_effect, -density_ratio) %>% 
   slice(1:samps) %>% 
   unnest() %>% 
-  mutate(year = year - burn_years) %>% 
+  group_by(experiment) %>% 
+  mutate(year = 1:length(year)) %>% 
+  ungroup() %>% 
   mutate(years_protected = year - year_mpa + 1) %>% 
   mutate(fishery_effect = pmin(mpa_effect,1)) %>% 
   left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>% 
   filter(fleet_model != "constant-catch") %>% 
   mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
+
+density_ratios <- processed_grid %>%
+  select(-fishery_effect) %>% 
+  slice(1:samps) %>% 
+  unnest() %>% 
+  group_by(experiment) %>% 
+  mutate(year = 1:length(year)) %>% 
+  ungroup() %>% 
+  mutate(years_protected = year - year_mpa + 1) %>% 
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
+
 
 fishery_eqo <- fishery_outcomes %>% 
   filter(year == max(year))
@@ -431,7 +455,7 @@ pop_size_plot <- outcomes %>%
    scale_x_percent(name = "") + 
    scale_y_percent(name = "Conservation Effect")
 
-
+ 
   pop_depletion_and_size_plot <- outcomes %>% 
     filter(years_protected >= 0) %>%
     group_by(experiment) %>% 
@@ -491,7 +515,6 @@ msy_depletion_plot <- fishery_outcomes %>%
              show.legend = FALSE) +
   scale_fill_viridis(
   option = "A",
-  trans = "log10",
   guide = guide_colorbar(frame.colour = "black",
   frame.linewidth = 1,),
   name = "Median Effect"
@@ -506,7 +529,6 @@ msy_size_plot <- fishery_outcomes %>%
   geom_bin2d(aes(mpa_size, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
   scale_fill_viridis(
   option = "A",
-  trans = "log10",
   guide = guide_colorbar(frame.colour = "black",
   frame.linewidth = 1,),
   name = "# of Sims"
@@ -523,7 +545,6 @@ msy_facet_effect_plot <- fishery_outcomes %>%
    geom_bin2d(aes(value, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
   scale_fill_viridis(
   option = "A",
-  trans = "log10",
   guide = guide_colorbar(frame.colour = "black",
   frame.linewidth = 1,barheight = unique(10, "lines")),
   name = "# of Sims"
@@ -542,7 +563,7 @@ msy_facet_effect_plot <- fishery_outcomes %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-    geom_tile() + 
+    geom_raster(interpolate = TRUE) + 
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_gradient2(midpoint = 0,
                          low = "tomato",
@@ -577,6 +598,94 @@ dev.off()
   \caption{Median (A) and range (B) MPA fishery effects, expressed as the difference in catch with and without MPAs  as a proportion of MSY, after 15 years of protection across a range of pre-MPA depletion and MPA sizes}
   \label{catch-msy-effects}
 \end{figure*}
+
+
+
+```{r density-ratio-plot}
+
+
+unbiased_dr <- density_ratios %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ggplot(aes(1 - depletion, pmin(10,true_density_ratio - 1))) + 
+  geom_point(size = 2, alpha = 0.75)  + 
+  labs(x = "Percent of Unfished Biomass", y = "Percent Difference in Inside/Outside MPA Densities", caption = "Density ratios calculated as density inside MPAs relative to density of identical scenario without MPAs",
+       title = "'Unbiased' Density Ratio") + 
+  scale_x_percent() + 
+  scale_y_percent()
+
+biased_dr <- density_ratios %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ggplot(aes(1 - depletion, pmin(10,biased_density_ratio - 1))) + 
+  geom_point() + 
+    labs(x = "Percent of Unfished Biomass", y = "Percent Difference in Inside/Outside MPA Densities", caption = "Density ratios calculated as density inside MPAs relative to density outside MPAs, weighted by distance from MPA border",
+         title = "'Biased' Density Ratio") + 
+  scale_x_percent() + 
+  scale_y_percent()
+
+
+```
+
+
+Why isn't it one to one? and in fact positively biased? Because the raio is density inside MPA / density outside MPA. But, in the actual case of total biomass effect, the total biomass is being affected by the MPAs, usually downwards a bit, which positively biases the ratio of MPA to non-MPA effect
+
+```{r dr-vs-mpa-effect-plot}
+
+unbiased_dr_plot <- density_ratios %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ggplot(aes(pmin(4,mpa_effect), pmin(4,true_density_ratio - 1))) + 
+  geom_point(aes(color = adult_movement),size = 2, alpha = 0.75)  + 
+  labs(x = "Percent difference in Total Biomass With MPAs vs Without", y = "Percent Difference in Inside/Outside MPA Densities", caption = "Density ratios calculated as density inside MPAs relative to density of identical scenario without MPAs",
+       title = "'SUTVA Satisfied' Density Ratio") + 
+  scale_x_percent() + 
+  scale_y_percent() + 
+  geom_smooth(method = "lm") + 
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  scale_color_viridis()
+
+biased_dr_plot <- density_ratios %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ggplot(aes( pmin(4,biased_density_ratio - 1),pmin(4, mpa_effect))) + 
+  geom_point(aes(color = adult_movement),size = 2, alpha = 0.75)  + 
+    labs(y = "Percent difference in Total Biomass With MPAs vs Without", x = "Percent Difference in Inside/Outside MPA Densities", caption = "Density ratios calculated as density inside MPAs relative to density outside MPAs, weighted by distance from MPA border",
+         title = "'SUTVA Violated' Density Ratio") + 
+  scale_x_percent() + 
+  scale_y_percent() + 
+  geom_smooth(method = "lm") + 
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  scale_color_viridis()
+
+
+```
+
+
+For the places that really need it, fishery effets are biggest. 
+```{r}
+fish_v_fishing <- processed_grid %>%
+  select(-density_ratio) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  rename(fishery_effect = mpa_effect1) %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  left_join(outcomes %>% select(experiment, year, depletion),
+            by = c("experiment", "year"))
+
+fish_v_fishing %>%
+  filter(years_protected == max(years_protected)) %>%
+  ggplot(aes(pmin(2, mpa_effect), pmin(2, fishery_effect))) +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  geom_smooth(method = "lm") +
+  geom_hex()
+
+
+```
+
 
 
 ## How Can We Detect Regional Effects?

@@ -33,10 +33,9 @@ functions <- list.files(here::here("functions"))
 
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
-run_name <- 'v3.0'
+run_name <- 'v4.0'
 
-run_description <-
-  'Fixed model runs to run all the damn options at once instead of as stupid toggles'
+run_description <- "post defense improvements and author feedback. Ideally publication version"
 
 in_clouds <- F
 
@@ -113,7 +112,7 @@ rstan_options(auto_write = TRUE)
 
 run_tmb <- FALSE
 
-n_cores <- 1
+n_cores <- 5
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
@@ -155,10 +154,11 @@ theme_set(plot_theme)
 
 # load data ---------------------------------------------------------------
 
-length_data <- read_csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
+length_data <- read.csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   mutate(classcode = tolower(classcode)) %>%
-  mutate(observer = ifelse(is.na(observer), 'unknown', observer))
+  mutate(observer = as.character(observer)) %>%
+  mutate(observer = ifelse(observer == '', 'unknown', observer))
 
 # Filter data per operations in Fish size biomass processing CIMPA.sas file
 
@@ -214,6 +214,13 @@ yoy_foo <- function(classcode, fish_tl) {
 
 length_data <- length_data %>%
   mutate(classcode = map2_chr(classcode, fish_tl, yoy_foo))
+
+# flip situations where min_tl is greater than max_tl
+
+flipped <- length_data$max_tl < length_data$min_tl & !is.na(length_data$max_tl) & !is.na(length_data$min_tl)
+
+length_data[flipped,c("min_tl","max_tl")] <-  length_data[flipped,c("max_tl","min_tl")]
+
 
 # add in covariates -------------------------------------------------------
 
@@ -398,11 +405,6 @@ num_clusters <- data_frame(clusters = 1:20) %>%
       iter.max = 1000
     )$withinss
   )))
-
-# num_clusters %>%
-#   ggplot(aes(clusters, within_ss)) +
-#   geom_point() +
-#   geom_line()
 
 cluster_classcodes <-
   kmeans(
@@ -628,7 +630,6 @@ if (file.exists('processed_data/pisco-data.Rdata') == F |
       ),
       length_to_weight
     ))
-
 
   pisco_data <- length_example %>%
     mutate(
@@ -1252,7 +1253,7 @@ save(file = paste0(run_dir, '/model_runs.Rdata'),
 
 } else {
 
-  load(file = paste0(run_dir, '/model_runs.Rdata'))
+  load(file = file.path(run_dir, 'model_runs.Rdata'))
 }
 
 
@@ -1266,14 +1267,6 @@ model_runs <- model_runs %>%
   mutate(processed_fits = map(tmb_fit, process_fits)) %>%
   mutate(did_plot = map(processed_fits, "did_plot"))
 
-# bad <- map(a$tmb_fit,c("zissou_estimates","lower")) %>%
-#   map_lgl(~all(is.na(.x)))
-#
-# b <- a %>%
-#   filter(bad)
-#
-# d <- a %>%
-#   filter(!bad)
 
 
 

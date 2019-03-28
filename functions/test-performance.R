@@ -4,12 +4,11 @@ test_performance <-
            min_year = 75,
            max_year = 100,
            time_step = 1) {
-
     simple_data <- fishes %>%
       select(loo, k, lm, m, targeted, classcode, commonname, pisco_samples) %>%
       unnest() %>%
       filter(year > min_year, year < max_year) %>%
-      select(-pop, -sampled_lengths, -diver_stats) %>%
+      select(-pop,-sampled_lengths,-diver_stats) %>%
       mutate(year = year * time_step) %>%
       mutate(subyear = year - floor(year),
              year = floor(year)) %>%
@@ -24,7 +23,8 @@ test_performance <-
 
     years_protected <- unique(simple_data$year) - year_mpa
 
-    bins <- c(seq(min(years_protected), -1, by = 5), seq(0, max(years_protected), by = 5), max(years_protected))
+    bins <-
+      c(seq(min(years_protected),-1, by = 5), seq(0, max(years_protected), by = 5))
 
     year_block <- data_frame(year = unique(simple_data$year)) %>%
       mutate(years_protected = year - year_mpa) %>%
@@ -41,31 +41,37 @@ test_performance <-
     true_effect <- fishes %>%
       select(classcode, targeted, mpa_effect) %>%
       unnest() %>%
+      # mutate(mpa_effect = log(`with-mpa`) - log(`no-mpa`)) %>%
       filter(year > min_year, targeted == 1) %>%
       mutate(post_mpa = year > year_mpa) %>%
       mutate(year = year * time_step) %>%
       mutate(subyear = year - floor(year),
              year = floor(year))
 
+
     bare_bones_model <-
       lm(log_density ~ targeted + protected_block + targeted:protected_block,
          data = simple_data)
-
     if (n_distinct(simple_data$diver) > 1) {
+      # mixed_effect_model <-
+      #   lme4::lmer(
+      #     log_density ~ (1 + enso|classcode) + diver + targeted*protected_block ,
+      #     data = simple_data,
+      #     verbose = 1
+      #   )
 
       mixed_effect_model <-
         lme4::lmer(
-          log_density ~ (1 + enso|classcode) + diver + targeted*protected_block ,
+          log_density ~ (1 | classcode) + diver + targeted * protected_block ,
           data = simple_data,
           verbose = 1
         )
 
     } else
     {
-
       mixed_effect_model <-
         lme4::lmer(
-          log_density ~ (1 + enso |classcode) + targeted*protected_block ,
+          log_density ~ (1 | classcode) + targeted * protected_block ,
           data = simple_data,
           verbose = 1
         )
@@ -75,8 +81,7 @@ test_performance <-
     pre_post_model <-
       lm(log_density ~ targeted + post_mpa + targeted:post_mpa, data = simple_data)
 
-    get_range <- function(bin){
-
+    get_range <- function(bin) {
       bin_range <- str_extract(bin, pattern = '(?<=\\().*(?=])')
 
       mean(str_split(bin_range, ',', simplify = T) %>% as.numeric())
@@ -100,9 +105,20 @@ test_performance <-
           ymax = estimate + 1.96 * std.error
         )
       ) +
-      geom_line(data = true_effect, aes(year - year_mpa, mpa_effect, color = classcode), show.legend = F, alpha = 0.5) +
+      geom_line(
+        data = true_effect,
+        aes(year - year_mpa, mpa_effect, color = classcode),
+        show.legend = F,
+        alpha = 0.5
+      ) +
       labs(title = 'bare bones') +
-      geom_line(data = mean_effect, aes(year - year_mpa, mean_effect), color = "red", size = 1.5, linetype = 2)
+      geom_line(
+        data = mean_effect,
+        aes(year - year_mpa, mean_effect),
+        color = "red",
+        size = 1.5,
+        linetype = 2
+      )
 
     mixed_effect_did <- broom::tidy(mixed_effect_model) %>%
       filter(str_detect(term, 'targeted:')) %>%
@@ -116,9 +132,19 @@ test_performance <-
           ymax = estimate + 1.96 * std.error
         )
       ) +
-      geom_line(data = true_effect, aes(year - year_mpa, mpa_effect, color = classcode), show.legend = F) +
+      geom_line(
+        data = true_effect,
+        aes(year - year_mpa, mpa_effect, color = classcode),
+        show.legend = F
+      ) +
       labs(title = 'mixed effects') +
-      geom_line(data = mean_effect, aes(year - year_mpa, mean_effect), color = "red", size = 1.5, linetype = 2)
+      geom_line(
+        data = mean_effect,
+        aes(year - year_mpa, mean_effect),
+        color = "red",
+        size = 1.5,
+        linetype = 2
+      )
 
 
     check_block_did <- broom::tidy(pre_post_model) %>%
@@ -138,7 +164,9 @@ test_performance <-
       )
 
     out_plot <-
-    {bare_bones_did + mixed_effect_did + plot_layout(ncol = 1)} + check_block_did + plot_layout(ncol = 2)
+      {
+        bare_bones_did + mixed_effect_did + plot_layout(ncol = 1)
+      } + check_block_did + plot_layout(ncol = 2)
 
     out <- list(
       bare_bones_did = bare_bones_did,
