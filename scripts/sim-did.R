@@ -172,7 +172,7 @@ pisco_performance <-
                    min_year = 45,
                    time_step = time_step)
 
-save(file = 'simulated_did.Rdata', simple_performance, pisco_performance)
+save(file = file.path(run_dir,'simulated_did.Rdata'), simple_performance, pisco_performance)
 
 
 # bayes_model <-

@@ -1,0 +1,17 @@
+---
+title: "Untitled"
+author: "Dan Ovando"
+date: "December 14, 2015"
+output: html_document
+---
+
+$$ll^{h}_{f,s,y} = \left(
+    \begin{array}{c}
+      n_{f,s,y} \\
+      o_{f,s,y}
+    \end{array}
+  \right) p_{f,s,y}^{w_{s,f,y}}(1-p_{f,s,y})^{n_{f,s,y}-o_{f,s,y}}$$
+  
+  
+  
+  $$ll^{d}_{f,s,y}=\frac{1}{\sqrt{2{\pi}{\sigma}}}e^{ \frac{ (\hat{d_{f,s,y}} - d_{f,s,y})^{2} }{2} }$$

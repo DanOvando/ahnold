@@ -3452,3 +3452,153 @@ bayesplot::mcmc_areas(as.matrix(sortasimple2_reg),
 
 
 ```
+
+
+# minimum model complexity?
+
+
+```{r}
+library(ranger)
+a = outcomes %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ungroup() %>% 
+  select(-experiment,-msy,-b_msy,-year,-mpa_size1,
+         -`no-mpa`,-`with-mpa`, -years_protected,
+         -b0,-depletion,-pop_effect,-scientific_name)
+
+
+d <- recipes::recipe(mpa_effect ~ ., data = a) %>% 
+  step_dummy(all_nominal())
+
+d <- prep(d, data = a) %>% 
+  juice() %>% 
+  mutate(rando = rnorm(nrow(.)))
+
+
+b <- train(mpa_effect ~ .,
+           data = d,
+           importance = "impurity_corrected",
+           method = "ranger")
+
+
+imp <- b$finalModel$variable.importance
+
+i <- imp %>% 
+  broom::tidy() %>% 
+  mutate(names = fct_reorder(names, x))
+
+
+i %>% 
+  filter(x > x[names == "rando"]) %>% 
+  top_n(15,x) %>% 
+  ggplot(aes(names,x)) + 
+  geom_col() + 
+  coord_flip()
+
+
+```
+
+```{r}
+a = outcomes %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ungroup() %>% 
+  select(-experiment,-msy,-b_msy,-year,-mpa_size1,
+         -`no-mpa`,-`with-mpa`, -years_protected,
+         -b0,-depletion,-mpa_effect,-scientific_name)
+
+
+d <- recipes::recipe(pop_effect ~ ., data = a) %>% 
+  step_dummy(all_nominal())
+
+d <- prep(d, data = a) %>% 
+  juice() %>% 
+  mutate(rando = rnorm(nrow(.)))
+
+
+b <- train(pop_effect ~ .,
+           data = d,
+           importance = "impurity_corrected",
+           method = "ranger")
+
+
+imp <- b$finalModel$variable.importance
+
+i <- imp %>% 
+  broom::tidy() %>% 
+  mutate(names = fct_reorder(names, x))
+
+
+i %>% 
+  filter(x > x[names == "rando"]) %>% 
+  top_n(15,x) %>% 
+  ggplot(aes(names,x)) + 
+  geom_col() + 
+  coord_flip()
+
+```
+
+```{r}
+
+a = fishery_outcomes %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  ungroup() %>% 
+  select(-experiment,-msy,-b_msy,-year,-mpa_size1,
+         -`no-mpa`,-`with-mpa`, -years_protected,-depletion,-mpa_effect,-scientific_name,-fishery_effect,-fleet_model) %>% 
+  na.omit()
+
+
+d <- recipes::recipe(msy_effect ~ ., data = a) %>%
+  step_dummy(all_nominal())
+
+d <- prep(d, data = a) %>% 
+  juice() %>% 
+  mutate(rando = rnorm(nrow(.)))
+
+
+b <- train(msy_effect ~ .,
+           data = d,
+           importance = "impurity_corrected",
+           method = "ranger")
+
+
+imp <- b$finalModel$variable.importance
+
+i <- imp %>% 
+  broom::tidy() %>% 
+  mutate(names = fct_reorder(names, x))
+
+
+i %>% 
+  filter(x > x[names == "rando"]) %>% 
+  top_n(15,x) %>% 
+  ggplot(aes(names,x)) + 
+  geom_col() + 
+  coord_flip()
+
+```
+
+# seminar outline
+
+mpas growing
+
+what do we want from mpas?
+  - more and more focus is on regional effects
+
+What do we mean by a regional effect?
+  - demonstrate causal effect
+
+What does theory say these regional effects should be?
+
+
+
+How do we detect it?
+  - if theory says things should maybe be small, how do we square that with the 400% increases in lester, sala, etc. 
+  
+
+so that's all well and good, what evidence is there supporting all this theory?
+lester, halpern, sala, etc. 
+Roberts, Fletcher, the GoM logbook example 
+

@@ -20,7 +20,6 @@ MLPA Effects Results**/*.csv
 MLPA Effects Results**/*.*
 .txt
 **/*.txt
-Presentations**/*.*
 MLPA Effects Results/
 **/*.docx
 Paper**/*.csv
@@ -49,3 +48,9 @@ data/zissou-data/
 *.png
 test_files/
 *.bib
+packrat/lib*/
+*.key
+*.pptx
+*.shape
+*.mov
+

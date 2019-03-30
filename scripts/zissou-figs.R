@@ -1,14 +1,3 @@
-## ---- include=FALSE------------------------------------------------------
-knitr::opts_chunk$set(
-  echo = FALSE,
-  message = FALSE,
-  warning = FALSE,
-  dev = "CairoPDF",
-  dpi = 600,
-  cache = FALSE
-)
-# knitr::opts_knit$set(root.dir = "/Users/danovando/PhD/zissou") # not entirely reprodcible hack to deal with knit child in dissertation.. not idealk
-
 
 
 ## ---- include=FALSE------------------------------------------------------
@@ -18,14 +7,15 @@ library(viridis)
 library(hrbrthemes)
 library(scales)
 library(patchwork)
-library(rpart)
+# library(rpart)
 library(extrafont)
-library(caret)
+# library(caret)
 library(ggsci)
 library(rEDM)
 library(rstanarm)
 library(bayesplot)
 library(tidyverse)
+library(spasm)
 extrafont::loadfonts()
 functions <- list.files(here::here("functions"))
 
@@ -47,7 +37,7 @@ fig_width <- 8
 
 fig_height <- 6
 
-device <- "pdf"
+device <- "tiff"
 
 run_dir <- here::here("results", run_name)
 
@@ -68,7 +58,7 @@ load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
-load(file = here::here("results",run_name,"about_time.Rdata"))
+load(file = here::here("results",run_name,"simulated_did.Rdata"))
 
 load(file = file.path(run_dir, "abundance_data.Rdata"))
 
@@ -83,12 +73,156 @@ ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>%
 
 zissou_theme <-
   theme_ipsum(
-    base_size = 12,
-    axis_title_size = 12,
-    strip_text_size = 12
+    base_size = 14,
+    axis_title_size = 16,
+    strip_text_size = 16
   )
 
 theme_set(zissou_theme)
+
+
+scale_fill_meridis <-
+  function (...,
+            alpha = 1,
+            begin = 0,
+            end = 1,
+            direction = 1,
+            discrete = FALSE,
+            option = "D",
+            frame.color = "black",
+            barheight = 15)
+  {
+    if (discrete) {
+      discrete_scale("fill",
+                     "viridis",
+                     viridis_pal(alpha,
+                                 begin, end, direction, option),
+                     ...)
+    }
+    else {
+      scale_fill_gradientn(colours = viridisLite::viridis(256,
+                                                          alpha, begin, end, direction, option),
+                           guide = guide_colorbar(frame.colour = frame.color,
+                                                  barheight = barheight),
+                           ...)
+    }
+  }
+
+scale_color_meridis <-
+  function (...,
+            alpha = 1,
+            begin = 0,
+            end = 1,
+            direction = 1,
+            discrete = FALSE,
+            option = "D",
+            frame.color = "black",
+            barheight = 15)
+  {
+    if (discrete) {
+      discrete_scale("color",
+                     "viridis",
+                     viridis_pal(alpha,
+                                 begin, end, direction, option),
+                     ...)
+    }
+    else {
+      scale_color_gradientn(colours = viridisLite::viridis(256,
+                                                          alpha, begin, end, direction, option),
+                           guide = guide_colorbar(frame.colour = frame.color,
+                                                  barheight = barheight),
+                           ...)
+    }
+  }
+
+
+
+# filter results ----------------------------------------------------------
+
+
+colfoo <- function(sim, collapsed = 0.1){
+  # sim <- processed_grid$mpa_effect[[1]]
+  prepop <- sim$`no-mpa`[sim$mpa_size == 0]
+
+  prepop <- prepop / max(prepop)
+
+  collapse <- any(prepop <= collapsed)
+
+}
+
+processed_grid <- processed_grid %>%
+  mutate(collapsed = map_lgl(mpa_effect, colfoo)) %>%
+  filter(collapsed == FALSE)
+
+# make examples -----------------------------------------------------------
+
+fish <- create_fish(r0 = 100)
+
+fleet <- create_fleet(fleet_model = "constant-effort", fish = fish,
+                      initial_effort = 10, q  = 1)
+
+
+sizes <- tibble(mpa_size = seq(0,0.75, by = 0.25))
+
+year_mpa <- 5
+sizes <- sizes %>%
+  mutate(foo = map(mpa_size, ~ comp_foo(fish = fish,
+                                        fleet = fleet,
+                                        year_mpa = year_mpa,
+                                        mpa_size = .x,
+                                        sim_years = 50,
+                                        num_patches = 25,
+                                        burn_years = 1,
+                                        sprinkler = FALSE,
+                                        mpa_habfactor = 1,
+                                        enviro = NA,
+                                        enviro_strength = NA,
+                                        rec_driver = 'stochastic',
+                                        simseed = 42)))
+
+compare <- sizes %>%
+  mutate(delta = map(foo,"outcomes")) %>%
+  select(-foo) %>%
+  unnest() %>%
+  mutate(years_protected = year - year_mpa) %>%
+  filter(years_protected <=20)
+
+ribbon <- compare %>%
+  select(years_protected, mpa_size, experiment, biomass) %>%
+  spread(experiment, biomass) %>%
+  group_by(mpa_size) %>%
+  mutate(delta = mean(`with-mpa` - `no-mpa`))
+
+labelfoo <- function(x){
+  paste0("MPA:", percent(as.numeric(x)))
+
+}
+
+
+effect_example_plot <- compare %>%
+  ggplot() +
+  geom_line(aes(years_protected , biomass, color = experiment), size = 1.5) +
+  geom_ribbon(
+    data = ribbon,
+    aes(
+      years_protected,
+      ymin = `no-mpa`,
+      ymax = `with-mpa`,
+      fill = delta
+    ),
+    alpha = 0.5,
+    show.legend = FALSE
+  ) +
+  geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
+  facet_wrap(~ mpa_size, labeller = labeller(mpa_size = labelfoo)) +
+  labs(x = "Years with MPA", y = "Biomass") +
+  scale_color_aaas(labels = c("Without MPAs", "With MPAs"), name  = '') +
+  scale_fill_gradient(low = "white", high = "steelblue")
+
+
+
+# make other plots --------------------------------------------------------
+
 
 
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
@@ -640,31 +774,35 @@ fish_v_fishing <- processed_grid %>%
   select(-density_ratio) %>%
   slice(1:samps) %>%
   unnest() %>%
+  group_by(experiment) %>%
+  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / `no-mpa`[year == min(year)])) %>%
   rename(fishery_effect = mpa_effect1) %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
   ungroup() %>%
   mutate(years_protected = year - year_mpa + 1) %>%
   left_join(outcomes %>% select(experiment, year, depletion),
-            by = c("experiment", "year"))
+            by = c("experiment", "year")) #%>%
+  # left_join(fishery_outcomes %>% select(experiment, year, msy_effect))
 
 fish_v_fishing_plot <- fish_v_fishing %>%
   group_by(experiment) %>%
   filter(years_protected == max(years_protected),
          fleet_model != "constant-catch") %>%
   ungroup() %>%
-  ggplot(aes(pmin(4, mpa_effect), pmin(4, fishery_effect))) +
+  ggplot(aes(x =pmin(1, pop_effect), y = pmin(1, fishery_effect))) +
+  geom_hline(aes(yintercept = 0), size = 1) +
+  geom_vline(aes(xintercept = 0), size = 1) +
   # geom_smooth(method = "lm") +
-  geom_point(alpha = 0.5) +
+  geom_point(alpha = 0.5, aes(color = mpa_size)) +
   # geom_hex(bins = 10) +
-  geom_abline(aes(slope = 1, intercept = 0), color = "red", size = 1.5) +
-  geom_abline(aes(slope = -1, intercept = 0), color = "red", size = 1.5) +
-  geom_smooth(method = "lm", linetype = 2, color = "black", se = FALSE) +
-  geom_hline(aes(yintercept = 0), size = 1.5) +
-  geom_vline(aes(xintercept = 0), size = 1.5) +
-  scale_fill_viridis() +
-  scale_x_percent(name = "% Change in Total Biomass") +
-  scale_y_percent(name = "% Change in Realized MSY")
+  # geom_abline(aes(slope = 1, intercept = 0), color = "red", size = 1) +
+  # geom_abline(aes(slope = -1, intercept = 0), color = "red", size = 1) +
+  geom_smooth(method = "lm", linetype = 2, color = "black", se = TRUE) +
+
+  scale_x_percent(name = "% of Unfished Biomass Recovered") +
+  scale_y_percent(name = "% Change in Catch") +
+  scale_color_meridis(labels = percent)
 
 
 
@@ -809,8 +947,7 @@ savefoo <- function(fig,
     filename =  file.path(fig_dir, paste(fig, device, sep = '.')),
     plot  = get(fig),
     width = fig_width,
-    height = fig_height,
-    useDingbats = TRUE
+    height = fig_height
   )
 
 }

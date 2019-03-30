@@ -2,7 +2,7 @@
 # Load packages
 library(tidyverse)
 library(plotly)
-library(Rbvi)
+# library(Rbvi)
 
 # Load the list of sites and their categories
 sites <- read.csv("./MLPA Data/Final_Site_Table_UCSB.csv", stringsAsFactors = F) %>%
@@ -60,5 +60,5 @@ BVI <- bvi(data3)
 
 BVI2 <- BVI[,c(1,2837:2838)]
 BVI2
-  
+
 

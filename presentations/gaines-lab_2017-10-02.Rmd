@@ -1,0 +1,713 @@
+---
+title: "MLPA = More Fat Fish?"
+subtitle: "Gaines Lab Meeting"
+author: "Dan Ovando"
+date: "2017/10/12"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(message = F, warning = F, echo = F, fig.align = 'center', dev = 'svg', fig.height = 5, fig.width = 8)
+```
+
+```{r load-life}
+
+library(sf)
+library(scales)
+library(rstanarm)
+library(scales)
+library(viridis)
+library(ggmap)
+library(tidyverse)
+library(forcats)
+library(stringr)
+library(lubridate)
+library(purrr)
+library(hrbrthemes)
+library(extrafont)
+library(wesanderson)
+
+
+demons::load_functions('../functions')
+
+pres_theme <- theme_ipsum(base_size = 15)
+
+theme_set(pres_theme)
+
+run_name <- 'Working'
+
+run_dir <- file.path('../results', run_name)
+
+run_description <-
+  'Model selection process, testing STAN selection'
+
+if (dir.exists(run_dir) == F) {
+  dir.create(run_dir)
+}
+
+load(file.path(run_dir,'mpa-sims.Rdata'))
+
+run_dir <- file.path('../results', run_name)
+
+run_description <-
+  'Model selection process, testing STAN selection'
+
+if (dir.exists(run_dir) == F) {
+  dir.create(run_dir)
+}
+
+load(file = paste0(run_dir,'/did-models.Rdata'))
+
+load(file = paste0(run_dir,'/abundance-model-data.Rdata'))
+
+load(file = paste0(run_dir,'/model_comparisons.Rdata'))
+
+length_data <- read_csv('../data/UCSB_FISH raw thru 2013.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+life_history_data <-
+  read_csv('../data/VRG Fish Life History in MPA_04_08_11_12 11-Mar-2014.csv') %>%
+  rename(classcode = pisco_classcode) %>%
+  mutate(classcode = tolower(classcode)) %>%
+  # rename(description_2 = Description) %>%
+  magrittr::set_colnames(., tolower(colnames(.)))
+
+site_data <- read_csv('../data/Final_Site_Table_UCSB.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  select(site,side,mpagroup, mpa_status, reserve, region, year_mpa,mpaareanm2) %>%
+  unique()
+
+length_data <- length_data %>%
+  left_join(life_history_data %>% mutate(classcode = toupper(classcode)), by = 'classcode') #%>%
+  # left_join(site_data, by = c('site', 'side'))
+
+conditions_data <- length_data %>%
+  group_by(site,side, year) %>%
+  summarise(
+    mean_temp = mean(temp, na.rm = T),
+    mean_kelp = mean(pctcnpy, na.rm = T),
+    mean_vis = mean(vis, na.rm = T)
+  )
+
+
+density_data <- read_csv('../data/ci_reserve_data_final3 txt.csv') %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  gather('concat.name', 'value', grep('_', colnames(.)), convert = T) %>%
+  mutate(
+    data.type = gsub('\\_.*', '', concat.name),
+    classcode = gsub('.*\\_', '', concat.name)
+  ) %>%
+  mutate(value = as.numeric(value)) %>%
+  spread(data.type, value) %>%
+  rename(site_side = site.side)
+
+
+
+site_coords <- density_data %>% 
+  group_by(site, side) %>% 
+  summarise(latitude = mean(lon.wgs84, na.rm = T),
+            longitude = mean(lat.wgs84, na.rm = T))
+
+# ggmap::qmplot(longitude,latitude, color = side, data = site_coords)
+
+
+if (file.exists('../data/enso.csv')) {
+  enso <- read_csv('../data/enso.csv') %>%
+    group_by(year) %>%
+    summarise(mean_enso = mean(enso, na.rm = T)) %>%
+    mutate(lag1_enso = dplyr::lag(mean_enso,1),
+           lag2_enso = dplyr::lag(mean_enso,2),
+           lag3_enso = dplyr::lag(mean_enso,3),
+           lag4_enso = dplyr::lag(mean_enso,4))
+
+} else {
+  scrape_enso(outdir = '../data/')
+
+}
+
+if (file.exists('../data/pdo.csv')) {
+  pdo <- read_csv('../data/pdo.csv') %>%
+    group_by(year) %>%
+    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
+    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
+           lag2_pdo = dplyr::lag(mean_pdo,2),
+           lag3_pdo = dplyr::lag(mean_pdo,3),
+           lag4_pdo = dplyr::lag(mean_pdo,4))
+
+} else {
+  scrape_pdo(outdir = '../data/')
+
+  pdo <- read_csv('../data/pdo.csv') %>%
+    group_by(year) %>%
+    summarise(mean_pdo = mean(pdo, na.rm = T)) %>%
+    mutate(lag1_pdo = dplyr::lag(mean_pdo,1),
+           lag2_pdo = dplyr::lag(mean_pdo,2),
+           lag3_pdo = dplyr::lag(mean_pdo,3),
+           lag4_pdo = dplyr::lag(mean_pdo,4))
+
+}
+
+
+
+
+```
+
+
+# Goals of the MLPA
+
+1. Protect the natural diversity and abundance of marine life, and the structure, function and integrity of marine ecosystems.
+
+2. Help sustain, conserve and protect marine life populations, including those of economic value, and rebuild those that are depleted.
+
+
+--
+
+** 14 years in, did MLPA increase density of fishes in the Channel Islands? **
+
+---
+
+# Hypotheses
+
+- "Classic MPA": Slow and steady increase in densities
+
+- "Scorched Earth": Decreased densities outside, increased inside, net effect unclear
+
+- "Ms. Frizzle": Environment drives the bus; who knows what happens
+
+
+---
+
+
+# Identification Strategy
+
+- Changes in density may be due to environmental confounders (e.g. El Niño)
+
+- Proposed solution: *Unfished species (garibaldi, señorita, etc.) are environmental "control" for fished species (sheephead, rockfish)*
+
+- Rationale
+  
+  - Environment affects all species
+  
+  - Fishing only affects some (sort of)
+  
+  - Trend of unfished species post-MPA then serves as counterfactual for fished
+
+- Key Assumptions
+  
+  - Parallel trends
+  
+  - No interactions (or net zero interactions)
+  
+
+---
+
+class: inverse, center, middle
+# Data Data Data
+
+---
+
+# What do we have to work with?
+
+
+- Underwater visual survey transects
+
+  - Stratfied random sampling inside and outside eventual reserves
+  
+  - 30m x 2m transects
+  
+  - ID, count, and estimate length of all observed fish species
+  
+  - Lengths converted to weights via allometric relationships 
+  
+  - Biomass density of each species for each transect estimated
+
+
+---
+
+# Data Coverage
+
+```{r}
+big_trends <- length_data %>% 
+  left_join(site_data, by = c('site','side')) %>% 
+  group_by(year) %>% 
+  summarise(`Total Observations` = length(classcode),
+            `Species Observed` = length(unique(classcode)),
+            `Sites Surveyed` = length(unique(site)),
+            `Number of Observers` = length(unique(observer)))
+
+big_trends %>% 
+  gather(variable, value, -year) %>% 
+  ggplot(aes(year, value, color = variable)) + 
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_line(show.legend = F) + 
+  geom_point(show.legend = F) +
+  facet_wrap(~variable, scales = 'free_y') + 
+    scale_color_manual(values = wes_palette("Zissou")) + 
+  scale_y_continuous(labels = comma)
+
+```
+
+---
+
+# Spatial Coverage
+
+
+```{r}
+
+spatial_trend <- length_data %>% 
+  left_join(site_data, by = c('site','side')) %>% 
+  filter(region %in% c('ANA','SCI','SMI','SRI')) %>% 
+  mutate(eventual_mpa = year_mpa > 0) %>% 
+  group_by(year,site, side) %>% 
+  summarise(n_obs = length(classcode),
+            eventual_mpa = unique(eventual_mpa)) %>% 
+  left_join(site_coords, by = c('site','side'))
+
+ggmap::qmplot(longitude, latitude, color = eventual_mpa, data = spatial_trend) + 
+  facet_wrap(~year) + 
+  ggsci::scale_color_npg(name = 'Eventual MPA?') +
+  theme_minimal() + 
+  theme(axis.text = element_blank())
+
+```
+
+---
+
+# Species Covered
+
+
+```{r}
+
+load(file = paste0(run_dir, '/length_to_density_data.Rdata'))
+
+fished_species <- read_csv(file = file.path('../data','cfdw-channel-islands-catches.csv')) %>% group_by(classcode) %>% 
+  summarise(catch = sum(pounds_caught, na.rm = T))
+
+
+fished_species <- data_frame(classcode = unique(fished_species$classcode), fished = 1)
+
+
+length_to_density_data <- length_to_density_data %>% 
+    mutate(classcode = tolower(classcode)) %>% 
+   left_join(life_history_data %>% select(classcode, commonname,targeted), by = 'classcode')  %>% 
+  left_join(fished_species, by = c('classcode')) %>% 
+  left_join(site_data, by = c('site','side')) %>%
+  mutate(targeted = ifelse(fished == 1 & is.na(fished) == F & targeted == "Non-targeted", 'Targeted', targeted))
+
+length_to_density_data %>% 
+  group_by(classcode, commonname, targeted) %>% 
+  summarise(n_obs = length(year)) %>% 
+  ungroup() %>% 
+  filter(is.na(commonname) == F, is.na(targeted) == F, str_detect(commonname,'YOY') == F) %>% 
+    ungroup() %>% 
+  mutate(commonname = fct_reorder(commonname, n_obs)) %>% 
+  top_n(35, n_obs) %>% 
+   ggplot(aes(commonname, n_obs, fill = targeted), color = 'black') +
+  geom_col() + 
+  coord_flip() + 
+  theme(axis.text.y = element_text(size = 8))
+```
+
+---
+
+# Density Data
+
+```{r}
+
+
+length_to_density_data %>% 
+  ggplot(aes(log(mean_biomass_g + 1e-3))) + 
+  geom_histogram() + 
+  labs(x = 'Log density', y = 'Observations', caption = 'missing fish added in')
+
+```
+
+---
+
+# Environmental Covariates
+
+
+```{r}
+
+conditions_data %>% 
+  left_join(site_data %>% select(site, region), by = 'site') %>% 
+  gather(variable, value, contains('mean_')) %>% 
+  ggplot(aes(year,value, color = variable)) + 
+  geom_violin(show.legend = F, aes(group = year, fill = variable), alpha = 0.5) + 
+  geom_smooth(show.legend = F) +
+  facet_grid(variable ~., scales = 'free_y')
+
+```
+
+---
+
+# Environmental Covariates
+
+```{r}
+
+enso %>% 
+  select(year, mean_enso) %>% 
+  left_join(pdo %>% select(year, mean_pdo), by = 'year') %>% 
+  filter(year >= 1999, year <=2013) %>% 
+  gather(variable, value, -year) %>% 
+  ggplot(aes(year, value, color = variable)) + 
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_hline(aes(yintercept = 0)) +
+  geom_line(show.legend = F) +
+  geom_point(show.legend = F) + 
+  facet_wrap(~variable)
+  
+```
+
+---
+
+# CFDW Catch Data
+
+```{r}
+
+ci_catches <- read_csv(file = file.path('../data','cfdw-channel-islands-catches.csv'))
+
+ci_catches %>%
+  filter(common_name != 'pacific sardine') %>%
+  group_by(common_name, year) %>%
+  summarise(catch = sum(pounds_caught))  %>%
+  group_by(common_name) %>%
+  mutate(total_catch = sum(catch)) %>%
+  ungroup() %>%
+  mutate(common_name = fct_reorder(common_name,total_catch )) %>%
+  group_by(common_name) %>% 
+  mutate(catch = (catch - mean(catch, na.rm = T)) / (2 * sd(catch, na.rm = T))) %>% 
+  ungroup() %>% 
+  filter(is.na(catch) == F) %>% 
+  ggplot(aes(year,catch, color = common_name)) +
+  geom_vline(aes(xintercept = 2003), color = 'red',
+             linetype = 2) +
+  geom_line( show.legend = F) + 
+    facet_wrap(~common_name, as.table = F) + 
+theme_minimal() +
+  theme(axis.text = element_blank(), 
+        panel.grid = element_blank())
+
+```
+
+---
+
+# Key Data Issues
+
+- Massive changes in sampling quantity and coverage
+
+- Litte "pre" coverage
+
+- A boatload of zeros
+
+- Mother nature went nuts right along with MPAs
+
+- How to include catch data 
+
+---
+
+class: inverse, center, middle
+# Solutions
+
+---
+
+# Raw Trends
+
+
+```{r}
+
+length_to_density_data %>% 
+  mutate(classcode = tolower(classcode)) %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(year, targeted) %>% 
+  summarise(mean_density = mean(mean_biomass_g, na.rm = T)) %>% 
+  ggplot(aes(year, mean_density, color = targeted)) + 
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_line() + 
+  geom_point() + 
+  ggsci::scale_color_npg() + 
+  labs(title = 'Unfiltered mean densities')
+
+```
+
+---
+
+# Raw Trends
+
+
+```{r}
+length_to_density_data %>% 
+  filter(is.na(year_mpa) == F) %>% 
+  mutate(classcode = tolower(classcode),
+         eventual_mpa = year_mpa > 0) %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(year, targeted,eventual_mpa) %>% 
+  summarise(mean_density = mean(mean_biomass_g, na.rm = T)) %>% 
+  ggplot(aes(year, mean_density, color = targeted)) + 
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_line() + 
+  geom_point() + 
+  ggsci::scale_color_npg() + 
+  facet_wrap(~eventual_mpa) +
+  labs(title = 'Unfiltered mean densities')
+```
+
+---
+
+# Data Filtering
+
+- No 1999 (sampling protocols really changed)
+
+- Only main channel islands (SMI, SRI, SCI, ANA)
+
+- Species observed in at least 8 years, at least once pre MPA once post MPA
+
+- No "young of the year" (recruits) - too hard to spot
+
+---
+
+# Filtered Trends
+
+```{r}
+
+abundance_models %>% 
+  filter(data_source == 'length_to_density') %>% 
+  mutate(commonname = fct_reorder(commonname, dim_data)) %>% 
+  ggplot(aes(commonname, dim_data, fill = targeted)) + 
+  geom_col(position = 'dodge') + 
+  coord_flip() 
+```
+
+---
+
+# Filtered Trends
+
+```{r}
+model_data <- abundance_models %>% 
+  filter(data_source == 'length_to_density') %>% 
+  select(classcode, data,commonname, targeted) %>% 
+  unnest() %>% 
+  mutate(year = factor_year %>% as.character() %>% as.numeric())
+
+model_data %>% 
+  filter(is.na(year_mpa) == F) %>% 
+  mutate(classcode = tolower(classcode),
+         eventual_mpa = year_mpa > 0) %>% 
+  filter(is.na(targeted) == F) %>% 
+  group_by(year, targeted,eventual_mpa) %>% 
+  summarise(mean_density = mean(mean_biomass_g, na.rm = T)) %>% 
+  ggplot(aes(year, mean_density, color = targeted)) + 
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
+  geom_line() + 
+  geom_point() + 
+  ggsci::scale_color_npg() + 
+  facet_wrap(~eventual_mpa) +
+  labs(title = 'Filtered mean densities')
+
+```
+
+---
+
+
+class: inverse, middle, center
+# Model-Palooza
+
+---
+
+# Strategy #1: Ignore the zeroes
+
+- Unclear how to incorporate zeros into normal DiD estimator
+  - Standard tobit/probit doesn't work in this case
+  
+- So, easier to ignore!
+
+- Broader rationale: detection probability relatively independent of population size?
+  - Not entirely unreasonable given focus on common species and challenges of survey technique
+  
+- Estimate DiD terms with a whole pile of covariates
+
+---
+
+# Strategy #1: Ignore the zeroes
+
+
+```{r load-old-ahnold}
+
+runfolder <- 'Working'
+
+runpath <- paste('~/phd/ahnold/results/',runfolder,'/', sep = '')
+
+load(paste(runpath,'regressions.Rdata', sep = ''))
+
+load(paste(runpath,'plots.Rdata', sep = ''))
+
+plot_list$mpa_effect_plot
+
+```
+
+---
+
+# Strategy #1: Ignore the zeroes
+
+```{r}
+plot_list$in_mpa_effect_plot
+```
+
+---
+
+# Strategy #1: Ignore the zeroes
+
+
+```{r}
+
+plot_list$mpa_anasci_effect_plot
+
+```
+
+---
+
+# Strategy #1: Ignore the zeroes
+
+- How to explain these results?
+
+- Developed spatially explicit bio-economic MPA simulater (SPASM!)
+
+- Assess densities with and without MPAs under wide range of life history and economics
+
+- How likely, and under what circumstances, do we observe a net decrease in densities?
+
+---
+
+
+# Strategy #1: Ignore the zeroes
+## What would explain results?
+
+```{r}
+
+sim_grid_plots$sim_plot[[1]]
+
+```
+
+---
+
+# Strategy #1: Ignore the zeroes
+## What would explain results?
+
+
+```{r}
+
+bad_mpa_foo <- function(x){
+  
+  year_mpa <- min(x$year[x$percent_mpa > 0])
+  
+  xp <- x %>% 
+    filter(year >= year_mpa, year <= (year_mpa + 14)) %>% 
+    select(year,experiment, ssb) %>% 
+    spread(experiment, ssb) %>% 
+    mutate(no_mpa_better = `no-mpa` > `with-mpa`)
+  
+  mpa_better = any(xp$no_mpa_better == T)
+  
+}
+
+slice_grid <- slice_grid %>% 
+  mutate(mpa_bad = map_lgl(mpa_experiment, bad_mpa_foo))
+
+slice_grid %>% 
+  ggplot(aes(mpa_bad)) + 
+  geom_bar(position = 'stack') + 
+  labs(title = 'MPA made things worse?')
+
+
+```
+
+---
+
+# Strategy #1: Ignore the zeroes
+## What would explain results?
+
+
+```{r}
+
+bad_mpa <- which(slice_grid$mpa_bad) 
+
+sim_grid_plots[bad_mpa,]$sim_plot[[2]]
+
+```
+
+---
+
+# Strategy #2: Zeros then DiD
+
+- Rather than ignore zeros, incorporate into standard delta-GLM style "CPUE" standardization:
+ 
+  - Control for non-abundance based reasons we either see zeros or see the densities we see
+
+  - Observer, visibility, site, etc.
+  
+- Extract index of abundance controlling for above junk
+
+- Fit DiD estimator for abundance estimates
+
+  - Deals with zeros, species weighting, etc. 
+  
+  - Makes coefficients easier to understand
+  
+- Uncertainty a bit harder to deal with (MCMC fixes)
+
+- Assumes indicies are right....
+
+---
+
+# Strategy #2: Zeros then DiD
+
+```{r}
+
+model_comparison_plots$comp_plot[[8]]
+
+```
+
+---
+
+# Strategy #2: Zeros then DiD
+
+```{r}
+
+did_models$did_plot[[3]] + 
+  labs(title = "D'oh!")
+
+```
+
+---
+
+
+# What next?
+
+Put on your reviewer hats....
+
+Assuming these results hold...
+
+- Something is happening but we can't really explain it
+
+- MLPA has no detectable causal effect on fish densities
+
+- Environmental signals swamp MPA effect
+
+- Data just aren't able to answer this question...
+
+- Classical MPA models do not reflect observations from Channel Islands
+
+- Abandon ship
+
+- Another way in?
+
+---
+
+
