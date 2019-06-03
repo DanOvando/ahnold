@@ -57,8 +57,9 @@ load(file = here::here("results",run_name,"about_time.Rdata"))
 
 channel_islands <- readRDS(here::here("data","channel_islands_map.RDS"))
 
-ca_mpas <- sf::st_read("~/PhD/zissou/data/MPA_CA_Existing_160301") %>% 
-  rmapshaper::ms_simplify() %>% 
+
+ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>%
+  rmapshaper::ms_simplify() %>%
   sf::st_transform(crs = 4326)
 
 

@@ -256,7 +256,6 @@ fit_zissou <- function(data,
     log_species_sigma = log(1),
     log_did_sigma = log(1)
   )
-
   any_na <- map_lgl(zissou_params, ~ any(is.na(.x))) %>% any()
 
   if (any_na) {

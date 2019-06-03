@@ -10,6 +10,8 @@ comp_foo <- function(fish,
                      enviro = NA,
                      enviro_strength = NA,
                      rec_driver = 'stochastic',
+                     random_mpa = FALSE,
+                     min_size = 1,
                      simseed = 42) {
   set.seed(simseed)
 
@@ -27,7 +29,9 @@ comp_foo <- function(fish,
       sprinkler = sprinkler,
       mpa_habfactor = mpa_habfactor,
       tune_costs = FALSE,
-      est_msy = FALSE
+      est_msy = FALSE,
+      random_mpa = random_mpa,
+      min_size = min_size
     ) %>%
     mutate(experiment = 'no-mpa')
 
@@ -46,7 +50,9 @@ comp_foo <- function(fish,
       sprinkler = sprinkler,
       mpa_habfactor = mpa_habfactor,
       tune_costs = FALSE,
-      est_msy = FALSE
+      est_msy = FALSE,
+      random_mpa = random_mpa,
+      min_size = min_size
     ) %>%
     mutate(experiment = 'with-mpa')
 

@@ -53,4 +53,5 @@ packrat/lib*/
 *.pptx
 *.shape
 *.mov
-
+*.gif
+*.JPG
