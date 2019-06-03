@@ -1,0 +1,64 @@
+---
+title: "Presentation Ninja"
+subtitle: "⚔<br/>with xaringan"
+author: "Yihui Xie"
+date: "2016/12/12 (updated: `r Sys.Date()`)"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+background-image: url(https://upload.wikimedia.org/wikipedia/commons/b/be/Sharingan_triple.svg)
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+```
+
+???
+
+Image credit: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Sharingan_triple.svg)
+
+---
+class: center, middle
+
+# xaringan
+
+### /ʃaː.'riŋ.ɡan/
+
+---
+class: inverse, center, middle
+
+# Get Started
+
+
+---
+
+
+# test
+
+$$2+2 = 4$$
+
+
+---
+
+# hmm
+* No MPA is an Island
+
+  * Spillover happens to some degree
+  
+* Depends on…
+
+  * MPA size relative to dispersal (adult and larval) (Gerber et al. 2005)
+  
+  * Network effects (Gaines et al. 2010)
+  
+  * Strength and timing of density dependence
+  
+  * Fishing behavior and management (Hastings & Botsford 1999, Sanchirico & Wisen 2001)
+
+---
+

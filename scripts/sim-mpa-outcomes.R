@@ -23,13 +23,13 @@ burn_years <- 25
 
 num_patches <- 50
 
-run_experiments <- TRUE
+run_experiments <- FALSE
 
-create_grid <- TRUE
+create_grid <- FALSE
 
 n_cores <- 6
 
-samps <- 5000
+samps <- 10000
 
 grid_search <-  FALSE
 
@@ -105,6 +105,20 @@ fitted_data <- fitted_data %>%
 
 if (run_experiments == T) {
   if (create_grid == TRUE) {
+
+    fun <- function() {
+      ANSWER <- readline("Are you sure you want to overwrite the experiment grid? y/n ")
+      if (substr(ANSWER, 1, 1) == "y"){
+        cat("OK, sit back, this might take a while")
+
+      } else{
+        cat("Probably a good idea, stopping")
+        stop()
+
+      }
+    }
+    fun()
+
     if (grid_search == T) {
       sim_grid <- expand.grid(
         scientific_name = unique(fitted_data$taxa),
@@ -129,7 +143,7 @@ if (run_experiments == T) {
           density_movement_modifier = sample(c(0, 0.5), samps, replace = T),
           density_dependence_form = sample(1:3, samps, replace = T),
           mpa_size = runif(samps, min = 0.01, max = 1),
-          f_v_m = runif(samps, min = 0.01, max = 2),
+          f_v_m = runif(samps, min = 0.01, max = 4),
           fleet_model = sample(
             c("open-access", "constant-effort", "constant-catch"),
             samps,
@@ -145,7 +159,8 @@ if (run_experiments == T) {
           mpa_reaction   =  sample(c("stay", "leave"), samps, replace = TRUE),
           min_size = runif(samps, min = 0.01, max = 0.75),
           mpa_habfactor = sample(c(1, 4), samps, replace = TRUE),
-          size_limit = runif(samps, 0.1, 1.25)
+          size_limit = runif(samps, 0.1, 1.25),
+          random_mpas = sample(c(TRUE, FALSE), samps, replace = TRUE)
         )
 
 
@@ -235,8 +250,6 @@ if (run_experiments == T) {
 
   }
 
-
-
   doParallel::registerDoParallel(cores = n_cores)
 
   foreach::getDoParWorkers()
@@ -264,8 +277,9 @@ if (run_experiments == T) {
               mpa_size = mpa_size,
               year_mpa = year_mpa,
               sprinkler = sprinkler,
-              mpa_habfactor = mpa_habfactor
-
+              mpa_habfactor = mpa_habfactor,
+              min_size = min_size,
+              random_mpa = random_mpa
             ),
             comp_foo,
             sim_years = sim_years,
@@ -274,75 +288,7 @@ if (run_experiments == T) {
           )
         )
 
-      calc_mpa_effect <- function(outcomes) {
-        mpa_effect <- outcomes %>%
-          group_by(year) %>%
-          mutate(mpa_size = max(percent_mpa)) %>%
-          ungroup() %>%
-          select(year, experiment, biomass, mpa_size) %>%
-          spread(experiment, biomass) %>%
-          mutate(mpa_effect = `with-mpa` / `no-mpa` - 1) # %>%
-        # select(year, mpa_size, mpa_effect)
-      }
 
-
-      calc_mpa_fishery_effect <- function(outcomes) {
-        mpa_effect <- outcomes %>%
-          group_by(year) %>%
-          mutate(mpa_size = max(percent_mpa)) %>%
-          ungroup() %>%
-          select(year, experiment, catch, mpa_size) %>%
-          spread(experiment, catch) %>%
-          mutate(mpa_effect = `with-mpa` / `no-mpa` - 1)
-      }
-
-
-      patch_weight <-  results$mpa_experiment[[1]]$raw_outcomes %>%
-        filter(year == max(year), experiment == "with-mpa") %>%
-        group_by(patch) %>%
-        summarise(mpa = unique(mpa))
-
-      # weight fished mpa scenario densities by distance from nearest MPA
-      distance_grid <-
-        expand.grid(from = 1:num_patches, to = 1:num_patches) %>%
-        as.data.frame() %>%
-        mutate(distance = purrr::map2_dbl(from, to, ~ min(
-          c(abs(.x - .y),
-            .x + num_patches - .y,
-            num_patches - .x + .y)
-        ))) %>%
-        left_join(patch_weight, by = c("to" = "patch")) %>%
-        group_by(from) %>%
-        summarise(min_dist = min(distance[mpa == TRUE]))
-
-      density_ratio <- results$mpa_experiment[[1]]$raw_outcomes %>%
-        left_join(distance_grid, by = c("patch" = "from")) %>%
-        group_by(year) %>%
-        summarise(
-          fished_density = weighted.mean(biomass[eventual_mpa == FALSE &
-                                                   experiment == "with-mpa"],
-                                         w = min_dist[eventual_mpa == FALSE &
-                                                        experiment == "with-mpa"]),
-          mpa_density = mean(biomass[eventual_mpa == TRUE &
-                                       experiment == "with-mpa"]),
-          nompa_density = mean(biomass[experiment == "no-mpa"]),
-          mpa_period = any(mpa[experiment == "with-mpa"] == TRUE)
-        ) %>%
-        ungroup() %>%
-        mutate(
-          biased_density_ratio = mpa_density / fished_density,
-          true_density_ratio = mpa_density / nompa_density
-        )
-
-      results <- results %>%
-        mutate(
-          mpa_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_effect),
-          fishery_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_fishery_effect),
-          density_ratio = list(density_ratio)
-        )
-
-
-      # if (logged == TRUE) {
         filename <- glue::glue("experiment_{i}.rds")
 
         saveRDS(results, file = glue::glue("{experiment_dir}/{filename}"))
@@ -353,6 +299,7 @@ if (run_experiments == T) {
 
 message("finished mpa experiments")
 
+# process outcomes --------------------------------------------------------
 
 
 loadfoo <-
@@ -361,13 +308,14 @@ loadfoo <-
       readRDS(glue::glue("{experiment_dir}/experiment_{experiment}.rds"))
 
     # if (output == "mpa-effect") {
-      ex$msy <- ex$tuned_fishery[[1]]$fish$msy
+    ex$msy <- ex$tuned_fishery[[1]]$fish$msy
 
-      ex$b_msy <- ex$tuned_fishery[[1]]$fish$b_msy$b_msy
+    ex$b_msy <- ex$tuned_fishery[[1]]$fish$b_msy$b_msy
 
-      ex <- ex %>%
-        select(-mpa_experiment, -fish, -fleet, -tuned_fishery)
-    # }
+    ex <- purrr::map_df(list(ex), study_mpa)
+
+    ex <- ex %>%
+      select(-mpa_experiment, -fish,-fleet,-tuned_fishery)
 
     return(ex)
   }
@@ -381,11 +329,6 @@ loadfoo <-
                safely(loadfoo),
                experiment_dir = experiment_dir,
                .progress = T)
-
-# } else {
-  # processed_grid
-
-# }
 
 grid_worked <- map(processed_grid, "error") %>% map_lgl(is_null)
 
@@ -415,7 +358,6 @@ save(processed_grid, file = paste0(run_dir, "/processed_grid.Rdata"))
 #   scale_x_continuous(limits = c(40, NA))
 
 
-# process outcomes --------------------------------------------------------
 
 
 # save outcomes -----------------------------------------------------------

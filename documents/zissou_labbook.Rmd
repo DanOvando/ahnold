@@ -3602,3 +3602,206 @@ so that's all well and good, what evidence is there supporting all this theory?
 lester, halpern, sala, etc. 
 Roberts, Fletcher, the GoM logbook example 
 
+# what causes negative effects?
+
+```{r}
+cc_importance_plot <- outcomes %>%
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected), fleet_model == "constant-catch") %>% 
+  ggplot(aes(f_v_m, depletion, color = mpa_effect <0 )) + 
+  geom_point(show.legend = TRUE) 
+
+cc_importance_plot <- outcomes %>%
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected), fleet_model == "constant-catch", f_v_m < 1) %>% 
+  ggplot(aes(f_v_m, adult_movement, color = mpa_effect <0 )) + 
+  geom_point(show.legend = TRUE) 
+  
+  fishery_outcomes %>% 
+    filter(experiment == 2418) %>% 
+    select(year, `with-mpa`, `no-mpa`) %>% 
+    gather(scenario, biomass, -year) %>% 
+    ggplot(aes(year,biomass, color = scenario)) + 
+    geom_line()
+  
+  b <- a$mpa_experiment[[1]]$raw_outcomes
+  
+  b %>% 
+    group_by(experiment,year, mpa) %>% 
+    summarise(tc = sum(biomass_caught),
+              tb = sum(biomass),
+              percent_mpa = mean(mpa)) %>% 
+    ggplot(aes(year, tb, color = mpa)) + 
+    geom_point() + 
+    facet_wrap(~experiment)
+  
+  
+  processed_grid %>% 
+    filter(fleet_model == "constant-catch") %>% 
+    select(experiment, f_v_m, year_mpa, fishery_effect) %>% 
+    filter(experiment == 8585) %>% 
+    unnest() %>% 
+    gather(scene, catch, `no-mpa`:`with-mpa`) %>% 
+    ggplot(aes(year, catch, color = scene)) + 
+    geom_vline(aes(xintercept = min(year) + year_mpa)) +
+    geom_point()
+
+```
+
+# figures for MPA simulation
+
+plots are looking good, better off pulling up a saved simulation
+
+```{r}
+library(tidyverse)
+library(spasm)
+
+fish <- create_fish(r0 = 100, adult_movement = 2, larval_movement = 10)
+
+fleet <- create_fleet(fish = fish,
+                      initial_effort = 10,
+                      q = 1,
+                      target_catch = 25,
+                      fleet_model = "constant-effort")
+
+experiment <- spasm::mpa_counterfactual(
+  fish = fish, 
+  fleet = fleet, 
+  year_mpa = 25,
+  mpa_size = .5,
+  sim_years = 50,
+  burn_years = 1,
+  num_patches = 50,
+  random_mpas = FALSE,
+  min_size = 0.1
+)
+
+raw <- experiment$raw_outcomes %>%
+  select(year,
+         patch,
+         biomass,
+         biomass_caught,
+         profits,
+         effort,
+         experiment,
+         mpa) %>%
+  rename(catch = biomass_caught) %>% 
+  gather(metric, value, -year,-patch,-experiment,-mpa) %>%
+  group_by(year, patch, metric, experiment) %>%
+  summarise(value = sum(value),
+            mpa = unique(mpa)) %>%
+  group_by(year, patch) %>% 
+  mutate(mpa = unique(mpa[experiment == "with-mpa"])) %>% 
+  ungroup() %>% 
+  group_by(metric) %>%
+  mutate(value = value / max(value)) %>% 
+  ungroup() %>% 
+  spread(experiment, value) %>% 
+  ungroup() %>% 
+  mutate(delta = `with-mpa` / `no-mpa`,
+         ref = 1)
+
+# wtf <- sim_fishery(
+#   fish = fish, 
+#   fleet = fleet, 
+#   manager = create_manager(),
+#   random_mpas = TRUE,
+#   sim_years = 25,
+#   num_patches = 25,
+#   burn_years = 1,
+#   min_size = 0.1
+# )
+
+# plot_spasm(wtf, type = 
+#             "doughnut ")
+
+doh <- raw %>%
+  filter(metric %in% c("biomass","effort")) %>%
+  ggplot() +
+  geom_col(
+    aes(patch, `with-mpa`, fill = mpa),
+    width = 1
+  ) +
+  geom_line(aes(patch, `no-mpa`), size = 2,
+            color = "black") +
+  facet_wrap(~ metric) +
+  coord_polar() +
+  gganimate::transition_time(year) +
+  gganimate::ease_aes('linear') +
+  labs(title = 'Year: {frame_time}', x = "'",  y = "") + 
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "top") + 
+  scale_fill_npg(labels = c("Witout MPAs","With MPAs"), name = "")
+
+
+gganimate::anim_save(animation = doh,filename = "doh.gif")
+
+
+raw_sum <- raw %>% 
+  group_by(year, metric) %>% 
+  summarise(no_mpa = sum(`no-mpa`),
+            with_mpa = sum(`with-mpa`)) %>% 
+  ungroup() %>% 
+  gather(experiment, value, no_mpa:with_mpa) %>% 
+  filter(year > 20)
+
+ribbon <- raw_sum %>% 
+  group_by(year, metric) %>% 
+  summarise(ymin = min(value),
+            ymax = max(value),
+            delta = value[experiment == "with_mpa"] - value[experiment == "no_mpa"]) %>% 
+  ungroup() %>% 
+  group_by(metric) %>% 
+  mutate(max_delta = last(delta)) %>% 
+  ungroup()
+
+raw_sum %>%
+  ungroup() %>%
+  ggplot() +
+  geom_line(aes(year, value, color = experiment), size = 1) +
+  geom_ribbon(data = ribbon, aes(
+    year,
+    ymin = ymin,
+    ymax = ymax,
+    fill = max_delta
+  ),
+  alpha = 0.5,
+  show.legend = FALSE) +
+  facet_wrap( ~ metric, scales = "free_y",
+              labeller = labeller(metric = tools::toTitleCase)) + 
+  scale_fill_gradient(low = "tomato", high = "steelblue") + 
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.spacing = unit(1,"lines")) + 
+  labs(x = "Year") + 
+  scale_color_npg(labels = c("Without MPAs","With MPAs"), name = '')
+
+# do the raw values, leave a line for the no-MPA values
+# 
+# doh <- raw %>%
+#   filter(metric == "biomass") %>%
+#   select(-delta, -ref) %>% 
+#   gather(experiment,value, `no-mpa`:`with-mpa`) %>% 
+#   ggplot() +
+#   geom_col(
+#     aes(patch, value, fill = experiment),
+#     alpha = 0.75,
+#     width = 1,
+#     position = "dodge"
+#   ) +
+#   facet_wrap(~ metric) +
+#   gganimate::transition_time(year) +
+#   gganimate::ease_aes('linear') +
+#   labs(title = 'Year: {frame_time}', x = "'",  y = "Relative Value") 
+
+
+```
+
+# baci
+
+ok so you have your first version of a BACI up and running... And the results look meh. or rather, currently if BACI says high density increase, then overall density increase is likely to be positive, but order of magnitude lower. 
+
+currently calculating baci as (mpa after - mpa before) - (outside after - outside before). is that really right? So basically the critique there would be that if you thought that the outside was a control (e.g. same habitat), but it's actually affected by the treatment, then you're likely to get the overall sign of the effect but completely miss the magnitude. Is that a fair comparison though? Since you're saying the "correct" measure is the system wide density, and they're saying that no, that's not even what you're trying to measure, if you're doing a BACI you're tryign to measure the effect inside the MPAs themselves. So, in that case, the corect comparison is density inside the MPAs with treatment and density just inside the MPAs withot treatment? Can mess with it a bit more, but let's spend tomorrow focused on retooling the paper and you can see where this analysis fits in story wise before wasting time changing analyses you don't use. 
+
+Also, give some thought and care in the paper to differences of densities and biomass
