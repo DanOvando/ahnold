@@ -3798,4 +3798,10 @@ raw_sum %>%
 
 ```
 
+# baci
 
+ok so you have your first version of a BACI up and running... And the results look meh. or rather, currently if BACI says high density increase, then overall density increase is likely to be positive, but order of magnitude lower. 
+
+currently calculating baci as (mpa after - mpa before) - (outside after - outside before). is that really right? So basically the critique there would be that if you thought that the outside was a control (e.g. same habitat), but it's actually affected by the treatment, then you're likely to get the overall sign of the effect but completely miss the magnitude. Is that a fair comparison though? Since you're saying the "correct" measure is the system wide density, and they're saying that no, that's not even what you're trying to measure, if you're doing a BACI you're tryign to measure the effect inside the MPAs themselves. So, in that case, the corect comparison is density inside the MPAs with treatment and density just inside the MPAs withot treatment? Can mess with it a bit more, but let's spend tomorrow focused on retooling the paper and you can see where this analysis fits in story wise before wasting time changing analyses you don't use. 
+
+Also, give some thought and care in the paper to differences of densities and biomass
