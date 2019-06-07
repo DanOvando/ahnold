@@ -50,8 +50,8 @@ csl: pnas.csl
 lineno: false
 watermark: false
 output: 
-  rticles::pnas_article: default
   bookdown::word_document2: default
+  rticles::pnas_article: default
 ---
 
 ```{r, include=FALSE}
@@ -349,18 +349,14 @@ No-take Marine Protected Areas (MPAs), spatial regions in the ocean in which fis
 
 With these goals of both conservation and resource management in mind, the Convention on Biological Diversity’s Strategic Plan for Biodiversity calls for 10% of coastal waters to be protected inside MPAs by 2020. Despite these goals, our understanding of the regional-scale conservation and fishery impacts of current and future MPAs is surprisingly limited. We have evidence that well enforced and appropriately sized MPAs can provide conservation benefits within their borders [@lester2009;@halpern2003; @edgar2014; @gerber2005]. As these conservation benefits accrue inside MPAs, the MPA(s) can affect the waters beyond their borders through the spillover of adult and larval fish from the protected to the fished areas as well as through displacement of fishing effort. Several studies have documented empirical evidence for the existence of adult or larval spillover affecting both abundance and fisheries [e.g. @goni2010; @halpern2009;@kay2012; @stobart2009; @mcclanahan2000; @russ1996; @thompson2017]. The more complex and potentially important question however is not whether spillover occurs (it must to some degree in any realistic scenario), but what the net effects of spillover are and whether these effects are detectable. From a fishery perspective, are spillover benefits sufficient to offset losses in fishing grounds caused by an MPA? From a conservation perspective, does the buildup of adults inside an MPA increase abundance outside through spillover, or does concentration of fishing outside the reserve result in a net loss in regional abundance?
 
-As stakeholders around the world increasingly seek to use MPAs in marine resource management portfolios and the performance of existing MPAs is evaluated, it is critically important that we develop a better understanding of the magnitude and drivers of regional-scale MPA effects. To address this gap, this study examines two critical questions: 1) What do we expect the regional-scale conservation and fishery effects of MPAs to be and 2) When (and how) can we expect to detect these effects? We address these questions using a simulation analysis to frame the theoretical regional conservation and fishery impacts of MPAs, from which we then develop an empirical assessment of the evidence for regional-level conservation effects of MPAs resulting from a network of closures put in place in the Channel Islands, California, USA, in 2003. 
+As stakeholders around the world increasingly seek to use MPAs in marine resource management portfolios and the performance of existing MPAs is evaluated, it is critically important that we develop a better understanding of the magnitude and drivers of regional-scale MPA effects. To address this gap, this study examines two critical questions: 1) What do we expect the regional-scale conservation effects of MPAs to be and 2) When (and how) can we expect to detect these effects? We address these questions using a simulation analysis to frame the theoretical regional conservation impacts of MPAs, from which we then develop an empirical assessment of the evidence for regional-level conservation effects of MPAs resulting from a network of closures put in place in the Channel Islands, California, USA, in 2003. 
 
 What Are the Regional Effects of MPAs? {.unnumbered}
 ----------------------
 
-**key thing: a lot more ways for small things to happen than big things **
-  
-<!-- xx need to add in discussion of other outcomes not covered here, e.g. resiliency, tourism, etc. xx -->
-
 Much of the literature on the effects of Marine Protected Areas focuses on assessing the conservation effects within the borders of protected areas [e.g. @edgar2014]. While these effects are extremely important, they do not paint a complete picture of the effects of MPAs; the organisms within the borders of protected areas are generally part of a broader population, the biological stock, connected through adult movement and larval dispersal. If the goal of conservationists or natural resource managers is to increase the total abundance or productivity of a resource, a broader question we should ask of MPAs is not just are there more fish inside the borders of a reserve, but how do MPAs affect the broader region in which they sit? 
 
-We define the regional conservation effects of MPAs as the change in total biomass of fish (summing inside and outside of MPAs) relative to the total biomass of fish that would have occurred without the MPAs (acknowledging that other outcomes such as increased biodiversity or resiliency are also important to conservation but are beyond the scope of this analysis). We assess the fishery effects of MPAs as the total fishery catches with the MPAs relative to the fishery catches that would have occurred without the MPAs. Note that this definition of regional effects is in line with the recommendations of @ferraro2018, and differs from effects measured by for example differences in outcomes before and after MPAs. 
+We define the regional conservation effects of MPAs as the change in total biomass of fish (summing inside and outside of MPAs) relative to the total biomass of fish that would have occurred without the MPAs (acknowledging that other outcomes such as increased biodiversity or resiliency are also important to conservation but are beyond the scope of this analysis). Note that this definition of regional effects is in line with the recommendations of @ferraro2018, and differs from effects measured by for example differences in outcomes before and after MPAs. 
 
 We used a simulation model to examine the regional conservation effects of MPAs under a wide array of conditions that might reasonably be expected to affect these outcomes. The model explores combinations of MPA design (e.g. sizes, number, and placement of MPAs), life history (e.g. growth and mortality rates, adult movement, larval dispersal, and timing of density dependence), and fishing fleet dynamics (e.g. degree of fishing pressure, size selectivity of the fleet, reaction of fishing pressure to MPA placement) (See Supplementary Table.XX for a complete description of simulation variables). Numerous works have used simulation modeling to explore the effects of MPAs on different outcomes such as fisheries yields and stock abundance [see @fulton2014 and references within],  but these prior studies have either focused on the effect of a select set of drivers (such as dispersal rates) on outcomes, or have been highly localized assessments that incorporate multiple drivers but are tuned to one specific region. Our model captures critical biological features (such as the timing of density dependence), while still being flexible and fast enough to be generalized to a broad array of scenarios. We use this model to explore how different drivers interact to affect the conservation and fishery outcomes of MPAs. 
 
@@ -508,114 +504,11 @@ dev.off()
   \label{conservation-effects}
 \end{figure*}
 
-### Theoretical Fishery Effects {#fisheries .unnumbered}
+## How Can We Detect Regional Conservation Effects?
 
-Intuition and theory tell us that MPAs can have similarly diverse effects on fisheries outcomes as they did for conservation. If 100% of fishable area is placed inside an MPA then clearly the MPA can have no fishery benefits. The effects of smaller MPAs will depend on whether the spillover from MPAs is sufficient to offset losses in fishing grounds, and on the response of fishing fleets to the MPAs [see @hilborn2004 for general summary of possible fishery effects of MPAs]. 
+Basic bioeconomic theory tells us then that we should expect the regional conservation effects of MPAs to be highly context dependent. Given that their effects are not so obvious as to negate the need for program evaluation, how then can we go about measuring what the true effects of MPAs are? In a perfect setting, MPAs would be randomly assigned, and the conservation and fishery outcomes in places with and without treatment would be compared. This is clearly not how MPAs are in fact placed. What is required then is some means of controlling for biases introduced by factors such as the MPA siting process and biological and economic spillover [see @ferraro2018 and @larsen2019 for a thorough discussion of these problems]. 
 
-We used our simulation model to explore the effects of MPAs on fisheries. We express the fishery effects as a percentage of maximum sustainable yield (the maximum average catch that can taken from the fishery, MSY) gained or lost in the scenario with MPAs relative to the world without MPAs. MPAs produced gains in fishery catches in `r percent(pos_fish_runs, accuracy = 1)` of simulations (meaning MPAs produced reductions in fishery catches in `r percent(1 - pos_fish_runs, accuracy = 1)` of simulations). The median MPA effect for MPAs covering less than 25% of the target species' range was negligible. MPAs covering 50% or more of the range generally produced reductions of catches of 25% of MSY or greater, though large MPAs were able to provide fishery benefits of 25% or higher when the target fishery was severely depleted in the absence of MPAs (Fig. \ref{catch-msy-effects}A). In fact, under the assumptions of our model MPAs were only able to produce fishery benefits when pre-MPA depletion was greater than roughly 60%, though even then while positive outcomes were more frequent negative ones were still possible (Fig. \ref{catch-msy-effects}B). The simulated fishery effects of MPAs, similar to the conservation outcomes, are highly variable and context dependent. 
-
-```{r fishery-effects,fig.cap = "Median (A) and range (B) MPA fishery effects, expressed as the difference in catch with and without MPAs  as a proportion of MSY, after 15 years of protection. For (A), X-axes indicate the pre-MPA depletion of the fishery, where depletion is the percentage of unfished biomass that has been removed from the population, and Y-axes is the percent of the population's range encompasssed inside an MPA. For B), y-axes show the regional conservation effect. Constant-catch scenarios are not included in this plot since by definition catches are equal with or without MPAs", include = FALSE}
-
-msy_depletion_plot <- fishery_outcomes %>%
-  filter(years_protected == 15) %>%
-  ggplot() +
-  geom_bin2d(aes(depletion, msy_effect), binwidth = c(.05, .05),
-             show.legend = FALSE) +
-  scale_fill_viridis(
-  option = "A",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,),
-  name = "Median Effect"
-  ) +
-  scale_x_continuous(labels = percent, name = "Pre-MPA Depletion") + 
-  scale_y_continuous(labels = percent, name = "Fishery Effect")
-
-
-msy_size_plot <- fishery_outcomes %>%
-  filter(years_protected == 15) %>%
-  ggplot() +
-  geom_bin2d(aes(mpa_size, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
-  scale_fill_viridis(
-  option = "A",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,),
-  name = "# of Sims"
-  ) +
-  scale_x_continuous(labels = percent, name = "Range in MPA") + 
-    scale_y_continuous(labels = percent, name = "Fishery Effect") + 
-  theme(legend.position = "right")
-
-msy_facet_effect_plot <- fishery_outcomes %>%
-  filter(years_protected == 15) %>%
-   select(msy_effect, mpa_size, depletion) %>% 
-   gather(measure, value, -msy_effect) %>% 
-   ggplot() +
-   geom_bin2d(aes(value, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
-  scale_fill_viridis(
-  option = "A",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,barheight = unique(10, "lines")),
-  name = "# of Sims"
-  ) + 
-   facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") + 
-   scale_x_percent(name = "") + 
-   scale_y_percent(name = "Fishery Effect")
-
-
-  msy_depletion_and_size_plot <- fishery_outcomes %>% 
-    filter(years_protected >= 0,!is.na(msy)) %>%
-    group_by(experiment) %>% 
-    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
-           mpa_size = plyr::round_any(mpa_size, .05)) %>% 
-    filter(years_protected == 15) %>% 
-    group_by(depletion, mpa_size) %>% 
-    summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>% 
-    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
-    geom_raster(interpolate = TRUE) + 
-    # geom_contour(aes(z = median_mpa_effect)) +
-    scale_fill_gradient2(midpoint = 0,
-                         low = "tomato",
-                         high = "steelblue",
-                         mid = "white",
-                         labels = percent,
-                       guide = guide_colorbar(frame.colour = "black",
-                                              frame.linewidth = 1,
-                                              barheight = unit(10,"lines")), 
-                       name = "Median Effect") +
-  labs(x = "Pre-MPA Depletion", y = "Range in MPA") + 
-    scale_y_continuous(labels = percent) + 
-    scale_x_continuous(labels = percent, limits = c(0,NA))
-  
-  msy_fishery_combo_plot <-
-    (msy_depletion_and_size_plot + labs(title = "A")) + ((msy_size_plot + labs(title = "B")) / msy_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
-    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
-    axis.text.x = element_text(size = 8),
-    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
-    axis.text.y = element_text(size = 10)
-    )
-    
-pdf(file =  "figs/fishery-effect.pdf",width = 8, height = 5, useDingbats = TRUE)
-print(msy_fishery_combo_plot)
-dev.off()
-  
-```
-
-
-\begin{figure*}%[tbhp]
-  \includegraphics[width=0.9\linewidth]{figs/fishery-effect.pdf}
-  \caption{Median (A) and range (B) MPA fishery effects, expressed as the difference in catch with and without MPAs  as a proportion of MSY, after 15 years of protection across a range of pre-MPA depletion and MPA sizes}
-  \label{catch-msy-effects}
-\end{figure*}
-
-
-## How Can We Detect Regional Effects?
-
-Basic bioeconomic theory tells us then that we should expect the regional conservation and fishery effects of MPAs to be highly context dependent. Given that their effects are not so obvious as to negate the need for program evaluation, how then can we go about measuring what the true effects of MPAs are? In a perfect setting, MPAs would be randomly assigned, and the conservation and fishery outcomes in places with and without treatment would be compared. This is clearly not how MPAs are in fact placed. What is required then is some means of controlling for biases introduced by factors such as the MPA siting process and biological and economic spillover [see @ferraro2018 and @larsen2019 for a thorough discussion of these problems]. 
-
-From the fisheries perspective, catch rates before and after [e.g. @roberts2001a] or near and far from MPAs [e.g. @russ2004a] are often presented as evidence for the fisheries effects of MPAs. However neither of these approaches can be counted on to provide reliable estimate of the net fishery effects of MPAs, due to failures to account for potential broader trends in catch rates independent of MPAs and the potentially confounding effects of effort redistribution. @smiith2006a presents an econometrically robust method for estimating the fishery effects of MPAs, though this approach requires highly fine-resolution data on comparable fishing effort both near and far from MPAs. It is beyond the scope of this paper to dive deeper into detecting the net fishery effects of MPAs, and so we now focus on the question of estimating their regional conservation effects. 
-
-
-At face value (and relative to the case of fishery effects), estimating the regional conservation effects of MPAs seems a simpler and well-resolved problem. Conservation effects are often estimated by comparing densities inside MPAs to densities in selected control sites outside MPAs, which we will refer to as density ratios. Works such as @lester2009 and @halpern2002 present meta-analyses of hundreds of such studies. These results often find massively higher densities inside MPAs than outside [@lester2009], which are often equated to mean that the MPA has had a substantial positive effect on fish densities. How reliable are density ratios as an estimator of regional conservation effects though?
+Conservation effects are often estimated by comparing densities inside MPAs to densities in selected control sites outside MPAs, which we will refer to as density ratios. Works such as @lester2009 and @halpern2002 present meta-analyses of hundreds of such studies. These results often find massively higher densities inside MPAs than outside [@lester2009], which are often equated to mean that the MPA has had a substantial positive effect on fish densities. How reliable are density ratios as an estimator of regional conservation effects though?
 
 Control sites are often selected with regards to ecological traits such as habitat characteristics [@ferraro2018]. However, selection of control sites is further complicated by the very spillover that MPAs are often intended to create. Export of adult or larvae from the MPA to the "control" site dilutes their status as controls, as does concentration of fishing effort from MPAs to control sites. In theory, control sites far enough away enough to negate both biological and economic spillover could be selected, but finding suitably far sites that are also appropriate proxies for the ecological and economic context of the MPAs becomes difficult. While these concerns have been stated in various forms in the past [e.g. @halpern2004], the MPA evaluation literature has by and large been unable to address them adequately [@ferraro2018]. 
 
@@ -846,10 +739,6 @@ Studies such as @dinerstein2019 call for 30% of the oceans to be places in prote
 
 
 MPAs are an important part of the marine resource management toolbox. Under ideal circumstances they can protect both individual species and ecosystem linkages, safeguard critical habitat, and support local economies through tourism and fishing opportunities. However, our results show that the regional conservation and fishery benefits we should expect from MPAs are highly variable, and while we cannot assign probabilities to our simulated states of nature, given plausible states of nature most simulations produced small conservation effects (0-15% increases in biomass relative to what would have occurred without MPAs) and negative fishery effects (reduction in catches relative to what would have occurred without the MPAs) after fifteen years of protection. 
-
-Our simulation results present a clear outcome from the perspective of fishery effects: MPAs should not be expected to provide improvements in fisheries catches unless the stock is experiencing substantial overfishing (Fig.\ref{catch-msy-effects}-B). This general result has been discussed before [@hilborn2004], but our results provide the most comprehensive simulation testing of this concept to date.  MPAs placed in overfished fisheries frequently produced fishery catch gains of 0-25% of MSY, though larger and smaller effects were still possible. MPA size also presents an interesting tradeoff from a fisheries perspective. "Small" MPAs (less than 25% of the population range) very rarely produced substantial fishery losses, but also never produced meaningful fishery gains. Medium sized MPAs (25%-50%) produced the potential for higher fishery gains, but also opened up risk of greater fishery looses. For MPAs covering more than 50%, fishery losses quickly become much more likely than fishery gains. 
-
-We only measure one aspect of fishery outcomes here (catches). MPAs can affect many other outcomes of importance to fisheries, include profits (e.g. if MPAs improve catch per unit effort along the borders of reserves, potentially reducing costs of fishing to those), resiliency, and research. Our model does not account for potentially important factors such as inter-species effects. Our results though suggest a relatively simple rule of thumb: unless there is clear evidence of overfishing MPAs should not be expected to produce improvements in fishery catches without clear explanation for the mechanism for these increases (e.g. improvements in habitat). In assessing the potential fishery benefits of MPAs, stakeholders must make explicit the mechanisms by which these benefits are expected to be produced (for example through improved catch rates), and what evidence exists for the existence of those mechanisms within the local context.
 
 MPAs produced regional conservation gains in `r percent(pos_runs, accuracy = 1)` of simulations, though in most cases conservation gains were in the range of 0-15% increases in biomass (Fig.\ref{conservation-effects}) (XX Per Owen's thoughts, does anyone know of some references we could include here for prior thoughts on what this effect size might be?). Of particular note, MPAs covering less than 25% of the range were unlikely to produce substantial fishery harm, but also unlikely to produce regional conservation gains above 10% unless the stock was severely overfished pre-MPA. Large MPAs protecting highly depleted stocks almost always produced large regional conservation gains. This result stands on sharp contrast to the large within-MPA effects on biomass densities reported by @halpern2003a and @lester2009. This different is due in part to to the fact that within-MPA effects are likely to be much larger than regional-MPA effects, but may also reflect a tendency to place MPAs in situations most likely to produce larger conservation benefits (e.g. in heavily overfished locations). 
 
