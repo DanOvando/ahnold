@@ -1682,7 +1682,7 @@ savefoo <- function(fig,
 
 }
 
-walk(plots, savefoo, device = device, fig_height = fig_height,
+walk(plots, safely(savefoo), device = device, fig_height = fig_height,
      fig_width = fig_width)
 
 
