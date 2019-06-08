@@ -286,7 +286,11 @@ cip_data <- pisco_data %>%
 
 # process outcomes
 
+processed_grid <- processed_grid %>% 
+  filter(mpa_habfactor == 1)
+
 outcomes <- processed_grid %>%
+  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>% 
   select(-fishery_effect, -density_ratio) %>% 
   slice(1:samps) %>% 
   unnest() %>% 
@@ -294,17 +298,30 @@ outcomes <- processed_grid %>%
   mutate(year = 1:length(year)) %>% 
   ungroup() %>% 
   mutate(years_protected = year - year_mpa + 1) %>% 
-  mutate(mpa_effect = pmin(mpa_effect,2)) %>% 
+  mutate(mpa_effect = pmin(mpa_effect,1)) %>% 
   group_by(experiment) %>% 
   mutate(b0 = `no-mpa`[year == min(year)]) %>% 
   mutate(depletion = 1 - `no-mpa`/b0) %>% 
+  mutate(final_depletion = depletion[year == max(year)],
+         f = f_v_m * m) %>% 
+  mutate(u = 1 - exp(-f)) %>% 
+  mutate(final_u = u[year == max(year)]) %>% 
   ungroup() %>% 
   mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
+
+collapsed <- outcomes %>% 
+  group_by(experiment) %>% 
+  summarise(collapsed = any(depletion > 0.9)) %>% 
+  filter(collapsed == TRUE)
+
+outcomes <- outcomes %>% 
+    filter(!experiment %in% collapsed$experiment)
 
 eqo <- outcomes %>% 
   filter(year == max(year))
 
 fishery_outcomes <- processed_grid %>%
+  filter(!experiment %in% collapsed$experiment) %>% 
   select(-mpa_effect, -density_ratio) %>% 
   slice(1:samps) %>% 
   unnest() %>% 
@@ -318,6 +335,7 @@ fishery_outcomes <- processed_grid %>%
   mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
 
 density_ratios <- processed_grid %>%
+  filter(!experiment %in% collapsed$experiment) %>% 
   select(-fishery_effect) %>%
   slice(1:samps) %>%
   unnest() %>%
@@ -373,7 +391,7 @@ short_term <- outcomes %>%
   filter(years_protected == 15, years_protected >= 0)
 
 
-fishery_short_term <- fishery_outcomes %>% 
+fishery_short_term <- fishery_outcomes %>%  
   filter(years_protected <= 15, years_protected >= 0)
 
 median_effect <- median(short_term$mpa_effect[short_term$year == max(short_term$year)])
@@ -416,8 +434,14 @@ While positive conservation outcomes were much more likely to occur across our s
 ```{r conservation-effect, fig.cap = "Median (A) and range (B) regional MPA conservation effect (expressed as percent changes in biomass with MPAs relative to what would have occured without MPAs) after 15 years of protection. For (A), X-axes indicate the pre-MPA depletion of the fishery, where depletion is the percentage of unfished biomass that has been removed from the population, and Y-axes is the percent of the population's range encompasssed inside an MPA. For B), y-axes show the regional conservation effect.", include = FALSE}
 
 
+pop_time_plot <- outcomes %>% 
+  filter(years_protected > 0) %>% 
+  ggplot(aes(years_protected, mpa_effect)) + 
+  geom_bin2d() + 
+  scale_fill_viridis(guide = gc)
+
 pop_depletion_plot <- outcomes %>%
-  filter(years_protected == 15) %>%
+  filter(year == max(year)) %>%
   ggplot() +
   geom_bin2d(aes(depletion, mpa_effect), binwidth = c(.05, .05),
              show.legend = FALSE) +
@@ -428,12 +452,12 @@ pop_depletion_plot <- outcomes %>%
   frame.linewidth = 1,),
   name = "Median Effect"
   ) +
-  scale_x_continuous(labels = percent, name = "Pre-MPA Depletion") + 
+  scale_x_continuous(labels = percent, name = "Without-MPA Depletion") + 
   scale_y_continuous(labels = percent, name = "")
 
 
 pop_size_plot <- outcomes %>%
-  filter(years_protected == 15) %>%
+  filter(year == max(year)) %>%
   ggplot() +
   geom_bin2d(aes(mpa_size, mpa_effect), binwidth = c(.05, .05), show.legend = TRUE) +
   scale_fill_viridis(
@@ -449,7 +473,7 @@ pop_size_plot <- outcomes %>%
 
 
  pop_facet_effect_plot <- outcomes %>%
-  filter(years_protected == 15) %>%
+  filter(year == max(year)) %>%
    select(mpa_effect, mpa_size, depletion) %>% 
    gather(measure, value, -mpa_effect) %>% 
    ggplot() +
@@ -471,7 +495,7 @@ pop_size_plot <- outcomes %>%
     group_by(experiment) %>% 
     mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
            mpa_size = plyr::round_any(mpa_size, .05)) %>% 
-    filter(years_protected == 15) %>% 
+    filter(year == max(year)) %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(mpa_effect)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
@@ -482,7 +506,7 @@ pop_size_plot <- outcomes %>%
                                               frame.linewidth = 1,
                                               barheight = unit(10,"lines")), 
                        name = "Median Effect") +
-  labs(x = "Pre-MPA Depletion", y = "Range in MPA") + 
+  labs(x = "Without-MPA Depletion", y = "Range in MPA") + 
     scale_y_continuous(labels = percent) + 
     scale_x_continuous(labels = percent)
   
@@ -517,7 +541,7 @@ We used our simulation model to explore the effects of MPAs on fisheries. We exp
 ```{r fishery-effects,fig.cap = "Median (A) and range (B) MPA fishery effects, expressed as the difference in catch with and without MPAs  as a proportion of MSY, after 15 years of protection. For (A), X-axes indicate the pre-MPA depletion of the fishery, where depletion is the percentage of unfished biomass that has been removed from the population, and Y-axes is the percent of the population's range encompasssed inside an MPA. For B), y-axes show the regional conservation effect. Constant-catch scenarios are not included in this plot since by definition catches are equal with or without MPAs", include = FALSE}
 
 msy_depletion_plot <- fishery_outcomes %>%
-  filter(years_protected == 15) %>%
+  filter(year == max(year)) %>%
   ggplot() +
   geom_bin2d(aes(depletion, msy_effect), binwidth = c(.05, .05),
              show.legend = FALSE) +
@@ -532,7 +556,7 @@ msy_depletion_plot <- fishery_outcomes %>%
 
 
 msy_size_plot <- fishery_outcomes %>%
-  filter(years_protected == 15) %>%
+  filter(year == max(year)) %>%
   ggplot() +
   geom_bin2d(aes(mpa_size, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
   scale_fill_viridis(
@@ -546,7 +570,7 @@ msy_size_plot <- fishery_outcomes %>%
   theme(legend.position = "right")
 
 msy_facet_effect_plot <- fishery_outcomes %>%
-  filter(years_protected == 15) %>%
+  filter(year == max(year)) %>%
    select(msy_effect, mpa_size, depletion) %>% 
    gather(measure, value, -msy_effect) %>% 
    ggplot() +
@@ -567,7 +591,7 @@ msy_facet_effect_plot <- fishery_outcomes %>%
     group_by(experiment) %>% 
     mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
            mpa_size = plyr::round_any(mpa_size, .05)) %>% 
-    filter(years_protected == 15) %>% 
+  filter(year == max(year)) %>%
     group_by(depletion, mpa_size) %>% 
     summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>% 
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + 
@@ -647,8 +671,8 @@ dr_plot <- density_ratios %>%
   geom_point(aes(color = adult_movement), size = 2, alpha = 0.25)  +
   facet_wrap(~ rev(scenario), labeller = labeller(`rev(scenario)` = c(biased_density_ratio = "A) Inside vs. Experiment",true_density_ratio = "B) Inside vs. Outside"))) +
   labs(y = "True % Increase in Biomass", x = "% Density Ratio") +
-  scale_x_percent(labels = c(percent(seq(-1,1, by = 1)),">200%")) +
-  scale_y_percent(labels = c(percent(seq(-1,1, by = 1)),">200%")) +
+  # scale_x_percent(labels = c(percent(seq(-1,1, by = 1)),">200%")) +
+  # scale_y_percent(labels = c(percent(seq(-1,1, by = 1)),">200%")) +
   scale_color_viridis(guide = gc, labels = percent, name = "Fish Movement")
 
 pdf(file =  "figs/density-ratio.pdf",width = 8, height = 5, useDingbats = TRUE)

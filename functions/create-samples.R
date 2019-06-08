@@ -46,7 +46,7 @@ create_samples <- function(fishes,
           fleet = fleet,
           enviro = enviro
         ),
-        comp_foo,
+        run_mpa_experiment,
         year_mpa = year_mpa,
         sim_years = sim_years,
         num_patches = num_patches,

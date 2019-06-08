@@ -281,7 +281,7 @@ if (run_experiments == T) {
               min_size = min_size,
               random_mpa = random_mpa
             ),
-            comp_foo,
+            run_mpa_experiment,
             sim_years = sim_years,
             burn_years = burn_years,
             num_patches = num_patches

@@ -1,4 +1,4 @@
-comp_foo <- function(fish,
+run_mpa_experiment <- function(fish,
                      fleet,
                      year_mpa,
                      mpa_size,
@@ -13,27 +13,7 @@ comp_foo <- function(fish,
                      random_mpa = FALSE,
                      min_size = 1,
                      simseed = 42) {
-  set.seed(simseed)
 
-  no_mpa <-
-    sim_fishery(
-      fish = fish,
-      fleet = fleet,
-      manager = create_manager(year_mpa = year_mpa, mpa_size = 0),
-      sim_years = sim_years,
-      num_patches = num_patches,
-      burn_years = burn_years,
-      enviro = enviro,
-      enviro_strength = enviro_strength,
-      rec_driver = rec_driver,
-      sprinkler = sprinkler,
-      mpa_habfactor = mpa_habfactor,
-      tune_costs = FALSE,
-      est_msy = FALSE,
-      random_mpa = random_mpa,
-      min_size = min_size
-    ) %>%
-    mutate(experiment = 'no-mpa')
 
   set.seed(simseed)
   wi_mpa <-
@@ -55,6 +35,32 @@ comp_foo <- function(fish,
       min_size = min_size
     ) %>%
     mutate(experiment = 'with-mpa')
+
+  mpa_locations <- unique(wi_mpa$patch[wi_mpa$mpa == TRUE])
+
+  set.seed(simseed)
+
+  no_mpa <-
+    sim_fishery(
+      fish = fish,
+      fleet = fleet,
+      manager = create_manager(year_mpa = year_mpa, mpa_size = 0,
+                               mpa_locations = mpa_locations),
+      sim_years = sim_years,
+      num_patches = num_patches,
+      burn_years = burn_years,
+      enviro = enviro,
+      enviro_strength = enviro_strength,
+      rec_driver = rec_driver,
+      sprinkler = sprinkler,
+      mpa_habfactor = mpa_habfactor,
+      tune_costs = FALSE,
+      est_msy = FALSE,
+      random_mpa = random_mpa,
+      min_size = min_size
+    ) %>%
+    mutate(experiment = 'no-mpa')
+
 
   outcomes <- no_mpa %>%
     bind_rows(wi_mpa) %>%

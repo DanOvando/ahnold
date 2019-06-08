@@ -114,14 +114,14 @@ processed_grid <- processed_grid %>%
 fish <- create_fish(r0 = 100)
 
 fleet <- create_fleet(fleet_model = "constant-effort", fish = fish,
-                      initial_effort = 10, q  = 1)
+                      initial_effort = 1, q  = 1)
 
 
 sizes <- tibble(mpa_size = seq(0,0.75, by = 0.25))
 
-year_mpa <- 5
+year_mpa <- 20
 sizes <- sizes %>%
-  mutate(foo = map(mpa_size, ~ comp_foo(fish = fish,
+  mutate(foo = map(mpa_size, ~ run_mpa_experiment(fish = fish,
                                         fleet = fleet,
                                         year_mpa = year_mpa,
                                         mpa_size = .x,
@@ -129,7 +129,7 @@ sizes <- sizes %>%
                                         num_patches = 25,
                                         burn_years = 1,
                                         sprinkler = FALSE,
-                                        mpa_habfactor = 1,
+                                        mpa_habfactor = 100,
                                         enviro = NA,
                                         enviro_strength = NA,
                                         rec_driver = 'stochastic',
