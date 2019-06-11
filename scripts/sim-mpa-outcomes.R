@@ -1,6 +1,7 @@
 
 
 
+
 # setup -------------------------------------------------------------------
 
 library(spasm)
@@ -32,7 +33,7 @@ create_grid <- TRUE
 
 n_cores <- 6
 
-samps <- 25
+samps <- 100
 
 grid_search <-  FALSE
 
@@ -110,9 +111,21 @@ if (run_experiments == T) {
   if (create_grid == TRUE) {
     fun <- function() {
       ANSWER <-
-        readline("Are you sure you want to overwrite the experiment grid? y/n ")
+        readline("STOP!!! Are you sure you want to overwrite the experiment grid? y/n ")
       if (substr(ANSWER, 1, 1) == "y") {
         cat("OK, sit back, this might take a while")
+
+        fun <- function() {
+          ANSWER <-
+            readline("Delete old experiments? Recommend if tuning grid again")
+          if (substr(ANSWER, 1, 1) == "y") {
+            unlink(here::here("results", run_name, "experiments"),
+                   recursive = TRUE)
+
+          } else{
+
+          }
+        }
 
       } else{
         cat("Probably a good idea, stopping")
@@ -240,9 +253,9 @@ if (run_experiments == T) {
           .progress = T
         )
       )
-      # mutate(tune_worked = map_lgl(map(tune_fishery,"error"), is.null)) %>%
-      # filter(tune_worked) %>%
-      # mutate(tune_fishery = map(tune_fishery,"result"))
+    # mutate(tune_worked = map_lgl(map(tune_fishery,"error"), is.null)) %>%
+    # filter(tune_worked) %>%
+    # mutate(tune_fishery = map(tune_fishery,"result"))
 
 
     save(sim_grid, file = paste0(run_dir, "/sim_grid.Rdata"))
@@ -253,16 +266,15 @@ if (run_experiments == T) {
 
   }
 
-  tuning_worked <- map(sim_grid$tuned_fishery,"error") %>% map_lgl(is.null)
+  tuning_worked <-
+    map(sim_grid$tuned_fishery, "error") %>% map_lgl(is.null)
 
   sim_grid <- sim_grid %>%
     filter(tuning_worked) %>%
-    mutate(
-      fish = map(tuned_fishery, c("result","fish")),
-      fleet = map(tuned_fishery, c("result","fleet"))
-    )
+    mutate(fish = map(tuned_fishery, c("result", "fish")),
+           fleet = map(tuned_fishery, c("result", "fleet")))
 
-  sim_grid$tuned_fishery <- map(sim_grid$tuned_fishery,"result")
+  sim_grid$tuned_fishery <- map(sim_grid$tuned_fishery, "result")
 
   doParallel::registerDoParallel(cores = n_cores)
 
@@ -350,7 +362,7 @@ loadfoo <-
     ex <- purrr::map_df(list(ex), study_mpa)
 
     ex <- ex %>%
-      select(-mpa_experiment,-fish, -fleet, -tuned_fishery)
+      select(-mpa_experiment, -fish,-fleet,-tuned_fishery)
 
     return(ex)
   }
@@ -376,21 +388,13 @@ processed_grid <- map(processed_grid, "result") %>%
 
 save(processed_grid, file = paste0(run_dir, "/processed_grid.Rdata"))
 
-# outcomes <- processed_grid %>%
-#   select(-fish, -fleet) %>%
-#   unnest()
-#
-# outcomes %>%
-#   ggplot(aes(
-#     year,
-#     mpa_effect,
-#     group = interaction(year, factor(density_movement_modifier)),
-#     fill = factor(density_movement_modifier),
-#     color = factor(density_movement_modifier)
-#   )) +
-#   geom_boxplot() +
-#   scale_y_continuous(labels = scales::percent) +
-#   scale_x_continuous(limits = c(40, NA))
+outcomes <- processed_grid %>%
+  unnest()
+
+outcomes %>%
+  ggplot(aes(mpa_effect, fill = factor(density_movement_modifier))) +
+  geom_histogram() +
+  facet_wrap(~factor(density_movement_modifier))
 
 
 
