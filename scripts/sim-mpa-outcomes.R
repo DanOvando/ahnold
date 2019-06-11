@@ -1,5 +1,6 @@
 
 
+
 # setup -------------------------------------------------------------------
 
 library(spasm)
@@ -23,13 +24,15 @@ burn_years <- 25
 
 num_patches <- 50
 
-run_experiments <- FALSE
+run_experiments <- TRUE
 
-create_grid <- FALSE
+save_experiment <- TRUE
+
+create_grid <- TRUE
 
 n_cores <- 6
 
-samps <- 10000
+samps <- 25
 
 grid_search <-  FALSE
 
@@ -72,7 +75,7 @@ if (in_clouds == T) {
 
 # prepare data -----------------------------------------------------
 
-run_name <- "v4.0"
+run_name <- "v4.1"
 
 run_dir <- here::here("results", run_name)
 
@@ -105,10 +108,10 @@ fitted_data <- fitted_data %>%
 
 if (run_experiments == T) {
   if (create_grid == TRUE) {
-
     fun <- function() {
-      ANSWER <- readline("Are you sure you want to overwrite the experiment grid? y/n ")
-      if (substr(ANSWER, 1, 1) == "y"){
+      ANSWER <-
+        readline("Are you sure you want to overwrite the experiment grid? y/n ")
+      if (substr(ANSWER, 1, 1) == "y") {
         cat("OK, sit back, this might take a while")
 
       } else{
@@ -140,7 +143,7 @@ if (run_experiments == T) {
           steepness = runif(samps, min = 0.6, max = 0.95),
           adult_movement = sample(0:(0.5 * num_patches), samps, replace = T),
           larval_movement = sample(0:(0.5 * num_patches), samps, replace = T),
-          density_movement_modifier = sample(c(0, 0.5), samps, replace = T),
+          density_movement_modifier = sample(c(0, 0.25), samps, replace = T),
           density_dependence_form = sample(1:3, samps, replace = T),
           mpa_size = runif(samps, min = 0.01, max = 1),
           f_v_m = runif(samps, min = 0.01, max = 4),
@@ -160,7 +163,7 @@ if (run_experiments == T) {
           min_size = runif(samps, min = 0.01, max = 0.75),
           mpa_habfactor = sample(c(1, 4), samps, replace = TRUE),
           size_limit = runif(samps, 0.1, 1.25),
-          random_mpas = sample(c(TRUE, FALSE), samps, replace = TRUE)
+          random_mpa = sample(c(TRUE, FALSE), samps, replace = TRUE)
         )
 
 
@@ -230,17 +233,17 @@ if (run_experiments == T) {
             sprinkler = sprinkler,
             mpa_habfactor = mpa_habfactor
           ),
-          tune_fishery,
+          safely(tune_fishery),
           num_patches = num_patches,
           sim_years = sim_years,
           burn_years = burn_years,
           .progress = T
         )
-      ) %>%
-      mutate(
-        fish = map(tuned_fishery, "fish"),
-        fleet = map(tuned_fishery, "fleet")
       )
+      # mutate(tune_worked = map_lgl(map(tune_fishery,"error"), is.null)) %>%
+      # filter(tune_worked) %>%
+      # mutate(tune_fishery = map(tune_fishery,"result"))
+
 
     save(sim_grid, file = paste0(run_dir, "/sim_grid.Rdata"))
     message("finished fishery tuning")
@@ -250,12 +253,22 @@ if (run_experiments == T) {
 
   }
 
+  tuning_worked <- map(sim_grid$tuned_fishery,"error") %>% map_lgl(is.null)
+
+  sim_grid <- sim_grid %>%
+    filter(tuning_worked) %>%
+    mutate(
+      fish = map(tuned_fishery, c("result","fish")),
+      fleet = map(tuned_fishery, c("result","fleet"))
+    )
+
+  sim_grid$tuned_fishery <- map(sim_grid$tuned_fishery,"result")
+
   doParallel::registerDoParallel(cores = n_cores)
 
   foreach::getDoParWorkers()
 
   sim_grid$experiment <- 1:nrow(sim_grid)
-
 
   if (dir.exists(experiment_dir) == F) {
     dir.create(experiment_dir, recursive = T)
@@ -264,6 +277,9 @@ if (run_experiments == T) {
   # library(progress)
 
   message("starting mpa experiments")
+
+  # sim_grid <- sample_n(sim_grid, 100)
+
   mpa_experiments <-
     foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
       # pb$tick()
@@ -288,11 +304,30 @@ if (run_experiments == T) {
           )
         )
 
+      # results$mpa_experiment[[1]]$raw_outcomes %>% filter(year == max(year)) -> a
+      #
+      # a %>% filter(experiment == "with-mpa") %>% group_by(patch) %>% summarise(mpa = unique(mpa)) %>% ggplot(aes(patch, mpa)) + geom_col()
 
-        filename <- glue::glue("experiment_{i}.rds")
+      filename <- glue::glue("experiment_{i}.rds")
+      #
+      # out <- results
 
+      if (save_experiment == TRUE) {
         saveRDS(results, file = glue::glue("{experiment_dir}/{filename}"))
+
+      } else {
+        out <- results
+
+      }
     } # close dopar
+
+  # mpa_experiments[[1]]$mpa_experiment[[1]]$raw_outcomes %>% filter(year == max(year)) -> a
+  #
+  # a %>% filter(experiment == "with-mpa") %>% group_by(patch) %>% summarise(mpa = unique(mpa)) %>% ggplot(aes(patch, mpa)) + geom_col()
+  #
+  # filename <- glue::glue("experiment_{i}.rds")
+
+  # out <- results
 
 
 } # close run experiments
@@ -315,20 +350,20 @@ loadfoo <-
     ex <- purrr::map_df(list(ex), study_mpa)
 
     ex <- ex %>%
-      select(-mpa_experiment, -fish,-fleet,-tuned_fishery)
+      select(-mpa_experiment,-fish, -fleet, -tuned_fishery)
 
     return(ex)
   }
 
 
 # if (logged == TRUE) {
-  future::plan(future::multiprocess, workers = n_cores)
+future::plan(future::multiprocess, workers = n_cores)
 
-  processed_grid <-
-    future_map(1:samps,
-               safely(loadfoo),
-               experiment_dir = experiment_dir,
-               .progress = T)
+processed_grid <-
+  future_map(1:samps,
+             safely(loadfoo),
+             experiment_dir = experiment_dir,
+             .progress = T)
 
 grid_worked <- map(processed_grid, "error") %>% map_lgl(is_null)
 
