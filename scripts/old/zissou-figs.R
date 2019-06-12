@@ -1406,7 +1406,9 @@ catch_trend_plot <- cdfw_catches %>%
   ungroup() %>%
   filter(ncatch > 10) %>%
   ggplot(aes(year, scatch)) +
+  geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2) +
   geom_line(show.legend = TRUE, aes(size = mcatch)) +
+  geom_point(show.legend = TRUE, aes(size = mcatch)) +
   facet_wrap(~commonname) +
   theme_minimal() +
   labs(y = "Centered and Scaled Catch", x = "Year") +
