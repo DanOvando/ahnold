@@ -34,7 +34,7 @@ samps <- 20000
 
 short_frame <- 15
 
-run_name <- "v4.0"
+run_name <- "v4.1"
 
 fig_name <- "presentations"
 

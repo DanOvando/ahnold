@@ -79,7 +79,7 @@ results <- results %>%
   mutate(
     mpa_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_effect),
     fishery_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_fishery_effect),
-    density_ratio = density_ratio,
+    density_ratio = list(density_ratio),
     baci = map(map(mpa_experiment, "raw_outcomes"), calculate_baci, distance = distance_grid, type = "biased")
   )
 }
