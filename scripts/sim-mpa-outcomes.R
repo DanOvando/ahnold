@@ -7,8 +7,9 @@ library(FishLife)
 library(hrbrthemes)
 library(scales)
 library(doParallel)
-library(furrr)
 library(tidyverse)
+library(future)
+library(furrr)
 
 functions <- list.files(here::here("functions"))
 
@@ -23,13 +24,13 @@ burn_years <- 25
 
 num_patches <- 50
 
-run_experiments <- FALSE
+run_experiments <- TRUE
 
-create_grid <- FALSE
+create_grid <- TRUE
 
 n_cores <- 6
 
-samps <- 10000
+samps <- 100
 
 grid_search <-  FALSE
 
@@ -72,7 +73,7 @@ if (in_clouds == T) {
 
 # prepare data -----------------------------------------------------
 
-run_name <- "v4.0"
+run_name <- "v4.1"
 
 run_dir <- here::here("results", run_name)
 
@@ -217,7 +218,7 @@ if (run_experiments == T) {
 
     # tune fleet objects
 
-    future::plan(future::multiprocess, workers = n_cores)
+    plan(multiprocess, workers = n_cores)
 
     message("starting fishery tuning")
     sim_grid <- sim_grid %>%
@@ -265,7 +266,7 @@ if (run_experiments == T) {
 
   message("starting mpa experiments")
   mpa_experiments <-
-    foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
+    foreach::foreach(i = 1:4) %dopar% {
       # pb$tick()
       results <- sim_grid %>%
         slice(i) %>%
@@ -279,7 +280,7 @@ if (run_experiments == T) {
               sprinkler = sprinkler,
               mpa_habfactor = mpa_habfactor,
               min_size = min_size,
-              random_mpa = random_mpa
+              random_mpa = random_mpas
             ),
             run_mpa_experiment,
             sim_years = sim_years,
@@ -292,6 +293,9 @@ if (run_experiments == T) {
         filename <- glue::glue("experiment_{i}.rds")
 
         saveRDS(results, file = glue::glue("{experiment_dir}/{filename}"))
+        
+        out <- results
+        
     } # close dopar
 
 

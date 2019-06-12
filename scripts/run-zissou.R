@@ -33,9 +33,9 @@ functions <- list.files(here::here("functions"))
 
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
-run_name <- 'v4.0'
+run_name <- 'v4.1'
 
-run_description <- "post defense improvements and author feedback. Ideally publication version"
+run_description <- "fix bug with MPA habfactor, rerunning on squid"
 
 in_clouds <- F
 
@@ -112,7 +112,7 @@ rstan_options(auto_write = TRUE)
 
 run_tmb <- FALSE
 
-n_cores <- 5
+n_cores <- 8
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
