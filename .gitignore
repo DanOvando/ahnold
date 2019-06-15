@@ -14,8 +14,9 @@ data/kfm_data/*.*
 **/*.rdb
 **/*.rdata
 **/*.out
-Results**/*.csv
-Results**/*.*
+results**/*.csv
+results**/*.*
+results/
 MLPA Effects Results**/*.csv
 MLPA Effects Results**/*.*
 .txt
@@ -55,3 +56,4 @@ packrat/lib*/
 *.mov
 *.gif
 *.JPG
+*.log
