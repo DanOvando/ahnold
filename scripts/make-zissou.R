@@ -82,7 +82,8 @@ write(run_description,
       file = paste(run_dir, 'RUN_DESCRIPTION.txt', sep = '/'))
 
 plot_theme <- hrbrthemes::theme_ipsum(base_size = 14,
-                                      axis_title_size = 16)
+                                      axis_title_size = 16,
+                                      base_family = "Fira Sans")
 
 theme_set(plot_theme)
 
