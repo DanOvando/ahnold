@@ -110,7 +110,7 @@ write(run_description,
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- FALSE
+run_tmb <- TRUE
 
 n_cores <- 5
 
