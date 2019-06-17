@@ -64,6 +64,8 @@ num_patches <- 50
 
 samps <- 20000
 
+n_cores <- 12
+
 # prepare run -------------------------------------------------------------
 
 run_dir <- here::here("results", run_name)
@@ -78,11 +80,10 @@ write(run_description,
       file = paste(run_dir, 'RUN_DESCRIPTION.txt', sep = '/'))
 
 plot_theme <- hrbrthemes::theme_ipsum(base_size = 14,
-                                      axis_title_size = 16)
+                                      axis_title_size = 16,
+                                      base_family = "Fira Sans")
 
 theme_set(plot_theme)
-
-run_did <- TRUE
 
 fig_name <- "presentations"
 
@@ -99,15 +100,13 @@ if (run_did == TRUE){
 
 rstan_options(auto_write = TRUE)
 
-run_tmb <- FALSE
+run_tmb <- TRUE
 
-n_cores <- 5
+run_length_to_density <-  FALSE
 
 tmb_to_stan <- FALSE # fit the model in stan instead of TMB
 
 max_generations <- 4
-
-run_length_to_density <-  FALSE
 
 run_vast <- FALSE # run VAST, best to leave off for now
 
@@ -1183,6 +1182,8 @@ model_runs <- cross_df(
 # model_runs <- model_runs %>%
 #   filter(data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE)
 
+# model_runs <- model_runs %>% filter(data_source == "kfm")
+
 if (run_tmb == T){
 
   if (file.exists("fit-progress.txt")){
@@ -1216,6 +1217,9 @@ if (run_tmb == T){
     )
 
     write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
+          append = T)
+    
+    write(glue::glue("error message:{fits$error}"), file = "fit-errors.txt",
           append = T)
 
     out <- fits
