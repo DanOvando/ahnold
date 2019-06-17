@@ -42,7 +42,7 @@ walk(functions, ~ here::here("functions", .x) %>% source()) # load local functio
 run_name <- 'v4.1'
 
 run_description <- "hopefully publication version, incorporating new adult
-density dependent movemen"
+density dependent movement"
 
 # the following analysis run the complete contents of "zissou". Each section depends on the out
 # outcomes of the prior section, but will load relevant saved files.
