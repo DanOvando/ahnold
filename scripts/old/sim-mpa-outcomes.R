@@ -9,8 +9,9 @@ library(FishLife)
 library(hrbrthemes)
 library(scales)
 library(doParallel)
-library(furrr)
 library(tidyverse)
+library(future)
+library(furrr)
 
 functions <- list.files(here::here("functions"))
 
@@ -25,15 +26,15 @@ burn_years <- 25
 
 num_patches <- 50
 
-run_experiments <- TRUE
+run_experiments <- FALSE
 
-save_experiment <- TRUE
+save_experiment <- FALSE
 
-create_grid <- TRUE
+create_grid <- FALSE
 
-n_cores <- 6
+n_cores <- 10
 
-samps <- 100
+samps <- 5000
 
 grid_search <-  FALSE
 
@@ -233,7 +234,7 @@ if (run_experiments == T) {
 
     # tune fleet objects
 
-    future::plan(future::multiprocess, workers = n_cores)
+    plan(multiprocess, workers = n_cores)
 
     message("starting fishery tuning")
     sim_grid <- sim_grid %>%

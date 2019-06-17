@@ -18,7 +18,7 @@ functions <- list.files(here::here("functions"))
 
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 
-run_name <- 'v4.0'
+run_name <- 'v4.1'
 
 run_dir <- file.path('results', run_name)
 
