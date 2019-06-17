@@ -1273,7 +1273,7 @@ model_runs <- model_runs %>%
 
    create_grid <- TRUE
 
-   samps <- 10000
+   samps <- 12000
 
    grid_search <-  FALSE
 
@@ -1394,10 +1394,15 @@ model_runs <- model_runs %>%
              density_dependence_form = density_dependence_form,
              density_movement_modifier = density_movement_modifier
            ),
-           create_fish,
+           safely(create_fish),
            price = 10
          ))
 
+       fish_worked <- map(sim_grid$fish,"error") %>% map_lgl(is_null)
+
+       sim_grid <- sim_grid %>%
+         filter(fish_worked) %>%
+         mutate(fish = map(fish, "result"))
 
        # create fleet objects
        sim_grid <- sim_grid %>%
