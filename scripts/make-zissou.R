@@ -67,7 +67,7 @@ num_patches <- 50
 
 samps <- 20000
 
-n_cores <- 12
+n_cores <- 1
 
 # prepare run -------------------------------------------------------------
 
@@ -1308,31 +1308,15 @@ model_runs <- model_runs %>%
 
    if (run_experiments == T) {
      if (create_grid == TRUE) {
-       fun <- function() {
-         ANSWER <-
-           readline("STOP!!! Are you sure you want to overwrite the experiment grid? y/n ")
-         if (substr(ANSWER, 1, 1) == "y") {
-           cat("OK, sit back, this might take a while")
 
-           fun <- function() {
-             ANSWER <-
-               readline("Delete old experiments? Recommend if tuning grid again")
-             if (substr(ANSWER, 1, 1) == "y") {
-               unlink(here::here("results", run_name, "experiments"),
-                      recursive = TRUE)
-
-             } else{
-
-             }
-           }
-
-         } else{
-           cat("Probably a good idea, stopping")
-           stop()
-
-         }
-       }
-       fun()
+       # switch(
+       #   utils::menu(c("y", "n"), title = "STOP!!! Are you sure you want to overwrite the experiment grid? y/n", graphics = TRUE) + 1,
+       #   cat("Nothing done\n"),
+       #   cat("OK, sit back, this might take a while"),
+       #   stop("Got it, canceling run to avoid overwriting"))
+       #
+       #
+       # stop("force stop")
 
        if (grid_search == T) {
          sim_grid <- expand.grid(
