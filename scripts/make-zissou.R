@@ -50,7 +50,7 @@ run_description <- "post defense improvements and author feedback. Ideally publi
 
 run_did <- FALSE # run difference in difference on data from the CINMS
 
-simulate_mpas <- FALSE # simulate MPA outcomes
+simulate_mpas <- TRUE # simulate MPA outcomes
 
 validate_mpas <- FALSE
 
@@ -66,7 +66,7 @@ num_patches <- 50
 
 samps <- 20000
 
-n_cores <- 1
+n_cores <- 12
 
 # prepare run -------------------------------------------------------------
 
@@ -1272,7 +1272,7 @@ model_runs <- model_runs %>%
 
    create_grid <- TRUE
 
-   samps <- 100
+   samps <- 10000
 
    grid_search <-  FALSE
 
