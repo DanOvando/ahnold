@@ -16,8 +16,7 @@ data/kfm_data/*.*
 **/*.out
 results**/*.csv
 results**/*.*
-MLPA Effects Results**/*.csv
-MLPA Effects Results**/*.*
+results/
 .txt
 **/*.txt
 MLPA Effects Results/
@@ -55,4 +54,5 @@ packrat/lib*/
 *.mov
 *.gif
 *.JPG
+*.log
 *.zip

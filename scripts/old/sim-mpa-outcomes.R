@@ -393,10 +393,9 @@ outcomes <- processed_grid %>%
   unnest()
 
 outcomes %>%
-  ggplot(aes(mpa_effect, fill = factor(density_movement_modifier))) +
-  geom_histogram() +
-  facet_wrap(~factor(density_movement_modifier))
-
+  ggplot(aes(year,pmin(4,mpa_effect), group = experiment)) +
+  geom_path() +
+  facet_wrap(~effort_allocation)
 
 
 
