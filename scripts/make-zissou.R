@@ -51,7 +51,7 @@ density dependent movement"
 
 run_did <- FALSE # run difference in difference on data from the CINMS
 
-simulate_mpas <- FALSE # simulate MPA outcomes
+simulate_mpas <- TRUE # simulate MPA outcomes
 
 validate_mpas <- FALSE
 
