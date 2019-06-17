@@ -67,7 +67,7 @@ num_patches <- 50
 
 samps <- 20000
 
-n_cores <- 1
+n_cores <- 12
 
 # prepare run -------------------------------------------------------------
 
@@ -1305,7 +1305,6 @@ model_runs <- model_runs %>%
 
 
    # run experiments ---------------------------------------------------------
-
    if (run_experiments == T) {
      if (create_grid == TRUE) {
 
@@ -1335,7 +1334,7 @@ model_runs <- model_runs %>%
        } else{
          sim_grid <-
            tibble(
-             scientific_name = sample(unique(fitted_data$taxa), samps, replace = T),
+             scientific_name = sample(rfishbase::taxonomy(), samps, replace = T),
              steepness = runif(samps, min = 0.6, max = 0.95),
              adult_movement = sample(0:(0.5 * num_patches), samps, replace = T),
              larval_movement = sample(0:(0.5 * num_patches), samps, replace = T),
