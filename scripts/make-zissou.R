@@ -41,7 +41,8 @@ walk(functions, ~ here::here("functions", .x) %>% source()) # load local functio
 
 run_name <- 'v4.1'
 
-run_description <- "post defense improvements and author feedback. Ideally publication version"
+run_description <- "hopefully publication version, incorporating new adult
+density dependent movemen"
 
 # the following analysis run the complete contents of "zissou". Each section depends on the out
 # outcomes of the prior section, but will load relevant saved files.
@@ -1220,7 +1221,7 @@ if (run_tmb == T){
 
     write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
           append = T)
-    
+
     write(glue::glue("error message:{fits$error}"), file = "fit-errors.txt",
           append = T)
 
@@ -1339,7 +1340,7 @@ model_runs <- model_runs %>%
            steepness = seq(0.6, 1, by = .2),
            adult_movement = seq(1, 20, length.out = 3),
            larval_movement = seq(1, 20, length.out = 3),
-           density_movement_modifier = c(0, 1),
+           density_movement_modifier = c(0.25, 1),
            density_dependence_form = 1:5,
            mpa_size = c(.1, .3, .75),
            f_v_m = seq(.01, 1.25, by = 0.5),
@@ -1354,7 +1355,7 @@ model_runs <- model_runs %>%
              steepness = runif(samps, min = 0.6, max = 0.95),
              adult_movement = sample(0:(0.5 * num_patches), samps, replace = T),
              larval_movement = sample(0:(0.5 * num_patches), samps, replace = T),
-             density_movement_modifier = sample(c(0, 0.25), samps, replace = T),
+             density_movement_modifier = sample(c(0.25, 1), samps, replace = T),
              density_dependence_form = sample(1:3, samps, replace = T),
              mpa_size = runif(samps, min = 0.01, max = 1),
              f_v_m = runif(samps, min = 0.01, max = 4),
