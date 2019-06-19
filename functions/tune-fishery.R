@@ -22,8 +22,7 @@ tune_fishery <- function( f_v_m,
                                num_patches = 10,
                           sprinkler = sprinkler,
                           mpa_habfactor = mpa_habfactor){
-
-
+  
 
   if (fleet$fleet_model == "constant-catch"){
 

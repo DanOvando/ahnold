@@ -29,7 +29,7 @@ library(ggmap)
 library(rEDM)
 library(bayesplot)
 library(tidyverse)
-
+RhpcBLASctl::blas_set_num_threads(1) # idea from grant to deal with weird multicore failure
 extrafont::loadfonts()
 
 functions <- list.files(here::here("functions"))
@@ -51,7 +51,7 @@ density dependent movement"
 
 run_did <- FALSE # run difference in difference on data from the CINMS
 
-simulate_mpas <- TRUE # simulate MPA outcomes
+simulate_mpas <- FALSE # simulate MPA outcomes
 
 validate_mpas <- FALSE
 
@@ -64,8 +64,6 @@ sim_years <- 50
 # burn_years <- 1
 
 num_patches <- 50
-
-samps <- 20000
 
 n_cores <- 12
 
@@ -1273,7 +1271,7 @@ model_runs <- model_runs %>%
 
    create_grid <- TRUE
 
-   samps <- 12000
+   samps <- 10000
 
    grid_search <-  FALSE
 
@@ -1420,31 +1418,81 @@ model_runs <- model_runs %>%
 
        # tune fleet objects
 
-       future::plan(future::multiprocess, workers = n_cores)
+       # future::plan(future::multiprocess, workers = n_cores)
+       # 
+       # message("starting fishery tuning")
+       # sim_grid <- sim_grid %>%
+       #   mutate(
+       #     tuned_fishery = future_pmap(
+       #       list(
+       #         f_v_m = f_v_m,
+       #         fish = fish,
+       #         fleet = fleet,
+       #         sprinkler = sprinkler,
+       #         mpa_habfactor = mpa_habfactor             ),
+       #       safely(tune_fishery),
+       #       num_patches = num_patches,
+       #       sim_years = sim_years,
+       #       burn_years = burn_years,
+       #       .progress = T
+       #     )
+       #   )
+       
+       doParallel::registerDoParallel(cores = n_cores)
+       
+       if (dir.exists(experiment_dir) == F) {
+         dir.create(experiment_dir, recursive = T)
+       }
+       
+       sft = purrr::safely(tune_fishery)
+       
+       tuned_fisheries <-
+         foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
+           
+           
+           tuned_fishery = sft(
+                     f_v_m = sim_grid$f_v_m[i],
+                     fish = sim_grid$fish[[i]],
+                     fleet = sim_grid$fleet[[i]],
+                     sprinkler = sim_grid$sprinkler[i],
+                     mpa_habfactor = sim_grid$mpa_habfactor[i],
+                   num_patches = num_patches,
+                   sim_years = sim_years,
+                   burn_years = burn_years
+                 )
+           
+           filename <- glue::glue("fishery_{i}.rds")
+   
+           
+           if (save_experiment == TRUE) {
+             saveRDS(tuned_fishery, file = glue::glue("{experiment_dir}/{filename}"))
+             
+           } else {
+             out <- tuned_fishery
+             
+           }
+         } # close tuning
+       
+       
+       loadfoo <-
+         function(fishery, experiment_dir) {
+           ex <-
+             readRDS(glue::glue("{experiment_dir}/fishery_{fishery}.rds"))
+         }
+       
+ 
 
-       message("starting fishery tuning")
-       sim_grid <- sim_grid %>%
-         mutate(
-           tuned_fishery = future_pmap(
-             list(
-               f_v_m = f_v_m,
-               fish = fish,
-               fleet = fleet,
-               sprinkler = sprinkler,
-               mpa_habfactor = mpa_habfactor
-             ),
-             safely(tune_fishery),
-             num_patches = num_patches,
-             sim_years = sim_years,
-             burn_years = burn_years,
-             .progress = T
-           )
-         )
-       # mutate(tune_worked = map_lgl(map(tune_fishery,"error"), is.null)) %>%
-       # filter(tune_worked) %>%
-       # mutate(tune_fishery = map(tune_fishery,"result"))
+      
+      tuned_results = map(1:nrow(sim_grid), safely(loadfoo), experiment_dir = experiment_dir)
+      
+      tuning_worked <- map(tuned_results,"error") %>% map_lgl(is.null)
 
-
+      # annoying process to catch things that segfaulted in the parallel process      
+      sim_grid <- sim_grid %>% 
+        filter(tuning_worked) %>% 
+        mutate(tuned_fishery = map(tuned_results[tuning_worked],"result"))
+      
+      
        save(sim_grid, file = paste0(run_dir, "/sim_grid.Rdata"))
        message("finished fishery tuning")
 
@@ -1453,6 +1501,8 @@ model_runs <- model_runs %>%
 
      }
 
+     doParallel::stopImplicitCluster()
+     
      tuning_worked <-
        map(sim_grid$tuned_fishery, "error") %>% map_lgl(is.null)
 
@@ -1464,8 +1514,6 @@ model_runs <- model_runs %>%
      sim_grid$tuned_fishery <- map(sim_grid$tuned_fishery, "result")
 
      doParallel::registerDoParallel(cores = n_cores)
-
-     foreach::getDoParWorkers()
 
      sim_grid$experiment <- 1:nrow(sim_grid)
 
@@ -1581,7 +1629,7 @@ model_runs <- model_runs %>%
    outcomes %>%
      ggplot(aes(year,pmin(4,mpa_effect), group = experiment)) +
      geom_path() +
-     facet_wrap(~effort_allocation)
+     facet_wrap(~density_movement_modifier)
 
 
 
