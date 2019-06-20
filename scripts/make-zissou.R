@@ -29,8 +29,10 @@ library(ggmap)
 library(rEDM)
 library(bayesplot)
 library(tidyverse)
-RhpcBLASctl::blas_set_num_threads(1) # idea from grant to deal with weird multicore failure
 extrafont::loadfonts()
+
+
+
 
 functions <- list.files(here::here("functions"))
 
@@ -1419,7 +1421,7 @@ model_runs <- model_runs %>%
        # tune fleet objects
 
        # future::plan(future::multiprocess, workers = n_cores)
-       # 
+       #
        # message("starting fishery tuning")
        # sim_grid <- sim_grid %>%
        #   mutate(
@@ -1437,19 +1439,19 @@ model_runs <- model_runs %>%
        #       .progress = T
        #     )
        #   )
-       
+
        doParallel::registerDoParallel(cores = n_cores)
-       
+
        if (dir.exists(experiment_dir) == F) {
          dir.create(experiment_dir, recursive = T)
        }
-       
+
        sft = purrr::safely(tune_fishery)
-       
+
        tuned_fisheries <-
          foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
-           
-           
+
+
            tuned_fishery = sft(
                      f_v_m = sim_grid$f_v_m[i],
                      fish = sim_grid$fish[[i]],
@@ -1460,39 +1462,39 @@ model_runs <- model_runs %>%
                    sim_years = sim_years,
                    burn_years = burn_years
                  )
-           
+
            filename <- glue::glue("fishery_{i}.rds")
-   
-           
+
+
            if (save_experiment == TRUE) {
              saveRDS(tuned_fishery, file = glue::glue("{experiment_dir}/{filename}"))
-             
+
            } else {
              out <- tuned_fishery
-             
+
            }
          } # close tuning
-       
-       
+
+
        loadfoo <-
          function(fishery, experiment_dir) {
            ex <-
              readRDS(glue::glue("{experiment_dir}/fishery_{fishery}.rds"))
          }
-       
- 
 
-      
+
+
+
       tuned_results = map(1:nrow(sim_grid), safely(loadfoo), experiment_dir = experiment_dir)
-      
+
       tuning_worked <- map(tuned_results,"error") %>% map_lgl(is.null)
 
-      # annoying process to catch things that segfaulted in the parallel process      
-      sim_grid <- sim_grid %>% 
-        filter(tuning_worked) %>% 
+      # annoying process to catch things that segfaulted in the parallel process
+      sim_grid <- sim_grid %>%
+        filter(tuning_worked) %>%
         mutate(tuned_fishery = map(tuned_results[tuning_worked],"result"))
-      
-      
+
+
        save(sim_grid, file = paste0(run_dir, "/sim_grid.Rdata"))
        message("finished fishery tuning")
 
@@ -1502,7 +1504,7 @@ model_runs <- model_runs %>%
      }
 
      doParallel::stopImplicitCluster()
-     
+
      tuning_worked <-
        map(sim_grid$tuned_fishery, "error") %>% map_lgl(is.null)
 
@@ -1839,6 +1841,10 @@ if (make_figures == TRUE){
                        barheight = 35)
 
 
+  hgc <- guide_colorbar(frame.colour = "black",
+                       ticks.colour = "black",
+                       barwidth = 35)
+
   plot_trans <- "identity"
 
   # filter results ----------------------------------------------------------
@@ -2085,8 +2091,37 @@ if (make_figures == TRUE){
 
 
 
+  outcomes <- processed_grid %>%
+    select(-fishery_effect, -density_ratio) %>%
+    unnest() %>%
+    group_by(experiment) %>%
+    mutate(year = 1:length(year)) %>%
+    ungroup() %>%
+    mutate(years_protected = year - year_mpa + 1) %>%
+    mutate(mpa_effect = pmin(mpa_effect,2)) %>%
+    group_by(experiment) %>%
+    mutate(b0 = `no-mpa`[year == min(year)]) %>%
+    mutate(depletion = 1 - `no-mpa`/b0) %>%
+    ungroup() %>%
+    mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
+
+
+
+  sim_plot <- outcomes %>%
+    mutate(rsize = plyr::round_any(mpa_size, 0.25)) %>%
+    filter(rsize == 0.25) %>%
+    mutate(year = years_protected + 2003) %>%
+    filter(year %in% did_betas$year)
+
   did_plot <- did_betas %>%
     ggplot() +
+    geom_hex(
+      data = sim_plot,
+      aes(year, mpa_effect,
+          fill = ..density..),
+      binwidth = c(1, .1),
+      alpha = 0.85
+    ) +
     geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
     geom_hline(aes(yintercept = 0)) +
     geom_pointrange(aes(
@@ -2095,8 +2130,11 @@ if (make_figures == TRUE){
       ymin = lower,
       ymax = upper
     ),
-    size = 1.5) +
-    labs(x = "Year", y = "Targeted Trend Divergence")
+    size = 1.5
+    ) +
+    labs(x = "Year", y = "Targeted Trend Divergence") +
+    scale_fill_viridis(guide = gc, name = "% of Sims", labels = percent)
+
 
   doh_did_plot <- did_betas %>%
     filter(year < 2015) %>%
@@ -2127,27 +2165,11 @@ if (make_figures == TRUE){
 
   # process outcomes
 
-  outcomes <- processed_grid %>%
-    select(-fishery_effect, -density_ratio) %>%
-    slice(1:samps) %>%
-    unnest() %>%
-    group_by(experiment) %>%
-    mutate(year = 1:length(year)) %>%
-    ungroup() %>%
-    mutate(years_protected = year - year_mpa + 1) %>%
-    mutate(mpa_effect = pmin(mpa_effect,2)) %>%
-    group_by(experiment) %>%
-    mutate(b0 = `no-mpa`[year == min(year)]) %>%
-    mutate(depletion = 1 - `no-mpa`/b0) %>%
-    ungroup() %>%
-    mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
-
   eqo <- outcomes %>%
     filter(year == max(year))
 
   fishery_outcomes <- processed_grid %>%
     select(-mpa_effect, -density_ratio) %>%
-    slice(1:samps) %>%
     unnest() %>%
     group_by(experiment) %>%
     mutate(year = 1:length(year)) %>%
@@ -2161,7 +2183,6 @@ if (make_figures == TRUE){
   # density ratio is being saved as a list of a
   density_ratios <- processed_grid %>%
     select(-fishery_effect) %>%
-    slice(1:samps) %>%
     unnest() %>%
     group_by(experiment) %>%
     mutate(year = 1:length(year)) %>%
@@ -2343,12 +2364,12 @@ if (make_figures == TRUE){
     scale_fill_viridis(
       option = "A",
       trans = plot_trans,
-      guide = gc,
+      guide = hgc,
       name = "# of Sims"
     ) +
     scale_x_continuous(labels = percent, name = "Range in MPA") +
     scale_y_continuous(labels = percent, name = "Conservation Effect") +
-    theme(legend.position = "right")
+    theme(legend.position = "top")
 
 
   pop_facet_effect_plot <- outcomes %>%
@@ -2360,7 +2381,7 @@ if (make_figures == TRUE){
     scale_fill_viridis(
       option = "A",
       trans = plot_trans,
-      guide = gc,
+      guide = hgc,
       name = "# of Sims"
     ) +
     facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") +
@@ -2419,11 +2440,12 @@ if (make_figures == TRUE){
     geom_tile() +
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_viridis(labels = percent,
-                       guide = gc,
+                       guide = hgc,
                        name = "Median Effect") +
     labs(x = "Pre-MPA Depletion", y = "Range in MPA") +
     scale_y_continuous(labels = percent) +
-    scale_x_continuous(labels = percent)
+    scale_x_continuous(labels = percent) +
+    theme(legend.position = "top")
 
   eq_pop_depletion_and_size_plot <- outcomes %>%
     filter(years_protected >= 0) %>%
@@ -2437,7 +2459,7 @@ if (make_figures == TRUE){
     geom_tile() +
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_viridis(labels = percent,
-                       guide = gc,
+                       guide = hgc,
                        name = "Median Pop. Effect") +
     labs(x = "Equilibrium Depletion", y = "Range in MPA") +
     scale_y_continuous(labels = percent) +
@@ -2476,15 +2498,16 @@ if (make_figures == TRUE){
     geom_tile() +
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_viridis(labels = percent,
-                       guide = gc,
+                       guide = hgc,
                        name = "Median Effect") +
     labs(x = "Pre-MPA Depletion", y = "Range in MPA") +
     scale_y_continuous(labels = percent) +
-    scale_x_continuous(labels = percent)
+    scale_x_continuous(labels = percent) +
+    theme(legend.position = "top")
 
   pop_combo_plot <-
     (pop_depletion_and_size_plot + labs(title = "A")) + ((pop_size_plot + labs(title = "B")) / pop_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
-      plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+      plot.margin = unit(c(0.2, 0.2, 0.2, 0.2), units = "lines"),
       axis.text.x = element_text(size = 8),
       legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
       axis.text.y = element_text(size = 10)
@@ -2500,7 +2523,7 @@ if (make_figures == TRUE){
                show.legend = FALSE) +
     scale_fill_viridis(
       option = "A",
-      guide = gc,
+      guide = hgc,
       name = "Median Effect"
     ) +
     scale_x_continuous(labels = percent, name = "Pre-MPA Depletion") +
@@ -2528,7 +2551,7 @@ if (make_figures == TRUE){
     geom_bin2d(aes(value, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
     scale_fill_viridis(
       option = "A",
-      guide = gc,
+      guide = hgc,
       name = "# of Sims"
     ) +
     facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") +
@@ -2552,7 +2575,7 @@ if (make_figures == TRUE){
                          high = "steelblue",
                          mid = "white",
                          labels = percent,
-                         guide = gc,
+                         guide = hgc,
                          name = "Median Effect") +
     labs(x = "Pre-MPA Depletion", y = "Range in MPA") +
     scale_y_continuous(labels = percent) +
@@ -2575,7 +2598,7 @@ if (make_figures == TRUE){
                show.legend = FALSE) +
     scale_fill_viridis(
       option = "A",
-      guide = gc,
+      guide = hgc,
       name = "Median Effect"
     ) +
     scale_x_continuous(labels = percent, name = "Pre-MPA Depletion") +
@@ -2588,7 +2611,7 @@ if (make_figures == TRUE){
     geom_bin2d(aes(mpa_size, fishery_effect), binwidth = c(.05, .05), show.legend = TRUE) +
     scale_fill_viridis(
       option = "A",
-      guide = gc,
+      guide = hgc,
       name = "# of Sims"
     ) +
     scale_x_continuous(labels = percent, name = "Range in MPA") +
@@ -2603,7 +2626,7 @@ if (make_figures == TRUE){
     geom_bin2d(aes(value, fishery_effect), binwidth = c(.05, .05), show.legend = TRUE) +
     scale_fill_viridis(
       option = "A",
-      guide = gc,
+      guide = hgc,
       name = "# of Sims"
     ) +
     facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") +
@@ -2620,14 +2643,14 @@ if (make_figures == TRUE){
     group_by(depletion, mpa_size) %>%
     summarise(median_mpa_effect = median(fishery_effect, na.rm = T)) %>%
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) +
-    geom_raster(interpolate = TRUE) +
+    geom_raster(interpolate = FALSE) +
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_gradient2(midpoint = 0,
                          low = "tomato",
                          high = "steelblue",
                          mid = "white",
                          labels = percent,
-                         guide = gc,
+                         guide = hgc,
                          name = "Median Effect") +
     labs(x = "Pre-MPA Depletion", y = "Range in MPA") +
     scale_y_continuous(labels = percent) +
@@ -2713,7 +2736,6 @@ if (make_figures == TRUE){
   ## ------------------------------------------------------------------------
   fish_v_fishing <- processed_grid %>%
     select(-density_ratio) %>%
-    slice(1:samps) %>%
     unnest() %>%
     group_by(experiment) %>%
     mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / `no-mpa`[year == min(year)])) %>%

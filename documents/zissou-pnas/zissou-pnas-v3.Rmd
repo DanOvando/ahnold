@@ -105,6 +105,76 @@ load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
 # load(file = here::here("results",run_name,"about_time.Rdata"))
 
+processed_grid <- processed_grid %>%
+  filter(mpa_habfactor == 1)
+
+outcomes <- processed_grid %>%
+  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
+  select(-fishery_effect, -density_ratio) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  mutate(mpa_effect = pmax(-.5,pmin(mpa_effect,1))) %>%
+  group_by(experiment) %>%
+  mutate(b0 = `no-mpa`[year == min(year)]) %>%
+  mutate(depletion = 1 - `no-mpa`/b0) %>%
+  mutate(final_depletion = depletion[year == max(year)],
+         f = f_v_m * m) %>%
+  mutate(u = 1 - exp(-f)) %>%
+  mutate(final_u = u[year == max(year)]) %>%
+  ungroup() %>%
+  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
+
+collapsed <- outcomes %>%
+  group_by(experiment) %>%
+  summarise(collapsed = any(depletion > 0.9)) %>%
+  filter(collapsed == TRUE)
+
+outcomes <- outcomes %>%
+    filter(!experiment %in% collapsed$experiment)
+
+eqo <- outcomes %>%
+  filter(year == max(year))
+
+fishery_outcomes <- processed_grid %>%
+  filter(!experiment %in% collapsed$experiment) %>%
+  select(-mpa_effect, -density_ratio) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  mutate(fishery_effect = pmin(mpa_effect,1)) %>%
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
+  filter(fleet_model != "constant-catch") %>%
+  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
+
+density_ratios <- processed_grid %>%
+  filter(!experiment %in% collapsed$experiment) %>%
+  select(-fishery_effect) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
+
+
+
+fishery_eqo <- fishery_outcomes %>%
+  filter(year == max(year))
+
+
+facet_labels <- c(
+  mpa_size = "Range in MPA",
+  depletion = "Without-MPA Depletion"
+)
+
 channel_islands <- readRDS(here::here("data","channel_islands_map.RDS"))
 
 ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>%
@@ -129,6 +199,11 @@ panel_height = unit(1,"npc") - sum(ggplotGrob(testplot)[["heights"]][-3]) - unit
 gc <- guide_colorbar(frame.colour = "black",
                      ticks.colour = "white",
                      barheight = panel_height)
+
+
+  hgc <- guide_colorbar(frame.colour = "black",
+                       ticks.colour = "black",
+                       barwidth = 10)
 
 theme_set(zissou_theme)
 
@@ -266,19 +341,37 @@ did_betas <- zissou_fit$zissou_estimates %>%
 
 
 
- did_plot <- did_betas %>%
-   ggplot() +
-   geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
- geom_hline(aes(yintercept = 0)) +
-   geom_pointrange(aes(
-     year,
-     y = estimate,
-     ymin = lower,
-     ymax = upper
-   ),
-   size = 1.5) +
-   labs(x = "Year", y = "Targeted Trend Divergence")
 
+  sim_plot <- outcomes %>%
+    mutate(rsize = plyr::round_any(mpa_size, 0.25),
+           reff = plyr::round_any(mpa_effect,0.1)) %>%
+    filter(rsize == 0.25) %>%
+    mutate(year = years_protected + 2000) %>%
+    filter(year %in% did_betas$year) %>% 
+    group_by(year, reff) %>% 
+    count() %>% 
+    group_by(year) %>% 
+    mutate(sc = n / sum(n))
+
+  did_plot <- did_betas %>%
+    ggplot() +
+    geom_tile(data = sim_plot, aes(year, reff, fill = sc)) +
+    geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
+    geom_hline(aes(yintercept = 0)) +
+    geom_pointrange(aes(
+      year,
+      y = estimate,
+      ymin = lower,
+      ymax = upper
+    ),
+    size = 1.5
+    ) +
+    labs(x = "Year", y = "Targeted Trend Divergence") +
+    scale_fill_viridis(guide = hgc,
+                       name = "% of Annual Sims",
+                       labels = percent) + 
+    theme(legend.position = "top")
+  
 top_species <- base_run$data[[1]]$classcode %>% unique()
 
 cip_data <- pisco_data %>%
@@ -289,75 +382,7 @@ cip_data <- pisco_data %>%
 
 # process outcomes
 
-processed_grid <- processed_grid %>%
-  filter(mpa_habfactor == 1)
 
-outcomes <- processed_grid %>%
-  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
-  select(-fishery_effect, -density_ratio) %>%
-  slice(1:samps) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(mpa_effect = pmin(mpa_effect,1)) %>%
-  group_by(experiment) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = 1 - `no-mpa`/b0) %>%
-  mutate(final_depletion = depletion[year == max(year)],
-         f = f_v_m * m) %>%
-  mutate(u = 1 - exp(-f)) %>%
-  mutate(final_u = u[year == max(year)]) %>%
-  ungroup() %>%
-  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
-
-collapsed <- outcomes %>%
-  group_by(experiment) %>%
-  summarise(collapsed = any(depletion > 0.9)) %>%
-  filter(collapsed == TRUE)
-
-outcomes <- outcomes %>%
-    filter(!experiment %in% collapsed$experiment)
-
-eqo <- outcomes %>%
-  filter(year == max(year))
-
-fishery_outcomes <- processed_grid %>%
-  filter(!experiment %in% collapsed$experiment) %>%
-  select(-mpa_effect, -density_ratio) %>%
-  slice(1:samps) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(fishery_effect = pmin(mpa_effect,1)) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
-  filter(fleet_model != "constant-catch") %>%
-  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
-
-density_ratios <- processed_grid %>%
-  filter(!experiment %in% collapsed$experiment) %>%
-  select(-fishery_effect) %>%
-  slice(1:samps) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
-
-
-
-fishery_eqo <- fishery_outcomes %>%
-  filter(year == max(year))
-
-
-facet_labels <- c(
-  mpa_size = "Range in MPA",
-  depletion = "Without-MPA Depletion"
-)
 
 ```
 
@@ -466,15 +491,13 @@ pop_size_plot <- outcomes %>%
   scale_fill_viridis(
   option = "A",
   # trans = "log10",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,
-  barheight = unit(5,"lines")),
+  guide = hgc,
   name = "% of Sims",
   labels = percent
   ) +
   scale_x_continuous(labels = percent, name = "Range in MPA") +
     scale_y_continuous(labels = percent, name = "Conservation Effect") +
-  theme(legend.position = "right")
+  theme(legend.position = "top")
 
 
  pop_facet_effect_plot <- outcomes %>%
@@ -486,13 +509,13 @@ pop_size_plot <- outcomes %>%
   scale_fill_viridis(
   option = "A",
   # trans = "log10",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,barheight = unique(10, "lines")),
+  guide = hgc,
   name = "# of Sims"
   ) +
    facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") +
    scale_x_percent(name = "") +
-   scale_y_percent(name = "Conservation Effect")
+   scale_y_percent(name = "Conservation Effect") + 
+   theme(legend.position = "top")
 
 
   pop_depletion_and_size_plot <- outcomes %>%
@@ -507,17 +530,16 @@ pop_size_plot <- outcomes %>%
     geom_tile() +
     # geom_contour(aes(z = median_mpa_effect)) +
     scale_fill_viridis(labels = percent,
-                       guide = guide_colorbar(frame.colour = "black",
-                                              frame.linewidth = 1,
-                                              barheight = unit(10,"lines")),
+                       guide = hgc,
                        name = "Median Effect") +
   labs(x = "Without-MPA Depletion", y = "Range in MPA") +
     scale_y_continuous(labels = percent) +
-    scale_x_continuous(labels = percent)
+    scale_x_continuous(labels = percent) + 
+    theme(legend.position = "top")
 
   pop_combo_plot <-
-    (pop_depletion_and_size_plot + labs(title = "A")) + ((pop_size_plot + labs(title = "B")) / pop_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
-    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    (pop_depletion_and_size_plot) + ((pop_size_plot) / pop_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
     axis.text.x = element_text(size = 8),
     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
     axis.text.y = element_text(size = 10)
@@ -566,15 +588,13 @@ msy_size_plot <- fishery_outcomes %>%
   geom_bin2d(aes(mpa_size, msy_effect, fill = ..density..), binwidth = c(.05, .05), show.legend = TRUE) +
   scale_fill_viridis(
   option = "A",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,
-  barheight = unit(5,"lines")),
+  guide = hgc,
   name = "% of Sims",
   labels = percent
   ) +
   scale_x_continuous(labels = percent, name = "Range in MPA") +
     scale_y_continuous(labels = percent, name = "Fishery Effect") +
-  theme(legend.position = "right")
+  theme(legend.position = "top")
 
 msy_facet_effect_plot <- fishery_outcomes %>%
   filter(year == max(year)) %>%
@@ -584,8 +604,7 @@ msy_facet_effect_plot <- fishery_outcomes %>%
    geom_bin2d(aes(value, msy_effect), binwidth = c(.05, .05), show.legend = TRUE) +
   scale_fill_viridis(
   option = "A",
-  guide = guide_colorbar(frame.colour = "black",
-  frame.linewidth = 1,barheight = unique(10, "lines")),
+  guide = hgc,
   name = "# of Sims"
   ) +
    facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") +
@@ -593,33 +612,36 @@ msy_facet_effect_plot <- fishery_outcomes %>%
    scale_y_percent(name = "Fishery Effect")
 
 
-  msy_depletion_and_size_plot <- fishery_outcomes %>%
-    filter(years_protected >= 0,!is.na(msy)) %>%
-    group_by(experiment) %>%
-    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .05),
-           mpa_size = plyr::round_any(mpa_size, .05)) %>%
+msy_depletion_and_size_plot <- fishery_outcomes %>%
+  filter(years_protected >= 0, !is.na(msy)) %>%
+  group_by(experiment) %>%
+  mutate(
+    depletion = plyr::round_any(depletion[years_protected == 0], .05),
+    mpa_size = plyr::round_any(mpa_size, .05)
+  ) %>%
   filter(year == max(year)) %>%
-    group_by(depletion, mpa_size) %>%
-    summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>%
-    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) +
-    geom_raster(interpolate = TRUE) +
-    # geom_contour(aes(z = median_mpa_effect)) +
-    scale_fill_gradient2(midpoint = 0,
-                         low = "tomato",
-                         high = "steelblue",
-                         mid = "white",
-                         labels = percent,
-                       guide = guide_colorbar(frame.colour = "black",
-                                              frame.linewidth = 1,
-                                              barheight = unit(10,"lines")),
-                       name = "Median Effect") +
+  group_by(depletion, mpa_size) %>%
+  summarise(median_mpa_effect = median(msy_effect, na.rm = T)) %>%
+  ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) +
+  geom_tile(interpolate = FALSE) +
+  # geom_contour(aes(z = median_mpa_effect)) +
+  scale_fill_gradient2(
+    midpoint = 0,
+    low = "tomato",
+    high = "steelblue",
+    mid = "white",
+    labels = percent,
+    guide = hgc,
+    name = "Median Effect"
+  ) +
   labs(x = "Without-MPA Depletion", y = "Range in MPA") +
-    scale_y_continuous(labels = percent) +
-    scale_x_continuous(labels = percent, limits = c(0,NA))
+  scale_y_continuous(labels = percent) +
+  scale_x_continuous(labels = percent, limits = c(0, NA)) +
+  theme(legend.position = "top")
 
   msy_fishery_combo_plot <-
-    (msy_depletion_and_size_plot + labs(title = "A")) + ((msy_size_plot + labs(title = "B")) / msy_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
-    plot.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    (msy_depletion_and_size_plot) + ((msy_size_plot) / msy_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
     axis.text.x = element_text(size = 8),
     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
     axis.text.y = element_text(size = 10)
