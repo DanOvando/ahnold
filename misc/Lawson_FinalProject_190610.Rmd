@@ -1,0 +1,795 @@
+---
+title: Does setting a Total Allowable Catch (TAC) cause a reduction in fishing effort and a biomass recovery
+  for managed tuna and billfish stocks?
+author: "Julia Lawson, UCSB"
+date: "6/12/2019"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(ggsci)
+library(here)
+library(knitr)
+library(stargazer)
+library(plm)
+library(gridExtra)
+library(lmtest)
+library(data.table)
+library(Synth)
+library(gsynth)
+```
+
+## Brief Introduction to the Topic
+
+High seas fisheries for tuna and billfish fisheries fall outside of national jurisdictions and are prone to common pool resource problems such as overfishing. Many of these fisheries are managed by Regional Fisheries Management Organizations (RFMOs), multilateral institutions that aim to control access and sustainably manage certain species within their area of compliance. A recent paper looking at the effectiveness of management measures for tunas and billfishes found that Total Allowable Catch (TAC) regulations appear to lead to a recovery of fish biomass because of a reduction in fishing effort (Pons \textit{et al}. 2017). This finding has lead to claims that "the implementation of strong management measures (i.e. catch quotas) by some tRFMOs is promoting the recovery of overfished tuna and billfish stocks" (Pons \textit{et al}. 2018). However, Pons \textit{et al}. (2017) did not test whether there was a causal relationship between TACs and a reduction in fishing effort (and an associated recovery of fish biomass), they simply described a change in fishing effort and biomass over two time periods before and after a TAC.
+
+In order to understand the whether Total Allowable Catch (TAC) regulations truly constrain the behavior of high seas fishers, leading to improved biomass, causal inference is a more appropiate approach. I will use the synthetic control group method to test this hypothesis.
+
+## Brief Introduction to the Dataset
+
+I use the RAM Legacy Stock Assessment database (named for the late fisheries scientist Ransom A. Myers), which contains stock assessment data for commercially exploited marine populations from around the world (http://www.ramlegacy.org). Similar to Pons \textit{et al}. (2017) I will limit my analysis to species of tuna and billfish that are stock assessed by RFMOs. Eleven of these stocks have had Total Allowable Catches (TACs) instituted at various time points, whereas 25 stocks do not have TACs in place, amd have not had TACs in place at any point in time. Once in place, TACs can be re-negogiated at higher or lower levels (set in tonnes available for harvest), but none have been removed. I also use the Upsides database (developed by the Sustainable Fisheries Group at UCSB) to extract ex-vessel equivalent price per tonne of fish ($USD per metric tonne) taken from Melnychuk \textit{et al}. 2017.
+
+A stock is considered ‘overfished’ if the stock biomass is reduced to a level less than that which would provide $MSY$ ($B < B_{MSY}$) and ‘overfishing is occuring’ if the stock is fished at a rate greater than that expected to produce the $MSY$ ($F > F_{MSY}$). Stocks that have $B > B_{MSY}$ and $F < F_{MSY}$ are considered ‘healthy’.
+
+\textbf{Time-varying database components}\par
+• $BdivBmsypref$: Current biomass, $B$, in relation to the $B$ that produces $MSY$ \par
+• $UdivUmsypref$: Current fishing mortality, $F$, in relation to the $F$ that produces $MSY$ \par
+• $TAC$: The presence or absence of a Total Allowable Catch in a given year \par
+• $price$: Ex-vessel equivalent price per tonne ($USD/mt) \par
+
+\textbf{Time-invariant database components}\par
+• $year$: Increases constantly for all stocks (therefore effectively time-invariant) \par
+• $stockid$: The management unit of the stock \par
+• $scientificname$: The species for which the stock belongs to \par
+• $areatype$: RFMO responsible for management (i.e. IATTC, IOTC, ICCAT) \par
+• $region$: Area of the ocean where the stock resides (i.e. Eastern Pacific, Eastern Atlantic, Indian Ocean) \par
+
+## Setting up the Analysis [Hidden Code]
+
+```{r data set up, include=FALSE}
+## ----load RAM------------------------------------------------------------
+# load RData object
+load("DBdata.RData")
+
+# RAM datasets to use
+ram_datasets <- c('timeseries_values_views', 'stock', 'area', 'bioparams', 'timeseries_assessments_views',
+                  'bioparams_values_views', 'assessor', 'management', 'assessment')
+# Remove all unneccessary RAM data
+rm(list = c(ls()[!(ls() %in% ram_datasets)]))
+
+# Extract main RAM timeseries
+ram <- timeseries_values_views %>%
+  tbl_df() %>%
+  select(stockid, stocklong, year, TBbest, TCbest, BdivBmsypref, UdivUmsypref)
+
+# Join with stock data and area data
+ram <- ram %>%
+  left_join(tbl_df(stock),by = c("stockid", "stocklong")) %>%
+  left_join(tbl_df(area), by = "areaid") %>%
+  select(-inmyersdb, -myersstockid, -alternateareaname) # remove unneeded variables
+
+## ----Isolate RAM TAC and Non-TAC species---------------------------------------------------------
+ram.species <- filter(ram, scientificname == "Katsuwonus pelamis"| scientificname == "Thunnus alalunga"| scientificname == "Thunnus albacares"| scientificname == "Thunnus maccoyii" | scientificname == "Thunnus obesus" | scientificname == "Thunnus orientalis" | scientificname == "Thunnus thynnus" | scientificname == "Xiphias gladius"| scientificname == "Istiophorus albicans" | scientificname == "Istiophorus platypterus" | scientificname == "Istiompax indica" | scientificname == "Makaira nigricans" | scientificname == "Kajikia albidus" | scientificname == "Kajikia audax" | scientificname == "Tetrapturus angustirostris" | scientificname == "Tetrapturus belone" | scientificname == "Tetrapturus georgii"| scientificname == "Tetrapturus pfluegeri")
+
+## ----Setup for Panel Analysis-----------------------------------------------------
+
+#Selecting just the columns of interest
+ram.panel <- select(ram.species, stockid, year, BdivBmsypref, UdivUmsypref, scientificname, areatype, region, areaname) 
+
+#Creating a dataset of non-TAC species with a dummy TAC variable of 0
+nontac.species <- select(ram.species, stockid, year, BdivBmsypref, UdivUmsypref, scientificname, areatype, region, areaname) %>%  
+  filter(stockid != "SBT" & stockid != "ALBANATL" & stockid != "ALBASATL" & stockid != "BIGEYEATL"&stockid != "BMARLINATL"&stockid != "ATBTUNAEATL"&stockid != "ATBTUNAWATL"&stockid != "SWORDNATL"&stockid != "SWORDSATL"&stockid != "YFINATL"&stockid != "PACBTUNA")
+nontac.species$tac <- nontac.species$year 
+nontac.species <- replace(nontac.species, "tac", 0)
+
+#Creating dataasets for TAC species with a dummy TAC variable set to either 0 or 1
+sbt.tac <- filter(ram.panel, stockid == "SBT") %>% 
+  mutate(tac = ifelse(year >= 2006, 1, 0))
+albanatl.tac <- filter(ram.panel, stockid == "ALBANATL") %>% 
+  mutate(tac = ifelse(year >= 2001, 1, 0))
+albasatl.tac <- filter(ram.panel,stockid == "ALBASATL") %>% 
+  mutate(tac = ifelse(year >= 1998, 1, 0)) 
+bigeyeatl.tac <- filter(ram.panel,stockid == "BIGEYEATL") %>% 
+  mutate(tac = ifelse(year >= 2005, 1, 0))
+bmarlinatl.tac <- filter (ram.panel, stockid == "BMARLINATL") %>% 
+  mutate(tac = ifelse(year >= 2013, 1, 0)) 
+atbtunaeatl.tac <- filter (ram.panel, stockid=="ATBTUNAEATL") %>% 
+  mutate(tac = ifelse(year >= 1999, 1, 0))
+atbtunawatl.tac <- filter (ram.panel,stockid=="ATBTUNAWATL") %>% 
+  mutate(tac = ifelse(year >= 1982, 1, 0))
+swordnatl.tac <- filter(ram.panel, stockid=="SWORDNATL") %>% 
+  mutate(tac = ifelse(year >= 1997, 1, 0))
+swordsatl.tac <- filter(ram.panel, stockid=="SWORDSATL") %>% 
+  mutate(tac = ifelse(year >= 1998, 1, 0))
+yfinatl.tac <- filter (ram.panel, stockid == "YFINATL") %>% 
+  mutate(tac = ifelse(year >= 2013, 1, 0))
+pacbtuna.tac <- filter (ram.panel,stockid == "PACBTUNA") %>% 
+  mutate(tac = ifelse(year >= 2014, 1, 0))
+
+#Creating a final merged dataset with the new row of dummy variables.
+tac.final <- bind_rows(list(nontac.species, sbt.tac, albanatl.tac, albasatl.tac, bigeyeatl.tac, bmarlinatl.tac, atbtunaeatl.tac, atbtunawatl.tac, swordnatl.tac, swordsatl.tac, yfinatl.tac, pacbtuna.tac)) %>% 
+  drop_na()
+
+#Creating a dataset with a new variable of cumulative number of TACs in place over time.
+tac.final$year<-as.numeric(tac.final$year) 
+tac.grouped <- tac.final %>%
+  group_by(year) %>% 
+  summarize(tac_cuml = sum(tac))
+
+#Now incorportating dataset with price information
+ProjData <- read.csv("ProjectionData.csv", header = T, stringsAsFactors = F) %>% 
+  rename(year = Year) %>% 
+  rename(price = Price) %>% 
+  filter(Policy == "BAU" | Policy == "Historic") %>% 
+  filter(Scenario == "All Stocks" | Scenario == "Historic") %>% 
+  select(IdOrig, year, price, SciName)
+
+#Albacore Values
+alba.value.albaio <- filter(ProjData, IdOrig == "IOTC-ALBAIO-1950-2010-CHING") %>%
+  add_column(stockid = "ALBAIO")
+alba.value.med <- filter(ProjData, IdOrig == "ICCAT-ALBAMED-1956-2011-CHING") %>% 
+  add_column(stockid = "ALBAMED")
+alba.value.npac <- filter(ProjData, IdOrig == "ISC-ALBANPAC-1952-2010-CHING") %>% 
+  add_column(stockid = "ALBANPAC")
+alba.value.spac <- filter(ProjData, IdOrig == "SPC-ALBASPAC-1965-2007-BRANCH") %>% 
+  add_column(stockid = "ALBASPAC")
+alba.value.satl <- filter(ProjData, IdOrig == "ICCAT-ALBASATL-1956-2010-CHING") %>% 
+  add_column(stockid = "ALBASATL")
+alba.value.natl <- filter(ProjData, IdOrig == "ICCAT-ALBANATL-1950-2010-CHING") %>% 
+  add_column(stockid = "ALBANATL")
+
+#Bigeye Values
+big.value.epac <- filter(ProjData, IdOrig == "IATTC-BIGEYEEPAC-1975-2011-BRANCH") %>% 
+  add_column(stockid = "BIGEYEEPAC")
+big.value.cwpac <- filter(ProjData, IdOrig == "SPC-BIGEYECWPAC-1952-2010-CHING") %>% 
+  add_column(stockid = "BIGEYECWPAC")
+big.value.io <- filter(ProjData, IdOrig == "IOTC-BIGEYEIO-1950-2010-CHING") %>% 
+  add_column(stockid = "BIGEYEIO")
+big.value.eatl <- filter(ProjData, IdOrig == "ICCAT-BIGEYEATL-1950-2010-CHING") %>% 
+  add_column(stockid = "BIGEYEATL")
+
+#Swordfish Values
+#TAC species include SWORDNATL, SWORDSATL
+swo.value.med <- filter(ProjData, IdOrig == "ICCAT-SWORDMED-1950-2009-CHING") %>% 
+  add_column(stockid = "SWORDMED")
+swo.value.epac <- filter(ProjData, IdOrig == "IATTC-SWORDEPAC-1950-2010-CHING") %>% 
+  add_column(stockid = "SWORDEPAC")
+swo.value.io <- filter(ProjData, IdOrig == "IOTC-SWORDIO-1950-2010-CHING") %>% 
+  add_column(stockid = "SWORDIO")
+swo.value.npac <- filter(ProjData, IdOrig == "ISC-SWORDNPAC-1952-2010-CHING") %>% 
+  add_column(stockid = "SWORDNPAC")
+swo.value.natl <- filter(ProjData, IdOrig == "ICCAT-SWORDNATL-1950-2010-CHING") %>% 
+  add_column(stockid = "SWORDNATL")
+swo.value.satl <- filter(ProjData, IdOrig == "ICCAT-SWORDSATL-1950-2010-CHING") %>% 
+  add_column(stockid = "SWORDSATL")
+
+tac.valuessp <- bind_rows(list(alba.value.albaio,alba.value.med,alba.value.npac,alba.value.spac,alba.value.satl,alba.value.natl,big.value.epac,big.value.cwpac,big.value.io,big.value.eatl,swo.value.med,swo.value.epac,swo.value.io,swo.value.npac,swo.value.natl,swo.value.satl)) %>% 
+  drop_na()
+tac.value <- inner_join(tac.final, tac.valuessp, by = c("stockid","year")) %>% 
+  select(stockid, year, BdivBmsypref, UdivUmsypref, scientificname, areatype, region, areaname, price,tac) %>% 
+  left_join(tac.grouped, by = "year") %>% 
+  filter(year <=2012)
+
+#Calculating the individual sums for each stockid
+#setDT (tac.value) 
+#setkey(tac.value,tac,stockid,year)
+#tac.value[,csum := cumsum(tac),by=c('stockid')]
+
+tac.value2 <- ProjData %>% 
+  filter(SciName == "Katsuwonus pelamis"| SciName == "Thunnus alalunga"| SciName == "Thunnus albacares"| SciName == "Thunnus maccoyii" | SciName == "Thunnus obesus" | SciName == "Thunnus orientalis" | SciName == "Thunnus thynnus" | SciName == "Xiphias gladius"| SciName == "Istiophorus albicans" | SciName == "Istiophorus platypterus" | SciName == "Istiompax indica" | SciName == "Makaira nigricans" | SciName == "Kajikia albidus" | SciName == "Kajikia audax" | SciName == "Tetrapturus angustirostris" | SciName == "Tetrapturus belone" | SciName == "Tetrapturus georgii"| SciName == "Tetrapturus pfluegeri") %>% 
+  group_by(IdOrig) %>% 
+  summarize(
+    avg_price = mean(price))
+
+
+View(tac.value2)
+```
+
+## Checking for Parallel Trends
+
+Figure 1 checks the parallel trends assumption for TAC (red) and non-TAC (black) stocks ($stockid$) within each species ($scientificname$) using current fishing mortality, $F$, in relation to the $F$ that produces $MSY$ ($F/F_{msy}$) as the dependent variable. Note that Bluefin Tuna stocks could not be included here because all stocks are under TAC measures (no counterfactual exists).
+
+```{r parallel trends, include = FALSE}
+#Albacore tuna stocks
+alba <- filter(ram, scientificname == "Thunnus alalunga")
+#Non-TAC albacore species include ALBAIO, ALBAMED, ALBANPAC, ALBASPAC 
+alba.nontac <- filter (ram, stockid == "ALBAIO" | stockid=="ALBAMED" | stockid=="ALBANPAC" | stockid == "ALBASPAC")
+alba.tac1 <- filter(ram, stockid == "ALBASATL")
+alba.tac2 <- filter(ram, stockid == "ALBANATL")
+#TAC Albacore for South Atlantic, ALBASATL in 1998
+alba.group1 <- bind_rows(list(alba.nontac,alba.tac1))
+alba.group1$tacyear <- (alba.group1$year-1998)
+albaplot1 <- ggplot(data = alba.group1, aes(x=tacyear, y=UdivUmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("South Atlantic Albacore") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","black","red","black"))+
+  geom_vline(xintercept=0,linetype="dotted")
+#TAC Albacore for North Atlantic, ALBANATL in 2001
+alba.group2 <- bind_rows(list(alba.nontac,alba.tac2))
+alba.group2$tacyear <- (alba.group2$year-2001)
+albaplot2 <- ggplot(data = alba.group2, aes(x=tacyear, y=UdivUmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("North Atlantic Albacore") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","red","black","black")) +
+  geom_vline(xintercept=0,linetype="dotted")
+
+#Bluefin tuna stocks, all species under TAC managment
+bluefin <- filter(ram, scientificname == "Thunnus thynnus" | scientificname == "Thunnus orientalis" | scientificname == "Thunnus maccoyii")
+#SBT TAC in 2006; ATBTUNAEATL in 1950; ATBTUNAWATL in 1962; PACBTUNA 2014
+
+#Bigeye tuna stocks
+bigeye <- filter (ram, scientificname == "Thunnus obesus")
+#Non-TAC stocks include BIGEYEEPAC, BIGEYECWPAC, BIGEYEIO
+#TAC stocks include BIGEYEATL
+#TAC Bigeye for Eastern Atlantic, BIGEYEATL in 2005
+bigeye$tacyear <- (bigeye$year-2005)
+bigeyeplot <- ggplot(data = bigeye, aes(x=tacyear, y=UdivUmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("Eastern Atlantic Bigeye") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("red","black","black","black")) +
+  geom_vline(xintercept=0,linetype="dotted")
+
+#Swordfish stocks
+sword <- filter (ram, scientificname =="Xiphias gladius")
+#Non-TAC stocks include SWORDMED, SWORDEPAC, SWORDIO, SWORDNPAC
+#TAC species include SWORDNATL, SWORDSATL
+sword.nontac <- filter (ram, stockid == "SWORDMED" | stockid=="SWORDEPAC" | stockid=="SWORDIO" | stockid == "SWORDNPAC")
+sword.tac1 <- filter(ram, stockid == "SWORDSATL")
+sword.tac2 <- filter(ram, stockid == "SWORDNATL")
+#TAC Swordfish for South Atlantic, SWORDSATL in 1998
+sword.group1 <- bind_rows(list(sword.nontac,sword.tac1))
+sword.group1$tacyear <- (sword.group1$year-1998)
+swordplot1 <- ggplot(data = sword.group1, aes(x=tacyear, y=UdivUmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("South Atlantic Swordfish") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","black","black","red"))+
+  geom_vline(xintercept=0,linetype="dotted")
+#TAC Swordfish for North Atlantic, SWORDNATL in 1997
+sword.group2 <- bind_rows(list(sword.nontac,sword.tac2))
+sword.group2$tacyear <- (sword.group2$year-1997)
+swordplot2 <- ggplot(data = sword.group2, aes(x=tacyear, y=UdivUmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("North Atlantic Swordfish") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","black","red","black")) +
+  geom_vline(xintercept=0,linetype="dotted")
+```
+
+```{r parallel trends plot, warning=FALSE, echo=FALSE}
+grid.arrange(albaplot1, albaplot2, bigeyeplot, swordplot1, swordplot2, ncol=2, bottom="Years Relative to TAC Implementation Year", left="F/Fmsy")
+```
+
+Figure 2 checks the parallel trends assumption for TAC (red) and non-TAC (black) stocks ($stockid$) within each species ($scientificname$) using current biomass, $B$, in relation to the $B$ that produces $MSY$ ($B/B_{msy}$) as the dependent variable. All TAC stocks in this analysis are within ICCAT's area of competence ($areatype$). Again, no Bluefin tuna could be included in this analysis as all stocks have TACs in place.
+
+```{r parallel trends biomass, include = FALSE}
+#Albacore tuna stocks
+#TAC Albacore for South Atlantic, ALBASATL in 1998
+alba.group1b <- bind_rows(list(alba.nontac,alba.tac1))
+alba.group1b$tacyear <- (alba.group1b$year-1998)
+albaplot1b <- ggplot(data = alba.group1b, aes(x=tacyear, y=BdivBmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("South Atlantic Albacore") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","black","red","black"))+
+  geom_vline(xintercept=0,linetype="dotted")
+#TAC Albacore for North Atlantic, ALBANATL in 2001
+albaplot2b <- ggplot(data = alba.group2, aes(x=tacyear, y=BdivBmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("North Atlantic Albacore") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","red","black","black")) +
+  geom_vline(xintercept=0,linetype="dotted")
+
+#Bigeye tuna stocks
+bigeyeplotb <- ggplot(data = bigeye, aes(x=tacyear, y=BdivBmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("Eastern Atlantic Bigeye") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("red","black","black","black")) +
+  geom_vline(xintercept=0,linetype="dotted")
+
+#TAC Swordfish for South Atlantic, SWORDSATL in 1998
+swordplot1b <- ggplot(data = sword.group1, aes(x=tacyear, y=BdivBmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("South Atlantic Swordfish") +
+  labs(x = "", y = "") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","black","black","red"))+
+  geom_vline(xintercept=0,linetype="dotted")
+#TAC Swordfish for North Atlantic, SWORDNATL in 1997
+swordplot2b <- ggplot(data = sword.group2, aes(x=tacyear, y=BdivBmsypref)) + 
+  geom_line(aes(color=stockid)) +
+  ggtitle("North Atlantic Swordfish") +
+  theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.title.y = element_blank(), plot.title = element_text(size = 10)) +
+  scale_color_manual(values=c("black","black","black","red","black")) +
+  geom_vline(xintercept=0,linetype="dotted")
+```
+
+```{r parallel trends plot biomass, warning=FALSE, echo=FALSE}
+grid.arrange(albaplot1b, albaplot2b, bigeyeplotb, swordplot1b, swordplot2b, ncol=2, bottom="Years Relative to TAC Implementation Year", left="B/Bmsy")
+```
+
+## Conclusions from Checking for Parallel Trends
+
+Based on a combined visual examination of parallel trends in Figures 1 and 2, I believe that Eastern Atlantic Bigeye, North Atlantic Swordfish, and South Atlantic Swordfish meet the parallel trends assumption. I hypothesize that comparing stocks within species is the most appropiate way to check for parallel trends because biological charactaristics will be approximately the same within species. Certain species are able to sustain higher rates of fishing due to certain biological features (i.e. faster growth rates, earlier age, and smaller size at maturity).
+
+In Figure 1, South Atlantic Albacore, Eastern Atlantic Bigeye, South Atlantic Swordfish, and North Atlantic Swordfish all appear to have met the assumption of parallel trends when compared to other stocks within the same species. My inspection of parallel trends in Figure 1 suggests that North Atlantic Albacore does not meet the parallel trends assumption. In Figure 2, only Eastern Atlantic Bigeye, South Atlantic Swordfish, and North Atlantic Swordfish appear to have met the assumption of parallel trends when compared to stocks within the same species. As such, I will create a synthetic control for each of Eastern Atlantic Bigeye, South Atlantic Swordfish, and North Atlantic Swordfish to see if a causal claim can be made. 
+
+## Setting up dataset to isolate the Eastern Atlantic Bigeye stock
+
+Using the synthetic control group method for comparative case studies I will begin by looking at the effect of the TAC on the biomass and fishing effort for the Eastern Atlantic Bigeye. This stock had what appeared to be the strongest evidence of parallel trends (see Figures 1 and 2), although the TAC was implemented in 2005 (relatively recently) which leaves a small window for post-treatment analysis. I will begin by removing the other TAC species from the dataset, so that we are only left with the Eastern Atlantic Bigeye stock and all non-TAC stocks (totalling 10 stocks). I will also add in other RFMO-managed stocks of tuna and billfish for which no stocks are managed under TACs (Skipjack tuna, Yellowfin tuna, Atlantic sailfish, Blue marlin, and Striped marlin, totalling 15 stocks) that are assessed annually but are not managed under TACs. This brings the number of non-TAC donor pool stocks to 25. 
+
+```{r synth bigeye setup, include = FALSE}
+#Bring in all RAM species
+ram.species.rev <- filter(ram, scientificname == "Xiphias gladius" | scientificname == "Katsuwonus pelamis"| scientificname == "Thunnus albacares"| scientificname == "Istiophorus albicans" | scientificname == "Makaira nigricans" | scientificname == "Kajikia audax" | stockid == "BIGEYEEPAC" | stockid == "BIGEYECWPAC" | stockid == "BIGEYEIO" | stockid == "ALBAIO" | stockid=="ALBAMED" | stockid=="ALBANPAC" | stockid == "ALBASPAC" | stockid == "SWORDMED" | stockid=="SWORDEPAC" | stockid=="SWORDIO" | stockid == "SWORDNPAC")
+ram.species.rev$tac <- ram.species.rev$year 
+ram.species.rev <- replace(ram.species.rev, "tac", 0)
+
+bigeyeatl.tac <- filter(ram,stockid == "BIGEYEATL") %>% 
+  mutate(tac = ifelse(year >= 2005, 1, 0))
+
+ram.species.rev.final <- bind_rows(list(ram.species.rev, bigeyeatl.tac))
+
+#Add in value data for non-TAC RAM species
+#Skipjack Tuna
+#"SKJCIO","SKJCWPAC","SKJEATL","SKJWATL"
+skjcio.value <- filter(ProjData, IdOrig == "IOTC-SKJCIO-1950-2010-CHING") %>%
+  add_column(stockid = "SKJCIO")
+skjcwpac.value <- filter(ProjData, IdOrig == "SPC-SKJCWPAC-1950-2011-CHING") %>%
+  add_column(stockid = "SKJCWPAC")
+skjeatl.value <- filter(ProjData, IdOrig == "ICCAT-SKJEATL-1950-2010-CHING") %>%
+  add_column(stockid = "SKJEATL")
+skjwatl.value <- filter(ProjData, IdOrig == "ICCAT-SKJWATL-1952-2010-CHING") %>%
+  add_column(stockid = "SKJWATL")
+
+#Yellowfin Tuna
+#"YFINATL","YFINCWPAC","YFINEIO","YFINEPAC"
+yfinatl.value <- filter(ProjData, IdOrig == "ICCAT-YFINATL-1950-2011-CHING") %>%
+  add_column(stockid = "YFINATL")
+yfincwpac.value <- filter(ProjData, IdOrig == "SPC-YFINCWPAC-1952-2010-CHING") %>%
+  add_column(stockid = "YFINCWPAC")
+yfineio.value <- filter(ProjData, IdOrig == "IOTC-YFINEIO-1972-2009-BRANCH") %>%
+  add_column(stockid = "YFINEIO")
+yfinepac.value <- filter(ProjData, IdOrig == "IATTC-YFINEPAC-1975-2011-BRANCH") %>%
+  add_column(stockid = "YFINEPAC")
+
+#Sailfish
+#"SAILEATL","SAILWATL"
+saileatl.value <- filter(ProjData, IdOrig == "ICCAT-SAILEATL-1956-2010-CHING") %>%
+  add_column(stockid = "SAILEATL")
+sailwatl.value <- filter(ProjData, IdOrig == "ICCAT-SAILWATL-1956-2010-CHING") %>%
+  add_column(stockid = "SAILWATL")
+
+#Blue marlin
+#"BMARLINATL","BMARLINPAC"
+bmarlinatl.value <- filter(ProjData, IdOrig == "ICCAT-BMARLINATL-1956-2010-CHING") %>%
+  add_column(stockid = "BMARLINATL")
+bmarlinpac.value <- filter(ProjData, IdOrig == "ISC-BMARLINPAC-1952-2010-CHING") %>%
+  add_column(stockid = "BMARLINPAC")
+
+#Striped marlin
+#STMARLINNEPAC","STMARLINSWPO","STMARLINWCNPAC"
+stmarlinnepac.value <- filter(ProjData, IdOrig == "IATTC-STMARLINNEPAC-1954-2009-BRANCH") %>%
+  add_column(stockid = "STMARLINNEPAC")
+stmarlinswpo.value <- filter(ProjData, IdOrig == "SPC-STMARLINSWPO-1952-2011-CHING") %>%
+  add_column(stockid = "STMARLINSWPO")
+stmarlinwcnpac.value <- filter(ProjData, IdOrig == "ISC-STMARLINWCNPAC-1951-2010-CHING") %>%
+  add_column(stockid = "STMARLINWCNPAC")
+
+#Combine all relevant rows needed for analysis
+all.valuessp.rev <- bind_rows(list(alba.value.albaio,alba.value.med,alba.value.npac,alba.value.spac,big.value.epac,big.value.cwpac,big.value.io,big.value.eatl,skjcio.value,skjcwpac.value,skjeatl.value,skjwatl.value,yfinatl.value,yfincwpac.value,yfineio.value,yfinepac.value,saileatl.value,sailwatl.value,bmarlinatl.value,bmarlinpac.value,stmarlinnepac.value,stmarlinswpo.value,stmarlinwcnpac.value,swo.value.med,swo.value.epac,swo.value.io,swo.value.npac))
+unique(all.valuessp.rev$stockid)
+unique(ram.species.rev.final$stockid)
+
+#Create a numeric stock identifier ("stocknum")
+test1 <- matrix(c(1:26))
+testtable <- c("ALBAIO","ALBAMED","ALBASPAC","BIGEYEEPAC","BIGEYECWPAC","BIGEYEIO","BIGEYEATL","SKJCIO","SKJCWPAC","SKJEATL","SKJWATL","YFINATL","YFINCWPAC","YFINEIO","YFINEPAC","SAILEATL","SAILWATL","BMARLINATL","BMARLINPAC","STMARLINNEPAC","STMARLINSWPO",   "STMARLINWCNPAC","SWORDMED","SWORDEPAC","SWORDIO","SWORDNPAC")
+ident <- data.frame(test1,testtable,stringsAsFactors=TRUE) 
+colnames(ident) <- c("stocknum","stockid")
+
+#Final combined dataset with single TAC species (Bigeye Atlantic) and all non-TAC species
+allspecies.value <- inner_join(ram.species.rev.final, all.valuessp.rev, by = c("stockid","year")) %>% 
+  select(stockid, year, BdivBmsypref, UdivUmsypref, scientificname, areatype, region, areaname, price,tac) %>% 
+  filter(year >=1987) %>%
+  filter(year <=2006) %>% 
+  inner_join(ident, by = "stockid") %>% 
+  drop_na()
+unique(allspecies.value$stockid)
+#Checking balance
+testspe <- allspecies.value %>% 
+  group_by(stockid) %>%
+  tally()
+```
+
+## Synthetic control group method for Eastern Atlantic Bigeye stock, using `Synth`
+
+It was difficult to look at the effect of the TAC of Eastern Atlantic Bigeye because the TAC was set in 2005, and the `Synth` package required a balanced panel. This meant that the years of analysis had to be restricted to 1987 to 2006 (only one year post-treatment). However, this approach still allowed a thorough analysis of pre-treatment parallel trends by constructing a synthetic control. 
+
+The construction of the synthetic control could have benefitted from a greater number of predictor variables (in addition to $price$). Because only one predictor variable was used, the resulting tables comparing pre-treatment predictor values for treated, synthetic control unit, and all units in the sample did not provide much insight. The table showing W*-weight for each potential control unit was interesting (see Table 1). It showed that non-TAC swordfish stocks actually contributed the greatest weight (0.162 each) to the synthetic control, more than the non-TAC bigeye stocks (each of which contributed 0.026). 
+
+The figures comparing the treated unit (the Eastern Atlantic Bigeye stock) to the control units (see Table 1) for $F/Fmsy$ showed that the pre-treatment synthetic control could not be constructed from the donor units. Fishing effort was much greater for the pre-treatment treated unit, and the control units could not be weighed to create a synthetic control. The figures comparing the treated unit to the control units for $B/Bmsy$ showed that the pre-treatment synthetic control could not be constructed from the donor units. Biomass was much lower for the pre-treatment treated unit than for the control units. 
+
+
+```{r synth bigeye fishing,include = FALSE}
+allspecies.value <- as.data.frame(allspecies.value)
+
+dataprep.out<-
+  dataprep(
+    foo = allspecies.value,
+    predictors = c("price"),
+    dependent = c("UdivUmsypref"),
+    unit.variable = c("stocknum"),
+    time.variable = c("year"),
+    #special.predictors = list(
+    #  list("Y", 1991, "mean"),
+    #  list("Y", 1985, "mean"),
+    #  list("Y", 1980, "mean")
+    #),
+    treatment.identifier = 7,
+    controls.identifier = c(1:6,8:26),
+    time.predictors.prior = c(1987:2004),
+    time.optimize.ssr = c(1987:2006),
+    unit.names.variable = "stockid",
+    time.plot = 1987:2006
+  )
+
+synth.out <- synth(dataprep.out)
+round(synth.out$solution.w,4)
+
+synth.tables <- synth.tab(
+  dataprep.res = dataprep.out,
+  synth.res = synth.out)
+```
+
+```{r synth bigeye fishing table, results='asis', echo=FALSE}
+stargazer(synth.tables$tab.w, summary=FALSE, rownames=FALSE, type="latex",covariate.labels=c("Weights","Stock ID", "Stock ID Number"), title = "W-weight for each potential control unit for Eastern Atlantic Bigeye stock as the treated unit", font.size = "small")
+```
+
+\par
+
+```{r synth bigeye fishingfigs,echo=FALSE}
+path.plot(dataprep.res = dataprep.out,synth.res = synth.out, Ylab = "F/Fmsy", Main = "Trajectories of the treated unit (E Atl Bigeye) and synthetic control", Legend.position=c("topleft"),abline(h = 0, v = 2005, col = "black", lty=3))
+
+gaps.plot(dataprep.res = dataprep.out,synth.res = synth.out, Ylab = "Gap in F/Fmsy", Xlab="Time", Main = "Difference between treated (E Atl Bigeye) and synthetic control",abline(h = 0, v = 2005, col = "black", lty=3))
+```
+
+```{r synth bigeye biomass,include = FALSE}
+allspecies.value <- as.data.frame(allspecies.value)
+
+dataprep.out1b <-
+  dataprep(
+    foo = allspecies.value,
+    predictors = c("price"),
+    dependent = c("BdivBmsypref"),
+    unit.variable = c("stocknum"),
+    time.variable = c("year"),
+    #special.predictors = list(
+    #  list("Y", 1991, "mean"),
+    #  list("Y", 1985, "mean"),
+    #  list("Y", 1980, "mean")
+    #),
+    treatment.identifier = 7,
+    controls.identifier = c(1:6,8:26),
+    time.predictors.prior = c(1987:2004),
+    time.optimize.ssr = c(1987:2006),
+    unit.names.variable = "stockid",
+    time.plot = 1987:2006
+  )
+
+synth.out1b <- synth(dataprep.out1b)
+round(synth.out1b$solution.w,4)
+
+synth.tables1b <- synth.tab(
+  dataprep.res = dataprep.out1b,
+  synth.res = synth.out1b)
+print(synth.tables1b)
+```
+
+```{r synth bigeye figs biomass,echo=FALSE}
+path.plot(dataprep.res = dataprep.out1b,synth.res = synth.out1b, Ylab = "B/Bmsy", Main = "Trajectories of the treated unit (E Atl Bigeye) and synthetic control", Legend.position=c("topleft"))
+abline(h = 0, v = 2005, col = "black", lty=3)
+
+gaps.plot(dataprep.res = dataprep.out1b,synth.res = synth.out1b, Ylab = "Gap in B/Bmsy", Main = "Difference between treated (E Atl Bigeye) and synthetic control")
+abline(h = 0, v = 2005, col = "black", lty=3)
+```
+
+```{r gsynth bigeye,include = FALSE}
+#bigeye.gsynth <- gsynth(formula = UdivUmsypref ~ tac + price, data = allspecies.value, na.rm = FALSE, index, weight = NULL, force = "unit", r = 0, lambda = NULL, nlambda = 10, CV = TRUE, k = 5, EM = FALSE, estimator = "ife", se = FALSE, nboots = 200, inference = "nonparametric", cov.ar = 1, parallel = TRUE, cores = NULL, tol = 0.001, seed = NULL, min.T0 = 5, conf.lvl = 0.95, normalize = FALSE)
+```
+
+## Setting up dataset to isolate the South Atlantic Swordfish stock
+
+The South Atlantic Swordfish stock provided a better opportunity to look at pre- and post-treatment trends, as the TAC for this stock was put in place in 1998. The table showing W*-weight for each potential control unit (see Table 2) showed that non-TAC swordfish stocks actually contributed the greatest weight (0.25 each) to the synthetic control, while all other stocks contributed weights of 0.0001 each. This aheres to the initial hypothesis (in this case) that examining parallel trends within a species group is the best way to look at the effect of a TAC.
+
+The figures comparing the treated unit (the South Atlantic Swordfish stock) to the control units (see Table 2) for $F/Fmsy$ showed that the pre-treatment synthetic control could not be constructed from the donor units. Fishing effort was slightly greater for the pre-treatment treated unit, and the control units could not be weighed to create a synthetic control. Additionally, the figures comparing the treated unit (the South Atlantic Swordfish stock) to the control units for $B/Bmsy$ showed that the pre-treatment synthetic control could not be constructed from the donor units. Biomass was dramatically lower for the pre-treatment treated unit than for the control units. 
+
+
+```{r synth satl swo setup, include = FALSE}
+#Bring in all RAM species
+ram.species.rev2 <- filter(ram, scientificname == "Katsuwonus pelamis"| scientificname == "Thunnus albacares"| scientificname == "Istiophorus albicans" | scientificname == "Makaira nigricans" | scientificname == "Kajikia audax" | stockid == "BIGEYEEPAC" | stockid == "BIGEYECWPAC" | stockid == "BIGEYEIO" | stockid == "ALBAIO" | stockid=="ALBAMED" | stockid=="ALBANPAC" | stockid == "ALBASPAC" | stockid == "SWORDMED" | stockid=="SWORDEPAC" | stockid=="SWORDIO" | stockid == "SWORDNPAC")
+ram.species.rev2$tac <- ram.species.rev2$year 
+ram.species.rev2 <- replace(ram.species.rev2, "tac", 0)
+
+swordsatl.tac <- filter(ram.panel, stockid=="SWORDSATL") %>% 
+  mutate(tac = ifelse(year >= 1998, 1, 0))
+
+ram.species.rev.final2 <- bind_rows(list(ram.species.rev2, swordsatl.tac))
+
+#Combine all relevant rows needed for analysis
+all.valuessp.rev2 <- bind_rows(list(alba.value.albaio,alba.value.med,alba.value.npac,alba.value.spac,big.value.epac,big.value.cwpac,big.value.io,skjcio.value,skjcwpac.value,skjeatl.value,skjwatl.value,yfinatl.value,yfincwpac.value,yfineio.value,yfinepac.value,saileatl.value,sailwatl.value,bmarlinatl.value,bmarlinpac.value,stmarlinnepac.value,stmarlinswpo.value,stmarlinwcnpac.value,swo.value.med,swo.value.epac,swo.value.io,swo.value.npac,swo.value.satl))
+
+#Create a numeric stock identifier ("stocknum")
+test1b <- matrix(c(1:26))
+testtable2 <- c("ALBAIO","ALBAMED","ALBASPAC","BIGEYECWPAC","BIGEYEEPAC","BIGEYEIO","BMARLINATL","BMARLINPAC","SAILEATL","SAILWATL", "SKJCIO","SKJCWPAC","SKJEATL","SKJWATL","STMARLINNEPAC","STMARLINSWPO","STMARLINWCNPAC","SWORDEPAC","SWORDIO","SWORDMED","SWORDNPAC","YFINATL","YFINCWPAC","YFINEIO","YFINEPAC","SWORDSATL")
+ident2 <- data.frame(test1b,testtable2,stringsAsFactors=TRUE) 
+colnames(ident2) <- c("stocknum","stockid")
+
+#Final combined dataset with single TAC species (Bigeye Atlantic) and all non-TAC species
+allspecies.value2 <- inner_join(ram.species.rev.final2, all.valuessp.rev2, by = c("stockid","year")) %>% 
+  select(stockid, year, BdivBmsypref, UdivUmsypref, scientificname, areatype, region, areaname, price,tac) %>% 
+  filter(year >=1987) %>%
+  filter(year <=2006) %>% 
+  inner_join(ident2, by = "stockid") %>% 
+  drop_na()
+
+#Checking balance
+testspe2 <- allspecies.value2 %>% 
+  group_by(stockid) %>%
+  tally()
+```
+
+## Synthetic control group method for South Atlantic Swordfish stock, using `Synth`
+
+```{r synth satl swo fishing, include = FALSE}
+allspecies.value2 <- as.data.frame(allspecies.value2)
+
+dataprep.out2a<-
+  dataprep(
+    foo = allspecies.value2,
+    predictors = c("price"),
+    dependent = c("UdivUmsypref"),
+    unit.variable = c("stocknum"),
+    time.variable = c("year"),
+    #special.predictors = list(
+    #  list("Y", 1991, "mean"),
+    #  list("Y", 1985, "mean"),
+    #  list("Y", 1980, "mean")
+    #),
+    treatment.identifier = 26,
+    controls.identifier = c(1:25),
+    time.predictors.prior = c(1987:1997),
+    time.optimize.ssr = c(1987:2006),
+    unit.names.variable = "stockid",
+    time.plot = 1987:2006
+  )
+
+synth.out2a <- synth(dataprep.out2a)
+round(synth.out2a$solution.w,4)
+
+synth.tables2a <- synth.tab(
+  dataprep.res = dataprep.out2a,
+  synth.res = synth.out2a)
+```
+
+```{r synth satl swo fishing table, results='asis', echo=FALSE}
+stargazer(synth.tables2a$tab.w, summary=FALSE, rownames=FALSE, type="latex",covariate.labels=c("Weights","Stock ID", "Stock ID Number"), title = "W-weight for each potential control unit for South Atlantic Swordfish stock as the treated unit", font.size = "small")
+```
+
+```{r synth satl swo figs fishing,echo=FALSE}
+path.plot(dataprep.res = dataprep.out2a,synth.res = synth.out2a, Ylab = "F/Fmsy", Main = "Trajectories of treated (S Atl Swordfish) and synthetic control", Legend.position=c("topleft"))
+abline(h = 0, v = 1998, col = "black", lty=3)
+
+gaps.plot(dataprep.res = dataprep.out2a,synth.res = synth.out2a, Ylab = "Gap in F/Fmsy", Main = "Difference between treated (S Atl Swordfish) and synthetic control")
+abline(h = 0, v = 1998, col = "black", lty=3)
+```
+
+```{r synth satl swo biomass, include = FALSE}
+allspecies.value2 <- as.data.frame(allspecies.value2)
+
+dataprep.out2b<-
+  dataprep(
+    foo = allspecies.value2,
+    predictors = c("price"),
+    dependent = c("BdivBmsypref"),
+    unit.variable = c("stocknum"),
+    time.variable = c("year"),
+    #special.predictors = list(
+    #  list("Y", 1991, "mean"),
+    #  list("Y", 1985, "mean"),
+    #  list("Y", 1980, "mean")
+    #),
+    treatment.identifier = 26,
+    controls.identifier = c(1:25),
+    time.predictors.prior = c(1987:1997),
+    time.optimize.ssr = c(1987:2006),
+    unit.names.variable = "stockid",
+    time.plot = 1987:2006
+  )
+
+synth.out2b <- synth(dataprep.out2b)
+round(synth.out2b$solution.w,4)
+
+synth.tables2b <- synth.tab(
+  dataprep.res = dataprep.out2b,
+  synth.res = synth.out2b)
+print(synth.tables2b)
+```
+
+```{r synth satl swo figs biomass,echo=FALSE}
+path.plot(dataprep.res = dataprep.out2b,synth.res = synth.out2b, Ylab = "B/Bmsy", Main = "Trajectories of treated (S Atl Swordfish) and synthetic control", Legend.position=c("topleft"))
+abline(h = 0, v = 1998, col = "black", lty=3)
+
+gaps.plot(dataprep.res = dataprep.out2b,synth.res = synth.out2b, Ylab = "Gap in B/Bmsy", Main = "Difference between treated (S Atl Swordfish) and synthetic control")
+abline(h = 0, v = 1998, col = "black", lty=3)
+```
+
+
+## Setting up dataset to isolate the North Atlantic Swordfish stock
+
+Similar to the South Atlantic Swordfish, the North Atlantic Swordfish stock provided a better opportunity for looking at pre- and post-treatment trends, as the TAC for this stock was put in place in 1997. Like the South Atlantic Swordfish, the Table 3 shows that the W*-weight for each potential control unit (see Table 3) was largely composed of non-TAC swordfish stocks (0.25 each), while all other stocks contributed weights of 0.0001 each. 
+
+The figures for the treated unit of the North Atlantic Swordfish stock were quite different than the South Atlantic stock. For $F/Fmsy$, the pre-treatment synthetic control could not be constructed from the donor units. Like the previous two TAC stocks (Eastern Atlantic Bigeye and South Atlantic Swordfish), a synthetic control could not be constructed because fishing effort was greater for the pre-treatment treated unit. The figures comparing the treated unit to the control units for $B/Bmsy$ showed that the pre-treatment synthetic control could not be constructed from the donor units. Again, like the previous two TAC stocks, biomass was much lower for the pre-treated treatment unit than for the control units. 
+
+
+```{r synth natl swo setup, include = FALSE}
+#Bring in all RAM species
+ram.species.rev3 <- filter(ram, scientificname == "Katsuwonus pelamis"| scientificname == "Thunnus albacares"| scientificname == "Istiophorus albicans" | scientificname == "Makaira nigricans" | scientificname == "Kajikia audax" | stockid == "BIGEYEEPAC" | stockid == "BIGEYECWPAC" | stockid == "BIGEYEIO" | stockid == "ALBAIO" | stockid=="ALBAMED" | stockid=="ALBANPAC" | stockid == "ALBASPAC" | stockid == "SWORDMED" | stockid=="SWORDEPAC" | stockid=="SWORDIO" | stockid == "SWORDNPAC")
+ram.species.rev3$tac <- ram.species.rev3$year 
+ram.species.rev3 <- replace(ram.species.rev3, "tac", 0)
+
+swordnatl.tac <- filter(ram.panel, stockid=="SWORDNATL") %>% 
+  mutate(tac = ifelse(year >= 1997, 1, 0))
+
+ram.species.rev.final3 <- bind_rows(list(ram.species.rev3, swordnatl.tac))
+
+#Combine all relevant rows needed for analysis
+all.valuessp.rev3 <- bind_rows(list(alba.value.albaio,alba.value.med,alba.value.npac,alba.value.spac,big.value.epac,big.value.cwpac,big.value.io,skjcio.value,skjcwpac.value,skjeatl.value,skjwatl.value,yfinatl.value,yfincwpac.value,yfineio.value,yfinepac.value,saileatl.value,sailwatl.value,bmarlinatl.value,bmarlinpac.value,stmarlinnepac.value,stmarlinswpo.value,stmarlinwcnpac.value,swo.value.med,swo.value.epac,swo.value.io,swo.value.npac,swo.value.natl))
+
+#Create a numeric stock identifier ("stocknum")
+test1b2 <- matrix(c(1:26))
+testtable3 <- c("ALBAIO","ALBAMED","ALBASPAC","BIGEYECWPAC","BIGEYEEPAC","BIGEYEIO","BMARLINATL","BMARLINPAC","SAILEATL","SAILWATL", "SKJCIO","SKJCWPAC","SKJEATL","SKJWATL","STMARLINNEPAC","STMARLINSWPO","STMARLINWCNPAC","SWORDEPAC","SWORDIO","SWORDMED","SWORDNPAC","YFINATL","YFINCWPAC","YFINEIO","YFINEPAC","SWORDNATL")
+ident3 <- data.frame(test1b2,testtable3,stringsAsFactors=TRUE) 
+colnames(ident3) <- c("stocknum","stockid")
+
+#Final combined dataset with single TAC species (North Atlantic Swordfish) and all non-TAC species
+allspecies.value3 <- inner_join(ram.species.rev.final3, all.valuessp.rev3, by = c("stockid","year")) %>% 
+  select(stockid, year, BdivBmsypref, UdivUmsypref, scientificname, areatype, region, areaname, price,tac) %>% 
+  filter(year >=1987) %>%
+  filter(year <=2006) %>% 
+  inner_join(ident3, by = "stockid") %>% 
+  drop_na()
+
+#Checking balance
+testspe3 <- allspecies.value3 %>% 
+  group_by(stockid) %>%
+  tally()
+```
+
+## Synthetic control group method for North Atlantic Swordfish stock, using `Synth`
+
+```{r synth natl swo fishing, include = FALSE}
+allspecies.value3 <- as.data.frame(allspecies.value3)
+
+dataprep.out3a<-
+  dataprep(
+    foo = allspecies.value3,
+    predictors = c("price"),
+    dependent = c("UdivUmsypref"),
+    unit.variable = c("stocknum"),
+    time.variable = c("year"),
+    #special.predictors = list(
+    #  list("Y", 1991, "mean"),
+    #  list("Y", 1985, "mean"),
+    #  list("Y", 1980, "mean")
+    #),
+    treatment.identifier = 26,
+    controls.identifier = c(1:25),
+    time.predictors.prior = c(1987:1996),
+    time.optimize.ssr = c(1987:2006),
+    unit.names.variable = "stockid",
+    time.plot = 1987:2006
+  )
+
+synth.out3a <- synth(dataprep.out3a)
+round(synth.out3a$solution.w,4)
+
+synth.tables3a <- synth.tab(
+  dataprep.res = dataprep.out3a,
+  synth.res = synth.out3a)
+print(synth.tables3a)
+```
+
+```{r synth natl swo fishing table, results='asis', echo=FALSE}
+stargazer(synth.tables3a$tab.w, summary=FALSE, rownames=FALSE, type="latex",covariate.labels=c("Weights","Stock ID", "Stock ID Number"), title = "W-weight for each potential control unit for North Atlantic Swordfish stock as the treated unit", font.size = "small")
+```
+
+```{r synth natl swo figs fishing,echo=FALSE}
+path.plot(dataprep.res = dataprep.out3a,synth.res = synth.out3a, Ylab = "F/Fmsy", Main = "Trajectories of treated (N Atl Swordfish) and synthetic control", Legend.position=c("topleft"))
+abline(h = 0, v = 1997, col = "black", lty=3)
+
+gaps.plot(dataprep.res = dataprep.out3a,synth.res = synth.out3a, Ylab = "Gap in F/Fmsy", Main = "Difference between treated (N Atl Swordfish) and synthetic control")
+abline(h = 0, v = 1997, col = "black", lty=3)
+```
+
+```{r synth natl swo biomass, include = FALSE}
+allspecies.value3 <- as.data.frame(allspecies.value3)
+
+dataprep.out3b<-
+  dataprep(
+    foo = allspecies.value3,
+    predictors = c("price"),
+    dependent = c("BdivBmsypref"),
+    unit.variable = c("stocknum"),
+    time.variable = c("year"),
+    #special.predictors = list(
+    #  list("Y", 1991, "mean"),
+    #  list("Y", 1985, "mean"),
+    #  list("Y", 1980, "mean")
+    #),
+    treatment.identifier = 26,
+    controls.identifier = c(1:25),
+    time.predictors.prior = c(1987:1996),
+    time.optimize.ssr = c(1987:2006),
+    unit.names.variable = "stockid",
+    time.plot = 1987:2006
+  )
+
+synth.out3b <- synth(dataprep.out3b)
+round(synth.out3b$solution.w,4)
+
+synth.tables3b <- synth.tab(
+  dataprep.res = dataprep.out3b,
+  synth.res = synth.out3b)
+```
+
+```{r synth natl swo figs biomass,echo=FALSE}
+path.plot(dataprep.res = dataprep.out3b,synth.res = synth.out3b, Ylab = "B/Bmsy", Main = "Trajectories of treated (N Atl Swordfish) and synthetic control", Legend.position=c("topleft"))
+abline(h = 0, v = 1997, col = "black", lty=3)
+
+gaps.plot(dataprep.res = dataprep.out3b,synth.res = synth.out3b, Ylab = "Gap in B/Bmsy", Main = "Difference between treated (N Atl Swordfish) and synthetic control")
+abline(h = 0, v = 1997, col = "black", lty=3)
+```
+
+\par
+
+## Conclusions
+I was unable to determine if Total Allowable Catch (TAC) regulations truly constrain the behavior of high seas fishers, leading to improved biomass, because a pre-trends synthetic control could not be created for any of the three stocks that I examined. The Eastern Atlantic Bigeye was the most promising of the three TAC stocks, yet was ultimately still insufficient to create a viable synthetic control. Additionally, the $F/Fmsy$ pre-trends for the South Atlantic Swordfish were also promising, however the pre-trends for the $B/Bmsy$ for this stock were highly problematic. 
+
+The model would benefit from a greater number of predictors. There are several time-varying predictors that could be incorporated into the model including total catch (in metric tonnes), and dummy variables indicating other management measures in place for various stocks (i.e. seasonal closures, minimum size regulations, fishing capacity limits). Additionally, a variable could be created for how many countries report catches of a given stock over time (or the reported quantity of each major fishing country over time).
+
+Additionally, one of the major constraints in this analysis is that the `Synth` package requires balanced panels. A good next step would be to use a package that allows for unbalanced panels, such as the `gsynth` package. 
+
+However it also remains likely that the stocks examined here are systematically different than the non-TAC stocks. For example, all of these TAC stocks had generally higher fishing pressure pre- and post-treatment, and lower biomass pre- and post-treatment. Additionally, all three TAC stocks examined here are managed by a single RFMO (the International Commission for the Conservation of Atlantic Tunas, ICCAT), which is essentially the only RFMO that implements TACs (the exception being two Bluefin tuna stocks that also have TACs in place - one stock is managed by CCSBT and the other is jointly managed by WCPFC-IATTC - neither of which could be analyzed here because all Bluefin species have TACs in place). 
+
+
+## References
+Melnychuk, M. C., Clavelle, T., Owashi, B. & Strauss, C. K. (2017) Reconstruction of global ex-vessel prices of fished species. \textit{ICES Journal of Marine Science} 74, 121-133.
+
+Pons, M., Branch, T. A., Melnychuk, M. C., Jensen, O. P., Brodziak, J., Fromentin, J. M., Harley, S. J., Haynie, A. C., Kell, L. T., Maunder, M. N., et al. (2017) Effects of Biological, Economic and Management Factors on Tuna and Billfish Stock Status. \textit{Fish and Fisheries} 18, 1–21.
+
+Pons, M., Melnychuk, M. C. & Hilborn, R. (2018) Management Effectiveness of Large Pelagic Fisheries in the High Seas. \textit{Fish and Fisheries} 19, 260–270.

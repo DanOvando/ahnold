@@ -41,7 +41,7 @@ num_patches <- 25
 
   samps <- 20000
  
-  run_name <- "v3.0"
+  run_name <- "v4.1"
 
 run_dir <- here::here("results", run_name)
 

@@ -7,6 +7,7 @@ output:
 ---
 
 
+$$\sum_i^p $$
 
 \begin{equation}
   n_{t,a}=\begin{cases}
@@ -23,6 +24,13 @@ were *ssb* represents spawning stock biomass, by first
   l_{a} = l_{\infty}\left(1 - e^{-k(a - a_0)}\right)
   (\#eq:vbk)
 \end{equation}
+
+
+\begin{equation}
+  \sum_{i=1}^{p}Catch_{i,t} - cE_{i,t}
+  \label{eqn:profits}
+\end{equation}
+
 
 \begin{equation}
   b_{a} = w_a \times l_{a}^{w_b}
