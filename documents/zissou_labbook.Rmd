@@ -3506,15 +3506,17 @@ a = outcomes %>%
   ungroup() %>% 
   select(-experiment,-msy,-b_msy,-year,-mpa_size1,
          -`no-mpa`,-`with-mpa`, -years_protected,
-         -b0,-depletion,-mpa_effect,-scientific_name)
+         -b0,-depletion,-mpa_effect,-scientific_name,-baci,-mpa_size,-f,-f_v_m,-u,-final_u,-m) %>% 
+  na.omit()
+
+huh <- lm((pop_effect) ~ ., data = a %>% select(pop_effect,fleet_model,larval_movement, adult_movement, mpa_reaction, steepness, density_movement_modifier, density_dependence_form,sprinkler, mpa_reaction))
 
 
 d <- recipes::recipe(pop_effect ~ ., data = a) %>% 
   step_dummy(all_nominal())
 
 d <- prep(d, data = a) %>% 
-  juice() %>% 
-  mutate(rando = rnorm(nrow(.)))
+  juice()
 
 
 b <- train(pop_effect ~ .,
@@ -3531,7 +3533,6 @@ i <- imp %>%
 
 
 i %>% 
-  filter(x > x[names == "rando"]) %>% 
   top_n(15,x) %>% 
   ggplot(aes(names,x)) + 
   geom_col() + 
