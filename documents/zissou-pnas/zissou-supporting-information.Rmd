@@ -1,0 +1,224 @@
+---
+title: "Supporting Information"
+output: pdf_document
+bibliography: My Library.bib
+csl: pnas.csl
+---
+
+Supporting Information (SI) {#supporting-information-si .unnumbered}
+---------------------------
+
+
+The main text of the paper must stand on its own without the SI. Refer
+to SI in the manuscript at an appropriate point in the text. Number
+supporting figures and tables starting with S1, S2, etc. Authors are
+limited to no more than 10 SI files, not including movie files. Authors
+who place detailed materials and methods in SI must provide sufficient
+detail in the main text methods to enable a reader to follow the logic
+of the procedures and results and also must reference the online
+methods. If a paper is fundamentally a study of a new method or
+technique, then the methods must be described completely in the main
+text. Because PNAS edits SI and composes it into a single PDF, authors
+must provide the following file formats only.
+
+### SI Text {#si-text .unnumbered}
+
+#### Computing environment
+
+The computing environment needed to reproduce the results presented here is stored in a Docker container available [here](). Interested users can load the container on their system to reproduce the complete analysis and manuscript. 
+
+
+#### Operating Model
+
+The operating model is a spatial single-species age-structured bio-economic model. The operating model itself is organized as an R package, which can be found and installed [here](https://github.com/DanOvando/spasm). Users can explore the functionality of the operating mode through an interactive web application [here](https://danovando.shinyapps.io/simmpa/). 
+
+
+For the population model, numbers *n* at time *t* for age *a* are given by 
+
+$$n_{t,a}=\begin{cases}
+      = BH(ssb_{t-1}) & \text{if $a = 1$}\\
+     = n_{t-1,a-1}e^{-(m + qE_t{\times}s_{a-1})}, & \text{if $1< a < max(age)$}\\
+     =  n_{t-1,a}e^{-(m + qE_t{\times}s_a)} + n_{t-1,a-1}e^{-(m + qE_t{\times}s_{a-1})}, & \text{if $a = max(a)$}
+  \end{cases}$$
+
+where *BH* is the Beverton-Holt recruitment function, *ssb* is spawning-stock-biomass, *m* is natural mortality, *q* is catchability,*E* is fishing effort at time *t*, and *s* is selectivity at age *a*. 
+
+Selectivity is modeled through a logistic form per
+
+$$s_a=\frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{sel}}{\delta_{sel}}})}$$
+
+where $l_a$ is the mean length at at age, $l_sel$ is the length at which on average 50\% of individuals are selected by the fishery, and $\delta_{sel}$ are the additional units of length at which on average 95\% of fish are selected by the fishery. 
+
+*ssb* is calculated by converting age to mean length, calculating weight at age, maturity at age, and then calculating spawning stock biomass as the sum of spawning potential at age in a given time step. 
+
+$$l_{a} = l_{\infty}\left(1 - e^{-k(a - a_0)}\right)$$
+
+
+Weight at age is then given by 
+
+$$b_{a} = w_a \times l_{a}^{w_b}$$
+
+
+and maturity *mat* is calculated as
+
+$$\frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{mat}}{\delta_{mat}}})}$$
+
+where $l_{mat}$ is the length at which on average 50\% of individuals are sexual maturity, and $\delta_{mat}$ is the units of length beyond $l_{mat}$ at which on average 95\% of fish are sexually mature.
+
+Spawning stock biomass at time *t* is then calculated as
+
+$$ssb_t = \sum_{a=1}^Aw_{a,t}mat_{a,t}n_{a,t}$$
+
+
+##### Recruitment
+
+Recruitment follows Beverton-Holt dynamics. We do however allow for three variants in the timing of density density dependence:
+
+  1. Local density dependence: Density dependence occurs independently in each patch, and recruits then disperse to nearby patches
+  
+  
+$$n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l}$$
+
+where **d^l** is the larval movement matrix, *h* is Beverton-Holt steepness (constrained between 0.6 and 0.99), *r0* is unfished recruitment, and *ssb0* is unfished spawning stock biomass.
+  
+  
+  2. Global density dependence: Density dependence is a function of the sum of spawning biomass across all patches, and recruits are then distributed according to habitat quality
+  
+  
+$$n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p}$$
+  
+where *hab* is a vector of habitat quality by patch that sums to 1. 
+
+
+3. Post-dispersal density dependence: Larvae are distributed throughout the system, and then density dependence occurs based on the density of adult biomass at the destination patch.
+
+
+$$larv_{t,p} = ssb_{t-1} \times\boldsymbol{d^l}$$
+
+  
+$$n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l}$$
+
+##### Dispersal
+
+Dispersal in the model is broken into two components: adult and larval. Both assume a Gaussian dispersal kernel of the form
+
+$$m_{s,p_i,p_j}=\frac{1}{\sqrt{2\pi\sigma_{s,p_i}^2}}e^{-\frac{d_{p_i,p_j}^2}{2\sigma_{s,p_i}^2}}$$
+
+$$m_{s,p_i,p_j}=\frac{m_{s,p_i,p_j}}{\sum_{j=1}^Jm_{s,p_i,p_j}}$$
+
+Where *i* is the source patch, *j* is the destination patch, *d* is the distance between patches *i* and *j* (where distance is measured with wrapped edges, such that if there are 50 patches, patch 1 and patch 50 have a distance of 1), and $\sigma_s*$is the movement rate, in units of patches, for life stage *s* (adult or larval).
+
+We the adult dispersal matrix to be affected by adult density dependence. The idea behind this is that adult fish will move more as densities increase, and become more sedentary as densities decrease (as habitat and good becomes more available for example). This allows us to simulate a scenario where as MPAs build up density they begin to export more adults to the surrounding waters, and if densities are lower in the fished areas these fish will actually become more sedentary. 
+
+Under these conditions, the adult movement rate is a linear function of depletion (measured as SSB/SSB0)
+
+$$\sigma_{s=a,p}^* = max(slope\times{d _p+ \sigma_{s=a} \times dmod},0)$$
+
+where 
+
+$$slope = \sigma_{s=a} - ( \sigma_{s=a} \times dmod)$$
+
+Under these conditions, when depletion *d = 1* (meaning the stock is unfished) the adult movement rate equals the max adult movement rate ($\sigma_{s=a}^* = \sigma_{s=a}$). When $d=0$ $\sigma_{s=a}^* = \sigma_{s=a} * dmod$. The greater *dmod* is then, the more movement rates from a patch decline as density declines.
+
+We also allow for a "sprinkler" condition in which MPAs are placed in locations that disperse larvae to a much wider area than non-MPA locations. In this world, we simply multiply $\sigma_{s=l,p}$ by a sprinkler factor (by default 4) for any patch *p* that would eventually become an MPA (whether or not MPAs are ever introduced). In other words, when we compare two scenarios, one with MPA and one without, the "without" scenario still has higher larval movement rates in patches that become MPAs in the "with" scenario.
+
+##### Fleet Dynamics
+
+We allow for three fleet models: constant effort, constant catch, and open-access. Constant effort means that total effort across all patches is equal in all time steps (unless MPAs force exit of effort as discussed below). Under constant catch, we set a target catch volume (in biomass, summed across all patches). Each time step, we calculate the fishing mortality rate that, given the fishable biomass in that time step, would produce the target catch. If there is insufficient fishable biomass available to support the target catch, we mark the population as crashed and stop the simulation (these crashed simulations are not included in the final analysis). 
+
+Under open-access, fishing effort expands in proportion to a weighted mean of profit-per-unit effort over the last *t* time steps. 
+
+$$profit_{t} = price\times{catch_t} - cost\times{E_t}^2$$
+
+From there, we determine the new effort as 
+
+$$E_t = E_{t-1} + \theta\times\sum_{i=t-1-l}^{t-1}w_i\frac{profit_{i}}{E^i}$$
+
+where *w* is a weighting function which is just a linear function of time
+
+$$w_i = \frac{i}{\sum_{i=1}^li}$$
+
+and *l* is the number of lagged time steps over which to calculate the weighted mean PPUE.
+
+The open-access model can enter chaotic dynamics if the model parameters are not properly tuned. To address this, we first set price at 1, and set a $\theta$ such that when profits are about as large as they might conceivably be the fishery doubles in size. We then estimate reference points for the simulated fishery (Bmsy, Fmsy, MSY), and set a target bionomic equilibrium B/Bmsy. Holding the other parameters constant, we thing find a cost coefficient that produces the desired bionomic equilibrium. 
+
+###### Spatial Fleet Distribution
+
+Given a total amount of effort, we then need to distribute that effort in space. In the simplest form, effort is evenly distributed throughout the available patches. 
+
+$$E_{t,p} = E_t \times \frac{open_p}{\sum_{p=1}^Popen_p}$$
+
+where *open* indicates whether patch *p* is open to fishing or not. 
+
+Effort can also be distributed according to spawning stock biomass in fishable patches
+
+$$E_{t,p} = E_t \times \frac{open_{t,p}ssb_{t,p}}{\sum_{p=1}^Popen_{t,p}ssb_{t,p}}$$
+
+And lastly effort can be distributed according to profit-per-unit-effort
+
+$$E_{t,p} = E_t \times \frac{open_{t,p}ppue_{t,p}}{\sum_{p=1}^Popen_{t,p}ppue_{t,p}}$$
+
+Under the constant effort or open access scenarios, effort can immediately respond to MPA placement in one of two ways. Effort can concentrate outside the MPAs (such that the sum of effort before and after MPA placement stays constant), or effort can leave the MPAs, such that the total effort in the fishery is reduced by the amount of effort that occurred inside the MPAs immediately before MPA placement. This is intended to simulate a scenario where fishers that used to use the MPA simply leave the fishery, due for example to costs or lack of location specific knowledge to fish outside the MPA, rather than redistribute outside the MPA.
+
+##### MPA Design
+
+MPA design is relatively straightforward. We set a percentage of patches that are to be placed inside no-take MPAs. MPAs can either be placed continuously (e.g if there are 100 patches and 25% are in MPAs, patches 1:25 are in MPAs) or randomly. If the MPAs are placed randomly, we can also set a minimum MPA size. This controls the patchiness of the MPAs. As the "patchiness" factor approaches zero, the behavior equals that of random placement. As it approaches 1, the behavior approaches that of continuous placement. In between, the greater the patchiness, the more clustered together MPAs become.
+
+
+#### Simulations
+
+We use this our operating model to simulate 10,000 different fisheries, where each fishery is a random combination of variables, described below
+
+| Variable | Distribution|
+|---------:|:-----------:|
+| Scientific Name | Drawn from all possible species in `FishLife` (@thorson2017)|
+|steepness (h) | ~uniform(0.6,0.95)|
+|Adult movement ($\sigma_{s=a}$) | ~uniform(0,0.5 * P)|
+|Larval movement ($\sigma_{s=l}$) | ~uniform(0,0.5 * P)|
+|DD adult movement (dmod) | $\in\{0.25,1\}$|
+|Density-dependence timing | $\in\{local, global,post-dispersal\}$|
+|\% Patches in MPA | ~uniform(0.01,1)|
+|Initial fishing relative to natural mortality | ~uniform(0.01,4)|
+|Selectivity as a multiple of maturity length| ~uniform(0.1,1.25)|
+|Fleet model| $\in\{open-access, constant-effort,constant-catch\}$|
+|Spatial effort model| $\in\{uniform, biomass,profits\}$|
+|Years into simulation to start MPA| ~round(uniform(5,0.66 * T))|
+|MPA is sprinkler?| $\in\{TRUE,FALSE\}$|
+|Randomly place MPA?| $\in\{TRUE,FALSE\}$|
+|Fleet reaction to MPA| $\in\{concentrate, abandon-ship\}$|
+|Patchiness | ~uniform(0.01,0.75)|
+|MPA habitat factor| $\in\{1, 4\}$|
+
+One thing to call out here is the random sampling of scientific names. The effect of MPAs, especially over the short term, will clearly be affected by factors such as the growth rate, the mortality rate, and the maturity schedule. These life history traits are related through a variety of biological processes, as such randomly sampling these parameters can lead to biologically nonsensical "frankenfish". We resolve this by using the `FishLife` package (@thorson2017) instead. `FishLife` builds off of [FishBase](https://fishbase.org/), and provides estimate of key life history traits taking into account the relationships across these variables. For simulations then, we randomly pull a species from `FishLife`, and then pull the available life history information from that species for use in the operating model. This allows us to simulate a wide range of life history types in a realistic manner.
+
+We ran 10,000 simulations from these distributions. Each simulation runs for 50 years in 50 patches (with a 25 year unfished burn in period for conditions in which initial conditions cannot be solved analytically, for example when MPAs have better habitat than non-MPAs). For each simulation, we run one scenario without MPAs, though taking note of where the MPA would be as needed. For the second scenario, we hold everything constant except we now add in the MPAs as dictated by the particular simulation. 
+
+##### Filtering Simulations
+
+After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario, b) did not converge to the correct bionomic equilibrium in the open-access scenario, or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with 9066 viable simulations. 
+
+#### Estimation Model
+
+##### Alternative estimation models
+
+
+##### Sensitivity Tests
+
+
+
+### SI Figures {#si-figures .unnumbered}
+
+Provide a brief legend for each supporting figure after the supporting
+text. Provide figure images in TIFF, EPS, high-resolution PDF, JPEG, or
+GIF format; figures may not be embedded in manuscript text. When saving
+TIFF files, use only LZW compression; do not use JPEG compression. Do
+not save figure numbers, legends, or author names as part of the image.
+Composite figures must be pre-assembled.
+
+### SI Tables {#si-tables .unnumbered}
+
+Supply Word, RTF, or LaTeX files (LaTeX files must be accompanied by a
+PDF with the same file name for visual reference); include only one
+table per file. Do not use tabs or spaces to separate columns in Word
+tables.
+

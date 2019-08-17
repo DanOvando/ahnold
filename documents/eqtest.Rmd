@@ -9,6 +9,8 @@ output:
 
 $$\sum_i^p $$
 
+$\in$
+
 \begin{equation}
   n_{t,a}=\begin{cases}
       = BH(ssb_{t-1}) & \text{if $a = 1$}\\
