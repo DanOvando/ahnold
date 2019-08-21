@@ -1,12 +1,385 @@
 ---
 title: "Supporting Information"
-output: pdf_document
+output: 
+  pdf_document: default
+  bookdown::pdf_document2:
+    keep_tex: true
 bibliography: My Library.bib
 csl: pnas.csl
+header-includes:
+    - \usepackage{longtable}
+    - \usepackage{booktabs}
 ---
 
-Supporting Information (SI) {#supporting-information-si .unnumbered}
----------------------------
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+library(sf)
+library(ggmap)
+library(viridis)
+library(hrbrthemes)
+library(scales)
+library(patchwork)
+library(rpart)
+library(extrafont)
+library(caret)
+library(ggsci)
+library(rEDM)
+library(tidyverse)
+library(Synth)
+extrafont::loadfonts()
+functions <- list.files(here::here("functions"))
+
+walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
+save_plots <- TRUE
+
+sim_years <- 50
+
+burn_years <- 20
+
+num_patches <- 25
+
+  samps <- 20000
+
+  run_name <- "v4.2"
+
+run_dir <- here::here("results", run_name)
+
+experiment_dir <- here::here("results",run_name, "experiments")
+
+load(file = here::here("results",run_name, "rawish_zissou_data.Rdata"))
+
+load(file = here::here("results",run_name, "model_runs.Rdata"))
+
+load(file = here::here("results",run_name,"processed_grid.Rdata"))
+
+# load(file = here::here("results",run_name,"about_time.Rdata"))
+
+
+bad_sims <- processed_grid %>%
+  select(-fishery_effect,-density_ratio) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  filter(years_protected <= 0) %>%
+  mutate(b0 = `no-mpa`[year == min(year)]) %>%
+  mutate(depletion = pmax(0,1 - `no-mpa` / b0)) %>%
+  mutate(pop_effect = pmin(1, (`with-mpa` - `no-mpa`) / b0)) %>%
+  summarise(bad = any(depletion > 0.95 |
+                        abs(pop_effect) > 1e-3)) %>%
+  filter(bad == TRUE)
+
+
+# wtf <- processed_grid %>%
+#   select(-fishery_effect, -density_ratio) %>%
+#   unnest() %>%
+#   group_by(experiment) %>%
+#   mutate(year = 1:length(year)) %>% 
+#   mutate(years_protected = year - year_mpa + 1) %>%
+#   filter(years_protected <= 0) %>% 
+#   mutate(b0 = `no-mpa`[year == min(year)]) %>%
+#   mutate(depletion = 1 - `no-mpa`/b0) %>%
+#   mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0)) 
+# 
+
+processed_grid <- processed_grid %>% 
+  filter(!experiment %in% unique(bad_sims$experiment))
+
+outcomes <- processed_grid %>%
+  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
+  select(-fishery_effect, -density_ratio) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  mutate(mpa_effect = pmax(-.5,pmin(mpa_effect,1))) %>%
+  group_by(experiment) %>%
+  mutate(b0 = `no-mpa`[year == min(year)]) %>%
+  mutate(depletion = 1 - `no-mpa`/b0) %>%
+  mutate(final_depletion = depletion[year == max(year)],
+         f = f_v_m * m) %>%
+  mutate(u = 1 - exp(-f)) %>%
+  mutate(final_u = u[year == max(year)]) %>%
+  ungroup() %>%
+  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
+
+
+# outcomes <- outcomes %>%
+#     filter(!experiment %in% collapsed$experiment,
+#            !experiment %in% unique(bad_converge$experiment))
+
+eqo <- outcomes %>%
+  filter(year == max(year))
+
+fishery_outcomes <- processed_grid %>%
+  select(-mpa_effect, -density_ratio) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  mutate(fishery_effect = pmin(mpa_effect,1)) %>%
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
+  filter(fleet_model != "constant-catch") %>%
+  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
+
+density_ratios <- processed_grid %>%
+  select(-fishery_effect) %>%
+  slice(1:samps) %>%
+  unnest() %>%
+  group_by(experiment) %>%
+  mutate(year = 1:length(year)) %>%
+  ungroup() %>%
+  mutate(years_protected = year - year_mpa + 1) %>%
+  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
+
+
+
+fishery_eqo <- fishery_outcomes %>%
+  filter(year == max(year))
+
+
+facet_labels <- c(
+  mpa_size = "Range in MPA",
+  depletion = "Without-MPA Depletion"
+)
+
+channel_islands <- readRDS(here::here("data","channel_islands_map.RDS"))
+
+ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>%
+  rmapshaper::ms_simplify() %>%
+  sf::st_transform(crs = 4326)
+
+
+
+zissou_theme <-
+  theme_ipsum(
+    base_size = 12,
+    axis_title_size = 12,
+    strip_text_size = 12,
+    base_family = "Fira Sans"
+  )
+
+
+testplot <- ggplot()
+
+panel_height = unit(1,"npc") - sum(ggplotGrob(testplot)[["heights"]][-3]) - unit(4,"line")
+
+gc <- guide_colorbar(frame.colour = "black",
+                     ticks.colour = "white",
+                     barheight = panel_height)
+
+
+  hgc <- guide_colorbar(frame.colour = "black",
+                       ticks.colour = "black",
+                       barwidth = 10)
+
+  
+    wide_hgc <- guide_colorbar(frame.colour = "black",
+                       ticks.colour = "black",
+                       barwidth = 25)
+    
+theme_set(zissou_theme)
+
+
+models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
+
+model_runs <- model_runs %>%
+  filter(models_worked) %>%
+  mutate(tmb_fit = map(tmb_fit,"result")) %>%
+  mutate(processed_fits = map(tmb_fit, process_fits)) %>%
+  mutate(did_plot = map(processed_fits, "did_plot"))
+
+base_run <- model_runs %>%
+filter(var_names == "pisco_a", mpa_only == FALSE, center_scale == TRUE)
+
+mpa_run <- model_runs %>%
+  filter(data_source == "pisco",
+         var_names == "pisco_a",
+         mpa_only == TRUE)
+
+kfm_run <- model_runs %>%
+  filter(data_source == "kfm")
+
+fitted_data <- base_run$data[[1]]
+
+zissou_fit <- base_run$tmb_fit[[1]]
+
+report <- base_run$tmb_fit[[1]]
+
+site_data <- read_csv(here::here("data",'Final_Site_Table_UCSB.csv')) %>%
+  magrittr::set_colnames(., tolower(colnames(.))) %>%
+  select(
+    site,
+    side,
+    mpagroup,
+    mpa_status,
+    reserve,
+    region,
+    year_mpa,
+    mpaareanm2,
+    lat_wgs84,
+    lon_wgs84
+  ) %>%
+  rename(lat_wgs84 = lon_wgs84,
+         lon_wgs84 = lat_wgs84) %>%
+  unique() %>%
+  mutate(eventual_mpa = (year_mpa > 0))
+
+zissou_fit$zissou_estimates <- zissou_fit$zissou_estimates %>%
+  mutate(variable = str_replace_all(variable, "(\\.).*$",""))
+
+report$zissou_estimates <- report$zissou_estimates %>% 
+    mutate(variable = str_replace_all(variable, "(\\.).*$",""))
+
+
+seen_non_nested_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seen_non_nested_betas")) %>%
+  rename(group = variable) %>%
+  mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested %>% colnames())
+
+seeing_non_nested_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seeing_non_nested_betas")) %>%
+  rename(group = variable) %>%
+  mutate(variable  = zissou_fit$zissou_data$x_seen_non_nested %>% colnames())
+
+seen_year_species_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seen_year_species_betas")) %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
+
+seeing_year_species_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seeing_year_species_betas")) %>%
+  # filter(variable == "seeing_year_species_betas") %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_year_species %>% colnames())
+
+seen_region_cluster_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seen_region_cluster_betas")) %>%
+  # filter(variable == "seen_region_cluster_betas") %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+
+seeing_region_cluster_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "seeing_region_cluster_betas")) %>%
+  # filter(variable == "seeing_region_cluster_betas") %>%
+  rename(group = variable) %>%
+  mutate(variable = zissou_fit$zissou_data$x_seen_region_cluster %>% colnames())
+
+did_betas <- zissou_fit$zissou_estimates %>%
+  filter(stringr::str_detect(variable, "mpa_effect")) %>%
+  # filter(variable == "mpa_effect") %>%
+  mutate(group = variable) %>%
+  mutate(year = zissou_fit$did_data$year %>% unique())
+
+
+ betas <- bind_rows(
+   seen_non_nested_betas,
+   seeing_non_nested_betas,
+   seen_year_species_betas,
+   seeing_year_species_betas,
+   seen_region_cluster_betas,
+   seeing_region_cluster_betas,
+   did_betas %>% select(-year)
+ ) %>%
+   as_data_frame()
+
+ non_nested_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested")) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+
+ year_species_effects_plots <- betas %>%
+   filter(str_detect(group, "year_species_betas")) %>%
+   mutate(year = str_replace_all(variable,"\\D","") %>% as.numeric()) %>%
+   mutate(classcode = str_split(variable,'-', simplify = T)[,2]) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_ribbon(aes(x = year, ymin = lower, ymax = upper, fill = classcode), alpha = 0.25) +
+   geom_line(aes(x = year, y = estimate, color = classcode)) +
+   facet_wrap(~group)
+
+  region_cluster_plots <- betas %>%
+   filter(str_detect(group, "region_cluster_betas")) %>%
+   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
+   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
+   ggplot() +
+    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+    geom_pointrange(aes(x = region,
+                        y = estimate,
+                        ymin = lower,
+                        ymax = upper, color = cluster)) +
+    facet_wrap(~group)
+
+
+
+
+  sim_plot <- outcomes %>%
+    mutate(rsize = plyr::round_any(mpa_size, 0.25),
+           reff = plyr::round_any(mpa_effect,0.1)) %>%
+    filter(rsize == 0.25) %>%
+    mutate(year = years_protected + 2001) %>%
+    filter(year %in% did_betas$year) %>% 
+    group_by(year, reff) %>% 
+    count() %>% 
+    group_by(year) %>% 
+    mutate(sc = n / sum(n))
+
+  did_plot <- did_betas %>%
+    ggplot() +
+    geom_tile(data = sim_plot, aes(year, reff, fill = sc), alpha = 0.75) +
+    geom_vline(aes(xintercept = 2003), color = 'red', linewctype = 2, size = 2) +
+    geom_hline(aes(yintercept = 0)) +
+    geom_pointrange(aes(
+      year,
+      y = estimate,
+      ymin = lower,
+      ymax = upper
+    ),
+    size = 1.5
+    ) +
+    labs(x = "Year", y = "Targeted Trend Divergence") +
+    scale_fill_viridis(guide = hgc,
+                       name = "% of Annual Sims",
+                       labels = scales::percent_format(accuracy = 1),
+                       option = "plasma") + 
+    theme(legend.position = "top")
+  
+top_species <- base_run$data[[1]]$classcode %>% unique()
+
+cip_data <- pisco_data %>%
+  left_join(site_data, by = c("site","side")) %>%
+  filter(is.na(eventual_mpa) == F) %>%
+  filter(region %in% c("ANA", "SCI","SRI",'SMI'),
+         classcode %in% top_species)
+
+# process outcomes
+
+filter_summary <- fitted_data %>% 
+  select(classcode, targeted) %>% 
+  unique() %>% 
+  group_by(targeted) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(targeted = ifelse(targeted == 1,"yes","no")) %>% 
+  spread(targeted, n)
+
+```
+
+
+# Supporting Information (SI) 
 
 
 The main text of the paper must stand on its own without the SI. Refer
@@ -21,25 +394,28 @@ technique, then the methods must be described completely in the main
 text. Because PNAS edits SI and composes it into a single PDF, authors
 must provide the following file formats only.
 
-### SI Text {#si-text .unnumbered}
+# SI Text {#si-text .unnumbered}
 
-#### Computing environment
+## Computing environment
 
 The computing environment needed to reproduce the results presented here is stored in a Docker container available [here](). Interested users can load the container on their system to reproduce the complete analysis and manuscript. 
 
 
-#### Operating Model
+## Operating Model
 
 The operating model is a spatial single-species age-structured bio-economic model. The operating model itself is organized as an R package, which can be found and installed [here](https://github.com/DanOvando/spasm). Users can explore the functionality of the operating mode through an interactive web application [here](https://danovando.shinyapps.io/simmpa/). 
 
 
 For the population model, numbers *n* at time *t* for age *a* are given by 
 
-$$n_{t,a}=\begin{cases}
+\begin{equation}
+n_{t,a}=\begin{cases}
       = BH(ssb_{t-1}) & \text{if $a = 1$}\\
      = n_{t-1,a-1}e^{-(m + qE_t{\times}s_{a-1})}, & \text{if $1< a < max(age)$}\\
      =  n_{t-1,a}e^{-(m + qE_t{\times}s_a)} + n_{t-1,a-1}e^{-(m + qE_t{\times}s_{a-1})}, & \text{if $a = max(a)$}
-  \end{cases}$$
+  \end{cases}
+  (\#eq:pop)
+\end{equation}
 
 where *BH* is the Beverton-Holt recruitment function, *ssb* is spawning-stock-biomass, *m* is natural mortality, *q* is catchability,*E* is fishing effort at time *t*, and *s* is selectivity at age *a*. 
 
@@ -70,7 +446,7 @@ Spawning stock biomass at time *t* is then calculated as
 $$ssb_t = \sum_{a=1}^Aw_{a,t}mat_{a,t}n_{a,t}$$
 
 
-##### Recruitment
+### Recruitment
 
 Recruitment follows Beverton-Holt dynamics. We do however allow for three variants in the timing of density density dependence:
 
@@ -98,7 +474,7 @@ $$larv_{t,p} = ssb_{t-1} \times\boldsymbol{d^l}$$
   
 $$n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l}$$
 
-##### Dispersal
+### Dispersal
 
 Dispersal in the model is broken into two components: adult and larval. Both assume a Gaussian dispersal kernel of the form
 
@@ -122,7 +498,7 @@ Under these conditions, when depletion *d = 1* (meaning the stock is unfished) t
 
 We also allow for a "sprinkler" condition in which MPAs are placed in locations that disperse larvae to a much wider area than non-MPA locations. In this world, we simply multiply $\sigma_{s=l,p}$ by a sprinkler factor (by default 4) for any patch *p* that would eventually become an MPA (whether or not MPAs are ever introduced). In other words, when we compare two scenarios, one with MPA and one without, the "without" scenario still has higher larval movement rates in patches that become MPAs in the "with" scenario.
 
-##### Fleet Dynamics
+### Fleet Dynamics
 
 We allow for three fleet models: constant effort, constant catch, and open-access. Constant effort means that total effort across all patches is equal in all time steps (unless MPAs force exit of effort as discussed below). Under constant catch, we set a target catch volume (in biomass, summed across all patches). Each time step, we calculate the fishing mortality rate that, given the fishable biomass in that time step, would produce the target catch. If there is insufficient fishable biomass available to support the target catch, we mark the population as crashed and stop the simulation (these crashed simulations are not included in the final analysis). 
 
@@ -142,7 +518,7 @@ and *l* is the number of lagged time steps over which to calculate the weighted 
 
 The open-access model can enter chaotic dynamics if the model parameters are not properly tuned. To address this, we first set price at 1, and set a $\theta$ such that when profits are about as large as they might conceivably be the fishery doubles in size. We then estimate reference points for the simulated fishery (Bmsy, Fmsy, MSY), and set a target bionomic equilibrium B/Bmsy. Holding the other parameters constant, we thing find a cost coefficient that produces the desired bionomic equilibrium. 
 
-###### Spatial Fleet Distribution
+### Spatial Fleet Distribution
 
 Given a total amount of effort, we then need to distribute that effort in space. In the simplest form, effort is evenly distributed throughout the available patches. 
 
@@ -160,18 +536,18 @@ $$E_{t,p} = E_t \times \frac{open_{t,p}ppue_{t,p}}{\sum_{p=1}^Popen_{t,p}ppue_{t
 
 Under the constant effort or open access scenarios, effort can immediately respond to MPA placement in one of two ways. Effort can concentrate outside the MPAs (such that the sum of effort before and after MPA placement stays constant), or effort can leave the MPAs, such that the total effort in the fishery is reduced by the amount of effort that occurred inside the MPAs immediately before MPA placement. This is intended to simulate a scenario where fishers that used to use the MPA simply leave the fishery, due for example to costs or lack of location specific knowledge to fish outside the MPA, rather than redistribute outside the MPA.
 
-##### MPA Design
+### MPA Design
 
 MPA design is relatively straightforward. We set a percentage of patches that are to be placed inside no-take MPAs. MPAs can either be placed continuously (e.g if there are 100 patches and 25% are in MPAs, patches 1:25 are in MPAs) or randomly. If the MPAs are placed randomly, we can also set a minimum MPA size. This controls the patchiness of the MPAs. As the "patchiness" factor approaches zero, the behavior equals that of random placement. As it approaches 1, the behavior approaches that of continuous placement. In between, the greater the patchiness, the more clustered together MPAs become.
 
 
-#### Simulations
+## Simulations
 
 We use this our operating model to simulate 10,000 different fisheries, where each fishery is a random combination of variables, described below
 
 | Variable | Distribution|
 |---------:|:-----------:|
-| Scientific Name | Drawn from all possible species in `FishLife` (@thorson2017)|
+| Scientific Name | Drawn from all possible species in `FishLife` (@thorson2017c)|
 |steepness (h) | ~uniform(0.6,0.95)|
 |Adult movement ($\sigma_{s=a}$) | ~uniform(0,0.5 * P)|
 |Larval movement ($\sigma_{s=l}$) | ~uniform(0,0.5 * P)|
@@ -189,36 +565,1055 @@ We use this our operating model to simulate 10,000 different fisheries, where ea
 |Patchiness | ~uniform(0.01,0.75)|
 |MPA habitat factor| $\in\{1, 4\}$|
 
-One thing to call out here is the random sampling of scientific names. The effect of MPAs, especially over the short term, will clearly be affected by factors such as the growth rate, the mortality rate, and the maturity schedule. These life history traits are related through a variety of biological processes, as such randomly sampling these parameters can lead to biologically nonsensical "frankenfish". We resolve this by using the `FishLife` package (@thorson2017) instead. `FishLife` builds off of [FishBase](https://fishbase.org/), and provides estimate of key life history traits taking into account the relationships across these variables. For simulations then, we randomly pull a species from `FishLife`, and then pull the available life history information from that species for use in the operating model. This allows us to simulate a wide range of life history types in a realistic manner.
+One thing to call out here is the random sampling of scientific names. The effect of MPAs, especially over the short term, will clearly be affected by factors such as the growth rate, the mortality rate, and the maturity schedule. These life history traits are related through a variety of biological processes, as such randomly sampling these parameters can lead to biologically nonsensical "frankenfish". We resolve this by using the `FishLife` package (@thorson2017c) instead. `FishLife` builds off of [FishBase](https://fishbase.org/), and provides estimate of key life history traits taking into account the relationships across these variables. For simulations then, we randomly pull a species from `FishLife`, and then pull the available life history information from that species for use in the operating model. This allows us to simulate a wide range of life history types in a realistic manner.
 
 We ran 10,000 simulations from these distributions. Each simulation runs for 50 years in 50 patches (with a 25 year unfished burn in period for conditions in which initial conditions cannot be solved analytically, for example when MPAs have better habitat than non-MPAs). For each simulation, we run one scenario without MPAs, though taking note of where the MPA would be as needed. For the second scenario, we hold everything constant except we now add in the MPAs as dictated by the particular simulation. 
 
 ##### Filtering Simulations
 
-After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario, b) did not converge to the correct bionomic equilibrium in the open-access scenario, or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with 9066 viable simulations. 
+After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario, b) did not converge to the correct bionomic equilibrium in the open-access scenario, or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with `r nrow(processed_grid) ` viable simulations. 
 
-#### Estimation Model
+## Estimation Model
 
-##### Alternative estimation models
+The goal of the estimation model is to estimate the difference in the mean densities of targeted and non-targeted species pre-and-post MPA implementation.
+
+The regression analysis uses a mixed-effects hierarchical model. The raw data are estimated length compositions by fish species along a transect at a site. Lengths are converted to biomass per allometric relationships supplied by PISCO and supplemented by the `FishLife` [@thorson2017c] package in R where needed. We performed some minimal data filtering to reduce noise in the data. We only include species that were observed at least twice in each year of the dataset (2000-2017) somewhere in the core Channel Islands (Anacapa, Santa Cruz, Santa Rosa, San Miguel). While some data are available from 1999, per consultation with PISCO we omit those data due to changes in survey protocols. We assign species to targeted and non-targeted groups per the PISCO classifications. This filtering process results in `r filter_summary$no` non-targeted species and `r filter_summary$yes` targeted species remaining in the analysis. 
+
+The simplified explanation of the estimation is a hierarchichal model in which we first standardize the observed biomass densities into an abundance index of each species over time. The abundance indices in each year are assumed to be log-normally distributed with means and standard deviations for the targeted and non-targeted groups, giving an estimate of the mean densities of targeted and non-targeted species over time. We then calcualte the difference between these two means
+
+\newpage
+```{r cartoon, fig.cap= "Cartoon illustration of the hierarchichal difference-in-difference estimator", fig.width=3}
+knitr::include_graphics("figs/estimation-cartoon.png")
+```
+
+\pagebreak
 
 
-##### Sensitivity Tests
+The first stage of the regression is a log-normal delta model. The model estimates two regressions, the first is a binomial generalized linear model (GLM) with a logit link estimating the probability of observing a given fish species at a observation *i* (transect at time *t*). The probability that a given species was observed *o* at a given observation is distributed
+
+$$o_{s,i} \sim binomial(\frac{1}{1 +e^{-\beta^{o}{X}}}) $$
+ where $\beta^{o}$ are the estimated coefficients for the observation model and *X* is a matrix of covariates that include random effects for each year in the data (2000 to 2017). 
+ 
+The expected density *d* of positive observations is modeled per a log-normal distribution
+ 
+ $$log(d_{s,i}) \sim normal(\beta^{d}X, \sigma_s)$$
+ 
+
+where $\beta^{d}$ are the estimated coefficients for the expected density model and *X* is the same matrix of covariates as used in the observation portion of the model and $\sigma_s$ allows for each species *s* to have different standard deviations. 
+
+Our covariate matrix *X* contains both fixed and random effects. Fixed effects include the depth level of the transect, the sampling site, the month of the observation, the estimated surge at the transect, visibility, the depth of the transect, and the experience (and experience squared) of the diver conducting the transect. We classify each species into one of two clusters based on the mean longitude the species was encountered at, breaking the species into two groups: those primarily found in the western end of the Channel Islands those found more in the eastern end.  We then estimate random effects for each island for each cluster
+
+$$\beta_{island,cluster} \sim normal(0,\sigma_{cluster})$$
+
+This allows the mean effect of each island to differ for each cluster, e.g. allowing the San Miguel, the eastern most island, to have a higher mean density for eastern species than for more western species (if the data suggest it). 
+
+The second critical component of the covariate matrix *X* are random effects for each year for each species
+
+$$\beta_{year,species} \sim normal(0,\sigma_{species})$$
+
+These $\beta_{year,species}$ represent our "standardized" estimate of observed abundance of each species in each time step, controlling for the included covariates. 
+
+However, we still need to account for changes in the probability of detection over time. For that, we create a standard matrix of with rows equal to the number of years and columns corresponding to each of the columns in *X*, holding everything fixed at mean (or most frequently observed level for factors) levels for all variables in X except for the year and species interaction indices. Calling this standardized matrix $X^{standard}$, the probability of observing a given species in year *y* is then
+
+$$p_{s,y} = (\frac{1}{1 +e^{-\beta^{o}{X^{standard}}}})$$
+
+In the same manner as described by @punt2000, The standardized index of abundance for species *s* in year *y* then is
+
+$$I_{species,year} = p_{species,year}e^{\beta_{species,year}}$$
+
+The next phase of the model requires us to estimate the mean abundance of targeted and non-targeted species over time. The concept here is that each $I_{species,year}$ can be modeled by a regression that contains random effects for each year for targeted and non-targeted fishes, the assumption then being that there is a mean density for targeted and non-target species, and $I_{species,year}$ represent deviations from that mean. 
+
+$$log(I_{species,year}) \sim normal(\beta^{effect}X^{effect}, \sigma_I)$$
+
+$X^{effect}$ contains both fixed and random effects. The fixed effects include an intercept and the temperature deviation for a given species in a year, where temperature deviation is
+
+$$t_{s,y} = (t^{pref}_{s} -  \bar{t_{y}})^2$$
+
+where $t^{pref}$ is the preferred temperature for species *s* (drawn form `FishLife`, @thorson2017c), and $\bar{t_{y}}$ is the mean temperature encountered by that species in year *y*. We also include as variables in the model the mean kelp cover experienced by a given species in a given year, as well as the total fishery catches reported in the previous year for that species in the Santa Barbara region [drawn from the California Department of Fish and Wildlife database].  We also include random intercepts for each species in $X^{effect}$. The most important random effects are year effects for targeted and non-targeted species
+
+$$\beta_{year,targeted} \sim normal(0,\sigma_{targeted})$$
+
+$\beta_{year,targeted}$ is the mean log density of targeted species in year *y*, controlling for included covariates. Therefore, the final step in the model, the divergence in the standardized abundance trends of targeted and non-targeted species is
+
+$$divergence_{year} =  \beta_{year,targeted = 1} - \beta_{year,targeted = 0}$$
+
+The model is fit in TMB to integrate the uncertainty across all levels of the model, with standard errors for each coefficient in the model estimated through the Laplace approximation. 
+
+A complete table of estimated coefficients can be seen in Table.S\@ref(tab:betatable).
+
+```{r betatable}
+
+table <- betas %>% select(-std_error,-group)
+
+knitr::kable(table,
+             digits = 2,
+             caption = "Complete table of estimated coefficients from hierarchichal difference-in-difference model",
+             longtable = TRUE,
+             booktabs = TRUE,
+             col.names = colnames(table)) %>% 
+  kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
+
+
+```
+
+
+Figures S\@ref(fig:fe-plot):S\@ref(fig:targ-plot) present estimated effects for covariates included in the model, along with the raw estimated mean trends of the targeted and non-targeted species (while the difference between these trends is presented in our main results. 
+
+\newpage
+
+```{r fe-plot, fig.cap = "Estimated coefficients for non-spatial fixed effects in observation model (seeing) and observed model (seen)"}
+
+ non_nested_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested") & !str_detect(variable, "site_side")) %>%
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_wrap(~group) +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10))
+
+non_nested_beta_plot
+
+```
+
+\pagebreak
 
 
 
-### SI Figures {#si-figures .unnumbered}
+```{r site-plot, fig.cap = "Estimated coefficients for spatial random effects in observation model (seeing) and observed model (seen)", fig.height=10}
 
-Provide a brief legend for each supporting figure after the supporting
-text. Provide figure images in TIFF, EPS, high-resolution PDF, JPEG, or
-GIF format; figures may not be embedded in manuscript text. When saving
-TIFF files, use only LZW compression; do not use JPEG compression. Do
-not save figure numbers, legends, or author names as part of the image.
-Composite figures must be pre-assembled.
+ non_nested_site_beta_plot <- betas %>%
+   filter(str_detect(group, "non_nested") & str_detect(variable, "site_side")) %>%
+  mutate(variable = tolower(variable)) %>% 
+  mutate(variable = str_replace(variable, "site_side","")) %>% 
+  mutate(island = str_replace(str_split(variable, '_', simplify = TRUE)[,1],'-','')
+ ) %>% 
+   ggplot() +
+   geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+   geom_pointrange(aes(x = variable,
+                       y = estimate,
+                       ymin = lower,
+                       ymax = upper)) +
+   facet_grid(island~group, scales = "free") +
+   coord_flip() +
+   theme(axis.text.y = element_text(size = 10)) + 
+  theme_minimal()
 
-### SI Tables {#si-tables .unnumbered}
+non_nested_site_beta_plot + 
+  theme(axis.text.y = element_text(size = 6))
 
-Supply Word, RTF, or LaTeX files (LaTeX files must be accompanied by a
-PDF with the same file name for visual reference); include only one
-table per file. Do not use tabs or spaces to separate columns in Word
-tables.
+```
+
+\pagebreak
+
+
+
+```{r region-plot, fig.cap="Random effects for region by cluster", eval = FALSE}
+
+  region_cluster_plots <- betas %>%
+   filter(str_detect(group, "region_cluster_betas")) %>%
+   mutate(cluster = str_replace_all(variable,"\\D","")) %>%
+   mutate(region = str_split(variable,'-', simplify = T)[,3]) %>%
+   ggplot() +
+    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
+    geom_pointrange(aes(x = region,
+                        y = estimate,
+                        ymin = lower,
+                        ymax = upper, color = cluster)) +
+    facet_wrap(~group)
+
+region_cluster_plots
+
+```
+
+\pagebreak
+
+```{r targ-plot, fig.cap = "Trends in standardized mean abundance of targeted and non-targeted species"}
+
+targeted_trends <- report$zissou_estimates %>% 
+  filter(str_detect(variable, "targeted_did")) %>% 
+  group_by(variable) %>% 
+  mutate(year = unique(fitted_data$year)) %>% 
+  ungroup() %>% 
+  ggplot() + 
+  geom_line(aes(year, estimate, color = variable),alpha = 0.5) +
+  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable)) + 
+scale_color_d3(name = "Targeted?") 
+
+
+targeted_trends
+
+```
+
+\pagebreak
+
+### Regression Diagnostics
+
+We include visual diagnostics of our estimation model. 
+
+
+Looking first at the predictions of the model for the positive observations in the data (i.e. using the full model to predict biomass densities, and then comparing those predictions to cases where some positive biomass densities were observed), the model diagnostics show no clear problems. The R^2^ of the model is 0.43. Residuals do not exhibit trends, though some grouping the residuals is evident. The quantile-quantile plot suggest that on the assumption of log-normal errors on the observed densities is reasonable, though the model appears to have some slight problems estimating the highest observed densities (Fig.S\@ref(fig:obs-v-pred-plot)). 
+
+
+```{r}
+
+fit_report <- base_run$tmb_fit[[1]]$zissou_report
+
+observed_seen <- base_run$tmb_fit[[1]]$zissou_data$log_density
+  
+observed_seeing <- base_run$tmb_fit[[1]]$zissou_data$any_seen
+
+seen_diagnostics <- data_frame(observed = observed_seen, predicted = as.numeric(fit_report$log_density_hat)) %>% 
+  mutate(residuals = predicted - observed)
+
+
+seeing_diagnostics <- data_frame(observed = observed_seeing, predicted = as.numeric(fit_report$prob_seeing)) 
+
+```
+
+
+```{r, eval = FALSE}
+
+a = base_run$tmb_fit[[1]]$zissou_data$x_seen_non_nested %>% 
+  as_data_frame() %>% 
+  select(contains("mean_")) %>% 
+  mutate(resid = seen_diagnostics$residuals) %>% 
+  gather(variable, value, -resid) %>% 
+  ggplot(aes(value, resid)) + 
+  geom_point() + 
+  facet_wrap(~variable)
+
+a
+
+```
+
+
+```{r obs-v-pred-plot, fig.cap="High level diagnostics for observed compontent of Delta-GLM: Observed vs predicted log densities (A), predicted log density vs residuals (B), and a normal qq-plot of the residuals (C)"}
+
+obs_v_pred_plot <- seen_diagnostics %>% 
+  ggplot(aes(observed, predicted)) + 
+  geom_point(alpha = 0.5) + 
+  geom_abline(aes(intercept = 0, slope = 1), linetype = 2, color = "red") + 
+  labs(caption = glue::glue("R^2 is {round(yardstick::rsq(data = seen_diagnostics, truth = observed, estimate = predicted)$.estimate,2)}"), title= "A") + 
+  theme(plot.margin = unit(rep(.1,4), units = "lines"))
+
+fit_v_resid_plot <- seen_diagnostics %>% 
+  ggplot(aes(predicted, residuals)) + 
+  geom_point() + 
+  geom_hline(aes(yintercept = 0), linetype = 2, color = "red") + 
+  labs(title = "B") +
+    theme(plot.margin = unit(rep(.1,4), units = "lines"))
+
+qq_plot <- ggplot(seen_diagnostics, aes(sample = residuals)) +
+  stat_qq() +
+  stat_qq_line() + 
+  labs(title = "C") + 
+    theme(plot.margin = unit(rep(.1,4), units = "lines"))
+
+
+obs_v_pred_plot/(fit_v_resid_plot + qq_plot)
+
+
+```
+
+
+
+In order to evaluate the ability of the model to estimate positive observations, we can compare the the binned predicted probability of a positive observation vs proportion of observations in that bin that recorded positive observations. If our model is working well, we would expect a group of fisheries that our model estimates on average should have a 50% probability of a positive observation, then we should expect about 50% of those observations to have positive observations. This is indeed what we see from the model (Fig.S\@ref(fig:obs-prob-plot)).
+
+```{r obs-prob-plot , fig.cap = "Binned mean predicted probability of detection provided by the first stage of the hurdle model vs observed proportion of positive detections"}
+seeing_diag_plot <- seeing_diagnostics %>% 
+  ungroup() %>% 
+  mutate(binned_prob = ntile(predicted, 20)) %>% 
+  arrange(binned_prob) %>% 
+  group_by(binned_prob) %>% 
+  summarise(mean_prob_seen = mean(predicted),
+            percent_observed = mean(observed))  %>% 
+  ggplot() +
+  geom_point(aes(mean_prob_seen, percent_observed)) + 
+  geom_abline(aes(intercept = 0, slope = 1), color = "red", linetype = 2) + 
+  labs(x = "Binned Predicted Probability of Detection", y = "Proportion of Positive Observations")
+  
+
+seeing_diag_plot
+```
+
+
+We can also examine the receiver-operator-curve (ROC) to assess the performance of the observation component of the model. The area under the curve (AUC) value for the model is 0.84 (on a scale of 0.5 to 1), indicating the model is an overall good predictor of whether or not a given observation of biomass densities will be positive or not. 
+
+
+```{r roc-plot, fig.cap = "Receiver operating characteristic curve of predictions of positive biomass densities"}
+library(plotROC)
+rocplot <- ggplot(seeing_diagnostics, aes(m = predicted, d = observed))+ geom_roc(n.cuts=20,labels=FALSE) + 
+  geom_abline(aes(slope = 1, intercept = 0))
+
+roc_plot <- rocplot + style_roc(theme = zissou_theme) 
+
+roc_plot
+```
+
+
+
+### Standardized Abundance Indices 
+
+Overall most species showed consistent trends in biomass densities across the different islands at which they have been observed (Fig.S\@ref(fig:reg-pop)).  
+
+```{r reg-pop, fig.cap = "Mean density by island by year for each fish species included in the analysis"}
+
+reg_pop_plot <- fitted_data %>% 
+  group_by(region, year, classcode) %>% 
+  summarise(mean_density = mean(exp(log_density))) %>% 
+  mutate(log_mean_density = log(mean_density)) %>% 
+  ungroup() %>% 
+  group_by(classcode, region) %>% 
+  mutate(cs_mean_density = (mean_density - mean(mean_density)) / sd(mean_density)) %>% 
+  ungroup() %>% 
+  ggplot(aes(year, cs_mean_density, color = region)) + 
+  geom_line() + 
+  facet_wrap(~classcode, scales = "free_y") + 
+  theme_minimal()
+
+reg_pop_plot
+
+
+```
+
+The standardized indices of abundance generally did not very substantially from the raw mean densities by species over time. However, for some species, such as blue rockfish, the standardized abundance index suggests much higher biomass densities in the pre-MPA period than those reported in the raw data. We suspect this is largely a function of changes in sampling sites over time, that the standardization is better able to account for (Fig.S\@ref(fig:raw-v-stand-plot)). 
+
+
+```{r raw-v-stand-plot, fig.cap = "Raw (points) and standardized (lines) indices of abundance for each of the fishes included in the analysis"}
+
+
+life_history <- fitted_data %>%
+  select(classcode) %>%
+  unique() %>%
+  mutate(numeric_classcode = as.numeric(as.factor(classcode)))
+
+raw <- fitted_data %>%
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
+
+years <- unique(fitted_data$year)
+
+abundance_trends <- data_frame(abundance_hat = fit_report$abundance_hat,
+                               classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
+  mutate(log_abundance_hat = log(abundance_hat)) %>%
+  group_by(classcode) %>%
+  mutate(year = 1999 + 1:length(abundance_hat)) %>%
+  mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
+  ungroup() %>%
+  rename(numeric_classcode = classcode) %>%
+  left_join(life_history, by = "numeric_classcode" )
+
+
+# 
+# abundance_trends %>%
+#   ggplot(aes(year, log(abundance_hat), color = factor(classcode))) +
+#   geom_line(show.legend = F) +
+#   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+#   facet_wrap(~classcode) +
+#   theme_minimal()
+
+raw_v_std_plot <- abundance_trends %>%
+  ggplot(aes(year, scaled_abundance_hat, color = factor(classcode))) +
+  geom_line(show.legend = F) +
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_point(data = raw,aes(year, smd, color = factor(classcode)), show.legend = F)+
+  facet_wrap(~classcode) +
+  theme_minimal()
+
+raw_v_std_plot
+
+```
+
+
+We include a variety of environmental, observation, and temporal indicators in our model. Inclusion of highly co-linear variables in a model can inflate standard errors and obscure "true" effects. To account for this we calculated the Pearson's correlation coefficients for all of the continuous data included in our model to ensure that none of the included variables had correlation coefficients greater than 0.7, a general rule of thumb for co-inclusion of variables. We did not find problematic levels of correlation among any of our included continuous variables. 
+
+```{r numeric-cor, fig.cap="Pearson correlation coefficients of continuos data included in the regression model"}
+
+numeric_cor_plot <- base_run$data[[1]] %>% 
+  select_if(is.numeric) %>% 
+  select(-log_density,-targeted) %>% 
+  na.omit() %>% 
+  corrr::correlate() %>% 
+  gather("colname","correlation",-rowname) %>% 
+  ggplot(aes(rowname, colname,fill = correlation)) + 
+  geom_tile() + 
+  geom_text(aes(rowname, colname, label = round(correlation,2))) + 
+  scale_fill_gradient2(low = "tomato", mid = "white", high = "steelblue", midpoint = 0, limits = c(-1,1)) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) 
+
+numeric_cor_plot
+  
+  
+
+```
+
+
+## Alternative estimation models
+
+Our proposed identification strategy attempts to control for non-MPA (and not directly modeled) related changes in abundances through the trend in the non-targeted species. However, a simpler alternative would be to simply compare densities before-and-after MPA implementation, while explicitly controlling for non-MPA related factors that we believe may have some effect on densities (a "selection on observables" strategy). To that end, we fit a mixed-effects regression that models log densities  of targeted species only (of positive observations only for simplicity's sake here) as a function of temperature deviations, kelp cover, observer experience, random effects for species and region, and fixed effects for each year in the data (omitting the year 2000). The hypothesis here is that any non-MPA related factors that affect densities are accounted for in the observed variables included in the model. 
+
+Using this model, densities of targeted species appear to have been declining steadily since 2000, and appear to have plateaued off since the implementation of MPAs in 2003. Without an identification strategy such as the one employed in this study then, all we could conclude is that densities appear to be lower post-MPA, and have not increased substantially over time (Fig.S\@ref(fig:obs-plot)).  
+
+
+```{r obs-plot, fig.cap = "Selection on observables identification strategy. Plotted estiamtes are fixed effects of year on log-density (relative to the year 2000), controlling for observer experience, temperature deviations, and kelp cover, with random effects for species and region"}
+
+test <- lme4::lmer(log_density~ factor_year + cumulative_n_obs  + temp_deviation + interp_kelp + (1|classcode) + (1|region), data = fitted_data %>% filter(targeted == 1, any_seen == T))
+
+sel_on_obs_plot <- broom::tidy(test) %>% 
+  filter(str_detect(term, "factor_year")) %>% 
+  mutate(year = str_replace_all(term,"\\D","") %>% as.numeric()) %>% 
+  ggplot() + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_pointrange(aes(year, estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) + 
+  labs(y = "Estimated Difference", x = "Year")
+
+
+sel_on_obs_plot
+```
+
+
+
+```{r, include=F}
+raw <- fitted_data %>%
+  group_by(year, classcode, region, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
+
+raw_region <- fitted_data %>%
+  group_by(year, region,classcode, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
+
+
+raw_mpa_only <- fitted_data %>%
+  filter(eventual_mpa == T) %>% 
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
+
+raw_nompa_only <- fitted_data %>%
+  filter(eventual_mpa == F) %>% 
+  group_by(year, classcode, targeted) %>%
+  summarise(md = mean(exp(log_density)),
+            mt = mean(temp_deviation)) %>%
+  group_by(classcode) %>%
+  mutate(smd = (md - mean(md))/(sd(md))) %>%
+  ungroup() %>%
+  left_join(life_history, by = "classcode")
+
+basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
+
+
+```
+
+
+The estimation model used for our main results is complicated. We feel this complexity is justified in order to best capture the uncertainty inherent in the challenging task of conducting underwater visual surveys, as well as the spatio-temporal nature of the underlying data. However, we also ran several simpler models in order to examine the sensitivity of our results to the model structure selected here. 
+
+Much of the complexity of our model comes from the integration of a standardized abundance index for each of the species, which are then compiled into a standardized index of abundance index for targeted species as a whole. 
+
+As a simpler approach, we aggregated the PISCO data into mean biomass densities by species and year across all the Channel Islands. Since all included species have at least some positive observations in each year, this removes the complication of dealing with the probability of detection problem in the raw data, while of course assuming that the net effects of all of the other factors included in our main model are on average zero (e.g. observer skill, visibility, etc.). A difference-in-difference model fit to these simplified data show qualitatively similar (though much more uncertain) results to our full model. In particular, the model shows the same gradual increase in targeted densities relative to non-targeted until 2013, followed by a decrease in this trend. Importantly, though, this simplified model fails to correct for some pre-MPA differences in the two groups, leading to negative "effects" of the MPAs being estimated before the MPAs themselves went in place. While these sort of anticipatory effects are certainly possible [@mcdermott2019], in this case we would suggest the likelier explanation, given that these anticipatory effects disappear in the full model, is that our full model provides important controls for pre-MPA characteristics (Fig.S\@ref(fig:sortasimple-did))
+
+
+```{r, results = "hide"}
+load(file.path(run_dir,"abundance_data.Rdata"))
+
+year_mpa <- 2002
+
+  data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+    mutate(density = exp(log_density) * any_seen) %>%
+    mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+  sortasimple <- data %>%
+    group_by(year, classcode) %>%
+    summarise(mean_density = mean(density),
+              targ = unique(targ)) %>%
+    mutate(mpa = year > year_mpa) %>%
+    ungroup() %>%
+    mutate(fyear = factor(year)) %>%
+    mutate(fyear = relevel(fyear, ref = "2002"))
+
+
+  sortasimple_reg <-
+    rstanarm::stan_glmer(
+      log(mean_density + 1e-3) ~ targ * fyear + (1 |
+                                                   classcode),
+      data = sortasimple,
+      cores = 4
+    )
+
+  sortasimple_plot <- bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                                            regex_pars = ":fyear") +
+    geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
+    scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+    coord_flip() +
+    scale_x_percent() + 
+    zissou_theme + 
+    theme(axis.text.x = element_text(size = 8))
+
+
+```
+```{r sortasimple-did, fig.cap = "Results of simplified difference-in-difference refression. The model estimates the difference in the mean trend of densities of targeted and non-targeted species over time, controlling for the mean densities of each individual species group. Data are initially aggregated to the level of species-by-year."}
+sortasimple_plot
+```
+
+
+As an even simpler approach, aggregated the data to the level of targeted and non-targeted species, and estimated the divergence in their trends over time. 
+
+```{r}
+
+
+  data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+    mutate(density = exp(log_density) * any_seen) %>%
+    mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+  supersimple <- data %>%
+    group_by(year, targeted) %>%
+    summarise(mean_density = mean(density)) %>% 
+    mutate(mpa = year > year_mpa) %>%
+    ungroup() %>%
+    mutate(fyear = factor(year)) %>%
+    mutate(fyear = relevel(fyear, ref = "2002"))
+
+
+  supersimple_reg <-
+    rstanarm::stan_glm(
+      log(mean_density + 1e-3) ~ targeted * fyear,
+      data = supersimple,
+      cores = 4,
+      iter = 5000,
+      adapt_delta = 0.95
+    )
+  
+    # supersimple_reg <-
+    # rstanarm::stan_glm(
+    #   log(mean_density + 1e-3) ~ targ * fyear,
+    #   data = supersimple,
+    #   cores = 4,
+    #   iter = 10000
+    # )
+
+
+  supersimple_plot <- bayesplot::mcmc_areas(as.matrix(supersimple_reg),
+                                            regex_pars = ":fyear") +
+    geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
+    scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+    coord_flip() +
+    scale_x_percent() + 
+    zissou_theme + 
+    theme(axis.text.x = element_text(size = 8))
+
+```
+
+```{r}
+supersimple_plot
+```
+
+
+
+### Synthetic controls
+
+Synthetic controls present an alternative method for attempting to estimate the causal effect of a policy intervention [@abadie2010]. A difference-in-difference approach assumes that some observable group serves as an adequate control for the state of the treated group in an untreated world. In our default case, we assume that the mean standardized index of non-targeted species are our control for the targeted species. Synthetic controls present an alternative, where given a timeseries of treated and non-treated groups before and after treatment, the model constructs a new "control" group built by weighting the pre-treatment timeseries of un-treated observations (together with covariates) such that the synthetic control group matches the trends in the treated group pre-treatment. 
+
+
+We chose to present difference-in-difference as our main result since it better allows us to capture the uncertainty in the data generating process through our hierarchical model. However, we felt that it was worth exploring whether synthetic controls provided substantially different results than our default model. 
+
+For the first synthetic control, we pulled our standardized mean index of abundance for targeted species as a whole from our difference-in-difference model as our treated group. We then pull the standardized indices of abundance for each of the non-targeted groups from the difference-in-difference to use as the candidate untreated components for the synthetic controls. A complete synthetic control analysis would require more extensive validation of the methods, but we use this approach simply to explore whether we see substantially different results that the difference-in-difference model. 
+
+We centered and scaled the candidate abundance indices to facilitate model convergence given the very few number of pre-treatment years available. The results of a synthetic control model are presented as the difference between the observed treatment outcome and the synthetic control (the difference in this case being in units of standard deviations). The model was not able to construct an adequate synthetic control at this level, as shown by the differences between the treated group and the synthetic control pre-treatment. However, we would note that the post-treatment results do show similarities with our main results, namely a lack of a clear divergence between the treatment and the control, and an upwards trend up through the earl 2010s followed by a decline (Fig.S\@ref(fig:total-synth)). 
+
+
+```{r, include = FALSE}
+
+nontargeted_index <- data_frame(abundance_hat = fit_report$abundance_hat,
+                               classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
+  mutate(log_abundance_hat = log(abundance_hat)) %>%
+  group_by(classcode) %>%
+  mutate(year = 1999 + 1:length(abundance_hat)) %>%
+  mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
+  ungroup() %>%
+  rename(numeric_classcode = classcode) %>%
+  left_join(life_history, by = "numeric_classcode" ) %>% 
+  left_join(unique(abundance_data$data[[1]] %>% select(classcode, targeted)), by = "classcode") %>% 
+  filter(targeted == 0) %>% 
+  select(log_abundance_hat, year, classcode, targeted)
+
+
+targeted_index <- zissou_fit$zissou_estimates %>%
+  filter(
+    stringr::str_detect(variable, "(targeted_did_betas)"),!str_detect(variable, "non")
+  ) %>%
+  mutate(
+    year = unique(nontargeted_index$year),
+    classcode = "targeted",
+    targeted = 1
+  ) %>%
+  rename(log_abundance_hat = estimate) %>% 
+  select(colnames(nontargeted_index))
+
+  # filter(variable == "seeing_year_species_betas") %>%
+
+
+nontargeted_covariates <- pisco_data %>% 
+  select(classcode, contains("mean"),year, targeted) %>% 
+  filter(targeted == 0) %>% 
+  select(-mean_length) %>% 
+  gather(variable, value, -classcode,-year,-targeted) %>% 
+  group_by(classcode, variable, year) %>% 
+  summarise(mean_value = mean(value, na.rm = TRUE)) %>% 
+  spread(variable, mean_value)
+
+targeted_covariates <- pisco_data %>% 
+  select(classcode, contains("mean"),year, targeted) %>% 
+  filter(targeted == 1) %>% 
+  mutate(classcode = "targeted") %>% 
+  select(-mean_length) %>% 
+  gather(variable, value, -classcode,-year,-targeted) %>% 
+  group_by(classcode, variable, year) %>% 
+  summarise(mean_value = mean(value, na.rm = TRUE)) %>% 
+  spread(variable, mean_value)
+
+
+synth_covariates <- nontargeted_covariates %>% 
+  bind_rows(targeted_covariates) 
+
+synth_data  <- targeted_index %>% 
+  bind_rows(nontargeted_index) %>% 
+  left_join(synth_covariates, by = c("classcode","year")) %>% 
+    mutate(numeric_classcode = as.numeric(factor(classcode))) %>% 
+  group_by(classcode) %>% 
+  mutate(log_abundance_hat = scale(exp(log_abundance_hat))) %>% 
+  ungroup() %>% 
+  as.data.frame()
+
+
+# synth_data %>%
+#   group_by(classcode) %>%
+#   mutate(index = (log_abundance_hat)) %>%
+#   ggplot(aes(
+#     year,
+#     index,
+#     color = factor(targeted),
+#     group = interaction(targeted, classcode)
+#   )) +
+#   geom_line()
+
+prepped_synth_data <-
+  Synth::dataprep(
+    foo = synth_data,
+    predictors = colnames(synth_data)[str_detect(colnames(synth_data),"mean")],
+    predictors.op = "mean",
+    dependent = "log_abundance_hat",
+    unit.variable = "numeric_classcode",
+    unit.names.variable = "classcode",
+    time.variable = "year",
+    treatment.identifier = "targeted",
+    controls.identifier = unique(synth_data$classcode)[unique(synth_data$classcode) != "targeted"],
+    time.predictors.prior = c(2000:2003),
+    time.optimize.ssr = c(2000:2003),
+    time.plot = years
+  )
+
+
+synth_fit <- Synth::synth(prepped_synth_data)
+
+gaps <-
+  rownames_to_column(
+    prepped_synth_data$Y1plot - (prepped_synth_data$Y0plot %*% synth_fit$solution.w) %>%
+      as.data.frame()
+  ) %>%
+  rename(gap = w.weight,
+         year = rowname) %>%
+  mutate(year = as.numeric(year)) %>%
+  mutate(synthetic = as.numeric(prepped_synth_data$Y0plot %*% synth_fit$solution.w)) %>% 
+  mutate(treatment = gap + synthetic)
+
+# path.plot(synth.res = synth_fit,
+#           dataprep.res = prepped_synth_data
+# ) 
+
+total_gap_plot <- gaps %>% 
+  ggplot(aes(year, gap)) + 
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 2003), color = "red")+
+  geom_line() + 
+    labs(x = "Year", y = "Standard deviations from synthetic control")
+
+
+total_synth_plot <- gaps %>% 
+  select(year, synthetic, treatment) %>% 
+  gather(source, value, -year) %>% 
+  group_by(source) %>% 
+  # mutate(value = scale(value)) %>% 
+  ggplot(aes(year, value, color = source, linetype = source)) + 
+  geom_vline(aes(xintercept = 2003), color = "red")+
+  geom_line() + 
+    labs(x = "Year", y = "Standard deviations from synthetic control")
+
+```
+
+```{r  total-synth, fig.cap = "Difference in centered and scaled standardized targeted abundance and synthetic standardized targeted abundance"}
+total_gap_plot
+```
+
+
+As an extension, we repeated this process, but now treating each targeted species individually as the treated group, and the non-targeted species as the non-targeted. This is intended to explore whether we see clearer signals for individual species than we do for the targeted class as a whole. 
+
+Overall we see similarly unclear results as the aggregate targeted synthetic control (and our main results). The synthetic control was better constructed for some individual species, but not clearly for any one, and most species showed some evidence of the upward-then-downward trend seen throughout our results (Fig.S\@ref(fig:synth-classcode-fits)). 
+
+
+```{r, include = FALSE}
+
+synth_foo <-
+  function(treated_classcode,
+           synth_data,
+           targeted_classcodes) {
+    # treated_classcode <- targeted_classcodes[1]
+    
+    temp_synth_data <- synth_data %>%
+      filter(classcode == treated_classcode |
+               !(classcode %in% targeted_classcodes))
+    
+    prepped_synth_data <-
+      Synth::dataprep(
+        foo = temp_synth_data,
+        predictors = colnames(temp_synth_data)[str_detect(colnames(temp_synth_data), "mean")],
+        predictors.op = "mean",
+        dependent = "log_abundance_hat",
+        unit.variable = "numeric_classcode",
+        unit.names.variable = "classcode",
+        time.variable = "year",
+        treatment.identifier = treated_classcode,
+        controls.identifier = unique(temp_synth_data$classcode)[unique(temp_synth_data$classcode) != treated_classcode],
+        time.predictors.prior = c(2000:2003),
+        time.optimize.ssr = c(2000:2003),
+        time.plot = years
+      )
+    
+    
+    synth_fit <- Synth::synth(prepped_synth_data)
+    
+    gaps <-
+      rownames_to_column(
+        prepped_synth_data$Y1plot - (prepped_synth_data$Y0plot %*% synth_fit$solution.w) %>%
+          as.data.frame()
+      ) %>%
+      rename(gap = w.weight,
+             year = rowname) %>%
+      mutate(year = as.numeric(year)) %>%
+      mutate(synthetic = as.numeric(prepped_synth_data$Y0plot %*% synth_fit$solution.w)) %>%
+      mutate(treatment = gap + synthetic)
+  }
+
+nontargeted_index <- data_frame(abundance_hat = fit_report$abundance_hat,
+                               classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
+  mutate(log_abundance_hat = log(abundance_hat)) %>%
+  group_by(classcode) %>%
+  mutate(year = 1999 + 1:length(abundance_hat)) %>%
+  mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
+  ungroup() %>%
+  rename(numeric_classcode = classcode) %>%
+  left_join(life_history, by = "numeric_classcode" ) %>% 
+  left_join(unique(abundance_data$data[[1]] %>% select(classcode, targeted)), by = "classcode") %>% 
+  select(log_abundance_hat, year, classcode, targeted)
+
+
+synth_covariates <- pisco_data %>% 
+  select(classcode, contains("mean"),year, targeted) %>% 
+  select(-mean_length) %>% 
+  gather(variable, value, -classcode,-year,-targeted) %>% 
+  group_by(classcode, variable, year) %>% 
+  summarise(mean_value = mean(value, na.rm = TRUE)) %>% 
+  spread(variable, mean_value)
+
+
+synth_data  <- nontargeted_index %>% 
+  left_join(synth_covariates, by = c("classcode","year")) %>% 
+    mutate(numeric_classcode = as.numeric(factor(classcode))) %>% 
+  group_by(classcode) %>% 
+  mutate(log_abundance_hat = scale(exp(log_abundance_hat))) %>% 
+  ungroup() %>% 
+  as.data.frame()
+
+targeted_classcodes <- unique(synth_data$classcode[synth_data$targeted == 1])
+
+synth_classcode_fits <-
+  tibble(targeted_classcodes = targeted_classcodes) %>%
+  mutate(
+    synthetic_fit = map(
+      targeted_classcodes,
+      synth_foo,
+      synth_data = synth_data,
+      targeted_classcodes = targeted_classcodes
+    )
+  )
+
+
+synth_classcode_fits <- synth_classcode_fits %>% 
+  unnest()
+
+synth_classcode_fits_plot <- 
+synth_classcode_fits %>% 
+  ggplot(aes(year, gap)) + 
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 2003), color = "red")+
+  geom_line() + 
+  facet_wrap(~targeted_classcodes) + 
+  labs(x = "Year", y = "Standard deviations from synthetic control")
+
+
+```
+
+
+
+
+```{r synth-classcode-fits, fig.cap="Synthetic control gaps for each targeted species"}
+synth_classcode_fits_plot + 
+  theme_minimal()
+```
+
+
+## Testing Model Assumptions
+
+
+### Simulation testing
+
+We state that a difference-in-difference model using targeted and non-targeted species is capable (conditional on assumptions) of estimating the causal effect of MPAs. We simulated MPA outcomes to test this claim. We first test our estimation strategy under idealized circumstances, where recruitment is deterministic, PISCO divers all have constant and perfect observer skills. We simulate five species that vary only in their maximum size and length at maturity. For each of these species, we set one version that is targeted by fishing and one that is not. We set a constant fishing mortality rate for each simulated targeted species, and then ran two matched simulations, one with MPAs and one without. We then have our simulated divers sample data from each of these scenarios, and then pass the sampled biomass densities to a simplified version of our difference-in-difference model (omitting the probability of detection step). We can then compare the difference-in-difference estimates of the MPA effect to the true simulated effect. The difference in difference model is able to capture the simulated MPA effect under these circumstances (Fig.S\@ref(fig:simple-did-test))
+
+
+
+```{r simple-did-test, fig.cap = "Simulated mean (red dashed line) and individual species (solid lines) MPA effects over time, along with difference-in-difference estimated MPA effects (mean with 95% confidence intervals)"}
+
+load(file = file.path(run_dir,'simulated_did.Rdata'))
+
+simple_performance$mixed_effect_did + 
+  labs(title = '', x = "Years with MPA protection",
+       y = "MPA Effect")
+```
+
+
+We then simulated a more complex example. We use the actual targeted and non-targeted species from our model. We assign species predominately seen in the western Channel Islands as "cold water" and those in the eastern Channel Islands as warm water. We allow for stochasticity in recruitment. We use El Niño data as a simulated environmental recruitment driver, where we assume that El Niño events produce negative recruitment shocks for cold water species and *vice versa*. We simulate three different divers each with different base skill levels, visual selectivities, and an evolving skill rate (such that observers get better over time). We hold fishing mortality rates constant for each species, but that rate has different effects on different species due to differences in maturity-at-age and steepness. We then test the ability of the difference-in-difference model to isolate the mean MPA effect across all of these targeted species, which our results show it is capable of doing (Fig.S\@ref(fig:complex-did-test)).
+
+```{r complex-did-test,  fig.cap = "Simulated mean (red dashed line) and individual species (solid lines) MPA effects over time, along with difference-in-difference estimated MPA effects (mean with 95% confidence intervals)"}
+
+pisco_performance$mixed_effect_did + 
+    labs(title = '', x = "Years with MPA protection",
+       y = "MPA Effect")
+
+```
+
+### Sensitivity to "missing" observations
+
+Dealing with "missing" observations is a critical challenge in any field observation study. If no observations of a given fish species were recorded on a given transect, should the density of that species on that transect be marked as zero, and influence the estimate of the overall mean density accordingly? The obvious answer seems to be yes, but what if that species simply does not live in the environment covered by a particular transect? For our base runs, we assign a value of zero density on a given transect for any fish species that has been observed at least once at a given site at any time in our data but was not observed on that particular transect. If that species was never observed at that site, we do not include a zero for that species. Our rationale for this is that given the shifting nature of the sampled sites, and the intensity of sampling at those sites, we do not want to skew density trends by changes in the amount of suitable habitat for a given species sampled. However, this is clearly a strong assumption. For example, perhaps the decreasing trend in mean densities from 2000 to 2004 is due to increased number of sites (and therefore zeros) included in the data. To assess the potential importance of this choice, we can compare the mean densities of targeted and non-targeted species over time with the added zeros to the mean densities using only positive observations (i.e. not including any zeros in the data, (Fig.S\@ref(fig:nozero-raw-trend)). The trends in the raw densities, and most importantly the mean trends of targeted and non-targeted fishes, are nearly identical whether or not zeros are added, providing strong evidence that our choice of how to incorporate missing observations into the data are not strongly influencing our overall results. 
+
+```{r nozero-raw-trend, fig.cap = "Centered and scaled mean annual density, excluding zeros, of included fishes (points) and smoothed means of targeted and non-targeted groups (line) over time" }
+
+nozero_trend_plot <- base_run$data[[1]] %>% 
+  filter(any_seen == T) %>% 
+  select(year, targeted,classcode, log_density, any_seen) %>% 
+  mutate(density = exp(log_density) * any_seen) %>% 
+  group_by(classcode,targeted, year) %>% 
+  summarise(md = mean(density)) %>% 
+  group_by(classcode,targeted) %>% 
+  mutate(smd = (md - mean(md)) / sd(md)) %>% 
+  ggplot(aes(year, smd, color = targeted == 1, fill = targeted == 1)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(aes(group = interaction(targeted, classcode)), alpha = 0.25) +
+  geom_smooth() +
+  scale_color_d3(name = "Targeted?") + 
+  scale_fill_d3(name = "Targeted?") +
+  labs(y = "Centered and Scaled Mean Density", x = "Year")
+
+
+nozero_trend_plot
+```
+
+### Testing SUTVA with Convergent Cross Mapping
+
+The difference-in-difference model also assumes that the targeted and non-targeted fishes do not directly or indirectly affect each other.This assumption is clearly violated on some level: all the fishes in this analysis are part of the same ecosystem and therefore interact to some degree. For example, if the protection of targeted predatory fishes results in increased mortality of non-targeted fishes, the model would attribute that as an increased regional effect (greater divergence between the abundance of targeted and non-targeted species). Given the time scale of analysis (15 years of protection), we do not feel that massive trophic cascades are likely to have developed yet, given both the pace and complexity of trophic cascade development [@babcock2010; @pershing2015a]. A complete assessment of evidence for trophic cascades in the Channel Islands is beyond the scope of this study, but to address this question somewhat we utilized convergent cross mapping *sensu* @sugihara2012 to test for a significant causal signal between different broad trophic groups in the data, implemented in the `rEDM` package in R. 
+
+Following methods laid out in @clark2015, we pool the abundance of each broad trophic group by region (Fig.S\@ref(fig:trophic-plot). This uses the data from the islands as "replicates", requiring the assumption that the islands are all part of the same dynamic system, but allowing us to take advantage of the extra information provided by each island to further resolve the reconstructed manifolds. Using these aggregations, we then test whether the variables can be properly embedded, i.e., if they have predictable manifold dynamics. We do this through a simplex forecasting test, using an individual timeseries' own lags to build a manifold. For each timeseries, the "best embedding dimension" is an approximation of the dimensionality of the dynamic system, in other words, the number of dimensions that define and predict the evolving states of the timeseries. This analysis shows that only the carnivore and herbivore groups show evidence of predictability within the timeseries (skill approaching zero within the tested embedding dimensions, Fig.S\@ref(fig:embed-plot)). 
+
+```{r trophic-plot, fig.cap="Centered and scaled densities by broad trophic group and island over time"}
+
+dat <- cip_data %>%
+  group_by(broadtrophic, region, site, side, transect, year, eventual_mpa) %>%
+  summarise(density = sum(density_g_m2)) %>%
+  group_by(broadtrophic, region, site, year) %>%
+  summarise(mean_density = mean(density, na.rm = T)) %>%
+  group_by(broadtrophic,region, year) %>%
+  summarise(regional_density = mean(mean_density, na.rm = T)) %>% 
+  ungroup() %>% 
+  spread(broadtrophic, regional_density) %>% 
+  group_by(region) %>% 
+  arrange(year) %>% 
+  mutate(lag4_carnivore = lag(carnivore,4),
+         lag4_piscovore = lag(piscivore,4)) %>% 
+  na.omit() %>% 
+  ungroup() %>% 
+  filter(year > 1999) 
+
+ dat <- dat %>%
+  select(-lag4_carnivore,-lag4_piscovore)%>%
+  group_by(region)%>%
+  mutate_at(vars(carnivore:planktivore),funs(norm=(.-mean(.))/sd(.)))->dat
+
+group_trends_plot <- dat %>%
+  select(region,year,contains("norm"))%>%
+  gather("group","density",-region,-year)%>%
+  ggplot(aes(year,density,col=group))+
+  geom_line()+
+  scale_color_locuszoom(name="Trophic Group",labels=c("carnivore","herbivore","piscivore","planktivore"))+
+  labs(x="year",y="Centered and Scaled Density")+
+  facet_wrap(~region)
+
+group_trends_plot
+```
+
+
+
+```{r embed-plot, fig.cap = "Predictive skill as a function of embedding dimensions"}
+
+## split data by region to analye timeseries from each island separately
+ana.dat <- dat %>% filter(region=="ANA")
+sci.dat <- dat %>% filter(region=="SCI")
+smi.dat <- dat %>% filter(region=="SMI")
+sri.dat <- dat %>% filter(region=="SRI")
+
+datnest <- dat %>% group_by(region) %>% nest()
+
+datnorm <- dat %>% select(region,year,contains('norm')) %>% ungroup()
+
+# have to record the segments corresponding to each "replicate" so simplex algorithm does not try to make predictions crossing time barriers
+segs <- datnorm %>% mutate(ind=row_number()) %>% group_by(region) %>% summarise(first=first(ind),last=last(ind)) %>%
+  select(-region)
+
+var_names <- c("carnivore_norm","herbivore_norm","piscivore_norm","planktivore_norm")
+
+
+regions.combined.simp.list <- map(var_names,function(x){
+  temp <- datnorm %>% ungroup() %>% select(matches(x)) %>% as.data.frame()
+  out <- simplex(as.numeric(temp[,1]),E=1:10,lib=as.matrix(segs),silent=T) %>%
+    mutate(trophic=x)
+  out
+})
+
+
+embed_plot <- bind_rows(regions.combined.simp.list) %>%
+  ggplot(aes(E,rho,color=trophic))+
+  geom_line(size=2)+
+  facet_wrap(~trophic,nrow=2,scales="free_y")+
+  geom_hline(yintercept = 0,color="black")+
+  labs(x="Embedding Dimension (E)",y=expression(paste("Skill, ",rho)))+
+  scale_x_continuous(breaks=seq(0,12,by=2))+
+  scale_color_locuszoom()+
+  guides(color=F)
+
+embed_plot
+
+```
+
+Focusing on just these two groups then, we can test for a causal relationship through Takens theorem using convergent cross mapping. Generalizations of Takens' theorem indicate that if two variables (in our case, species or physical variables) are part of the same dynamic system, their individual dynamics should reflect their relative causal influence. In other words, if one variable is causally forced by another, that forcing should leave a signature on the first time series. Convergent cross mapping (CCM) tests for causation by using the attractor/manifold built from the time series of one variable to predict another (hence the "cross-mapping"). In simple terms, the *causal effect of A on B is determined by how well B cross-maps A*.
+
+There are two criteria for CCM to establish causality:  First, and most obviously, predictive cross-map skill using all available data should be significantly greater than zero. Second, that predictability should be convergent.  Convergence means that cross-mapped estimates improve with library length (the number of state-space vectors used to build the attractor), because the attractor is more fully resolved and therefore estimation error should decline. Convergence is key to distinguishing causation from simple or spurious correlation. If two variables are spuriously correlated and not causally linked, CCM should fail to satisfy this second criterion. Based on these criteria, there is some slight evidence that herbivores may be driving carnivore densities, but no evidence that carnivores drive herbivores (Fig.S\@ref(fig:cross-map)). This analysis provides evidence that trophic cascades are unlikely to be a significant driver of our results. It is important to note though that this analysis does not mean that trophic cascades could not evolve, rather that we do not detect them with these data at this time. 
+
+```{r cross-map, fig.cap = "Cross mapping of effect of herbivores on carnivores (A) and carnivores on herbivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
+tempE <- 8
+
+temp <- ccm(datnorm,lib=as.matrix(segs),pred=as.matrix(segs),E=tempE,lib_column= 'carnivore_norm',target_column = 'herbivore_norm',lib_sizes = c(10,25,50,75),num_samples=100,replace=T,silent=T,RNGseed = 41389)
+
+c_xmap_h <- temp %>%
+  group_by(lib_size)%>%
+  summarise(rhomean=mean(rho,na.rm=T),upper=quantile(rho, 0.975),lower=quantile(rho, 0.025))%>%
+  ungroup()%>%
+  ggplot(aes(lib_size,rhomean))+
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.3,fill="red")+
+  geom_line(color="darkorchid3")+
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  labs(x="",y=expression(paste(rho, " (predictive skill)")),title="Carnivores on Herbivores")
+
+# cross map herbivore to carnivore
+# inspect the output of simplex from the previous step and use the best embedding dimension (highest rho) for the carnivore time series
+
+tempE <- 6
+
+temp <- ccm(datnorm,lib=as.matrix(segs),pred=as.matrix(segs),E=tempE,lib_column= 'herbivore_norm',target_column = 'carnivore_norm',lib_sizes = c(10,25,50,75),num_samples=100,replace=T,silent=T,RNGseed = 41389)
+
+h_xmap_c <- temp %>%
+  group_by(lib_size)%>%
+  summarise(rhomean=mean(rho,na.rm=T),upper=quantile(rho, 0.975),lower=quantile(rho, 0.025))%>%
+  ungroup()%>%
+  ggplot(aes(lib_size,rhomean))+
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.3,fill="red")+
+  geom_line(color="darkorchid3")+
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  labs(x="Library Size",y=expression(paste(rho, " (predictive skill)")),title="Herbivores on Carnivores")
+
+cross_map_plot <- h_xmap_c + c_xmap_h
+
+cross_map_plot
+```
+
+
+```{r trophic-cor-plot, fig.cap="Estimated correlation coefficients between broad trophic groups at the island by year resolution", eval = FALSE}
+
+trophic_effects_plot <- cip_data %>%
+  group_by(broadtrophic, region, site, side, transect, year, eventual_mpa) %>%
+  summarise(density = sum(density_g_m2)) %>%
+  group_by(broadtrophic, region, site, year) %>%
+  summarise(mean_density = mean(density, na.rm = T)) %>%
+  group_by(broadtrophic,region, year) %>%
+  summarise(regional_density = mean(mean_density, na.rm = T)) %>% 
+  ungroup() %>% 
+  spread(broadtrophic, regional_density) %>% 
+  group_by(region) %>% 
+  arrange(year) %>% 
+  mutate(lag4_carnivore = lag(carnivore,4),
+         lag4_piscovore = lag(piscivore,4)) %>% 
+  na.omit() %>% 
+  ungroup() %>% 
+  filter(year > 1999) %>% 
+  select(-year,-region) %>% 
+  corrr::correlate() %>% 
+   gather("colname","correlation",-rowname) %>% 
+  ggplot(aes(rowname, colname,fill = correlation)) + 
+  geom_tile() + 
+  geom_text(aes(rowname, colname, label = round(correlation,2))) + 
+  scale_fill_gradient2(low = "tomato", mid = "white", high = "steelblue", midpoint = 0, limits = c(-1,1),
+                       guide = guide_colorbar(frame.colour = "black",barheight = 13)) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1,
+                                   hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) 
+
+trophic_effects_plot
+
+
+
+```
+
+## References
+
 

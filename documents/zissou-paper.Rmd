@@ -1753,7 +1753,7 @@ obs_v_pred_plot <- seen_diagnostics %>%
   ggplot(aes(observed, predicted)) + 
   geom_point(alpha = 0.5) + 
   geom_abline(aes(intercept = 0, slope = 1), linetype = 2, color = "red") + 
-  labs(caption = glue::glue("R^2 is {round(yardstick::rsq(data = seen_diagnostics, truth = observed, estimate = predicted),2)}"), title= "A") + 
+  labs(caption = glue::glue("R^2 is {round(yardstick::rsq(data = seen_diagnostics, truth = observed, estimate = predicted)$.estimate,2)}"), title= "A") + 
   theme(plot.margin = unit(rep(.1,4), units = "lines"))
 
 fit_v_resid_plot <- seen_diagnostics %>% 

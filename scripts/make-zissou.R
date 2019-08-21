@@ -55,7 +55,7 @@ run_did <- FALSE # run difference in difference on data from the CINMS
 
 simulate_mpas <- FALSE # simulate MPA outcomes
 
-validate_mpas <- FALSE
+validate_mpas <- TRUE
 
 make_figures <- TRUE
 
