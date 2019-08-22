@@ -421,29 +421,46 @@ where *BH* is the Beverton-Holt recruitment function, *ssb* is spawning-stock-bi
 
 Selectivity is modeled through a logistic form per
 
-$$s_a=\frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{sel}}{\delta_{sel}}})}$$
+\begin{equation}
+s_a=\frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{sel}}{\delta_{sel}}})}
+  (\#eq:sel)
+\end{equation}
 
 where $l_a$ is the mean length at at age, $l_sel$ is the length at which on average 50\% of individuals are selected by the fishery, and $\delta_{sel}$ are the additional units of length at which on average 95\% of fish are selected by the fishery. 
 
 *ssb* is calculated by converting age to mean length, calculating weight at age, maturity at age, and then calculating spawning stock biomass as the sum of spawning potential at age in a given time step. 
 
-$$l_{a} = l_{\infty}\left(1 - e^{-k(a - a_0)}\right)$$
+\begin{equation}
+  l_{a} = l_{\infty}\left(1 - e^{-k(a - a_0)}\right)
+  (\#eq:len)
+\end{equation}
+
 
 
 Weight at age is then given by 
 
-$$b_{a} = w_a \times l_{a}^{w_b}$$
+\begin{equation}
+  b_{a} = w_a \times l_{a}^{w_b}
+  (\#eq:weight)
+\end{equation}
 
 
 and maturity *mat* is calculated as
 
-$$\frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{mat}}{\delta_{mat}}})}$$
+\begin{equation}
+  \frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{mat}}{\delta_{mat}}})}
+  (\#eq:mat)
+\end{equation}
+
 
 where $l_{mat}$ is the length at which on average 50\% of individuals are sexual maturity, and $\delta_{mat}$ is the units of length beyond $l_{mat}$ at which on average 95\% of fish are sexually mature.
 
 Spawning stock biomass at time *t* is then calculated as
 
-$$ssb_t = \sum_{a=1}^Aw_{a,t}mat_{a,t}n_{a,t}$$
+\begin{equation}
+  ssb_t = \sum_{a=1}^Aw_{a,t}mat_{a,t}n_{a,t}
+    (\#eq:ssb)
+\end{equation}
 
 
 ### Recruitment
@@ -453,34 +470,49 @@ Recruitment follows Beverton-Holt dynamics. We do however allow for three varian
   1. Local density dependence: Density dependence occurs independently in each patch, and recruits then disperse to nearby patches
   
   
-$$n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l}$$
+\begin{equation}
+  n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l}
+  (\#eq:dd1)
+\end{equation}
+
 
 where **d^l** is the larval movement matrix, *h* is Beverton-Holt steepness (constrained between 0.6 and 0.99), *r0* is unfished recruitment, and *ssb0* is unfished spawning stock biomass.
   
   
   2. Global density dependence: Density dependence is a function of the sum of spawning biomass across all patches, and recruits are then distributed according to habitat quality
+
+\begin{equation}
+n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p}
+  (\#eq:dd2)
+\end{equation}  
   
-  
-$$n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p}$$
-  
+
 where *hab* is a vector of habitat quality by patch that sums to 1. 
 
 
 3. Post-dispersal density dependence: Larvae are distributed throughout the system, and then density dependence occurs based on the density of adult biomass at the destination patch.
 
 
-$$larv_{t,p} = ssb_{t-1} \times\boldsymbol{d^l}$$
+\begin{equation}
+  larv_{t,p} = ssb_{t-1} \times\boldsymbol{d^l}
+  (\#eq:larvmove)
+\end{equation}
 
+
+\begin{equation}
+n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l}
+  (\#eq:dd3)
+\end{equation}
   
-$$n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l}$$
-
 ### Dispersal
 
 Dispersal in the model is broken into two components: adult and larval. Both assume a Gaussian dispersal kernel of the form
 
-$$m_{s,p_i,p_j}=\frac{1}{\sqrt{2\pi\sigma_{s,p_i}^2}}e^{-\frac{d_{p_i,p_j}^2}{2\sigma_{s,p_i}^2}}$$
+\begin{equation}
+m_{s,p_i,p_j}=\frac{1}{\sqrt{2\pi\sigma_{s,p_i}^2}}e^{-\frac{d_{p_i,p_j}^2}{2\sigma_{s,p_i}^2}}
+  (\#eq:move)
+\end{equation}
 
-$$m_{s,p_i,p_j}=\frac{m_{s,p_i,p_j}}{\sum_{j=1}^Jm_{s,p_i,p_j}}$$
 
 Where *i* is the source patch, *j* is the destination patch, *d* is the distance between patches *i* and *j* (where distance is measured with wrapped edges, such that if there are 50 patches, patch 1 and patch 50 have a distance of 1), and $\sigma_s*$is the movement rate, in units of patches, for life stage *s* (adult or larval).
 
@@ -488,11 +520,18 @@ We the adult dispersal matrix to be affected by adult density dependence. The id
 
 Under these conditions, the adult movement rate is a linear function of depletion (measured as SSB/SSB0)
 
-$$\sigma_{s=a,p}^* = max(slope\times{d _p+ \sigma_{s=a} \times dmod},0)$$
+\begin{equation}
+\sigma_{s=a,p}^* = max(slope\times{d _p+ \sigma_{s=a} \times dmod},0)
+  (\#eq:ddmove1)
+\end{equation}
 
 where 
 
-$$slope = \sigma_{s=a} - ( \sigma_{s=a} \times dmod)$$
+\begin{equation}
+slope = \sigma_{s=a} - ( \sigma_{s=a} \times dmod)
+  (\#eq:ddmove2)
+\end{equation}
+
 
 Under these conditions, when depletion *d = 1* (meaning the stock is unfished) the adult movement rate equals the max adult movement rate ($\sigma_{s=a}^* = \sigma_{s=a}$). When $d=0$ $\sigma_{s=a}^* = \sigma_{s=a} * dmod$. The greater *dmod* is then, the more movement rates from a patch decline as density declines.
 
@@ -504,15 +543,27 @@ We allow for three fleet models: constant effort, constant catch, and open-acces
 
 Under open-access, fishing effort expands in proportion to a weighted mean of profit-per-unit effort over the last *t* time steps. 
 
-$$profit_{t} = price\times{catch_t} - cost\times{E_t}^2$$
+\begin{equation}
+profit_{t} = price\times{catch_t} - cost\times{E_t}^2
+  (\#eq:profit)
+\end{equation}
+
 
 From there, we determine the new effort as 
 
-$$E_t = E_{t-1} + \theta\times\sum_{i=t-1-l}^{t-1}w_i\frac{profit_{i}}{E^i}$$
+\begin{equation}
+E_t = E_{t-1} + \theta\times\sum_{i=t-1-l}^{t-1}w_i\frac{profit_{i}}{E^i}
+  (\#eq:openaccess)
+\end{equation}
+
 
 where *w* is a weighting function which is just a linear function of time
 
-$$w_i = \frac{i}{\sum_{i=1}^li}$$
+
+\begin{equation}
+  w_i = \frac{i}{\sum_{i=1}^li}
+  (\#eq:oaweight)
+\end{equation}
 
 and *l* is the number of lagged time steps over which to calculate the weighted mean PPUE.
 
@@ -522,17 +573,32 @@ The open-access model can enter chaotic dynamics if the model parameters are not
 
 Given a total amount of effort, we then need to distribute that effort in space. In the simplest form, effort is evenly distributed throughout the available patches. 
 
-$$E_{t,p} = E_t \times \frac{open_p}{\sum_{p=1}^Popen_p}$$
+
+\begin{equation}
+E_{t,p} = E_t \times \frac{open_p}{\sum_{p=1}^Popen_p}
+  (\#eq:simpleeffort)
+\end{equation}
+
+
 
 where *open* indicates whether patch *p* is open to fishing or not. 
 
 Effort can also be distributed according to spawning stock biomass in fishable patches
 
-$$E_{t,p} = E_t \times \frac{open_{t,p}ssb_{t,p}}{\sum_{p=1}^Popen_{t,p}ssb_{t,p}}$$
+\begin{equation}
+E_{t,p} = E_t \times \frac{open_{t,p}ssb_{t,p}}{\sum_{p=1}^Popen_{t,p}ssb_{t,p}}
+  (\#eq:biomasseffort)
+\end{equation}
+
 
 And lastly effort can be distributed according to profit-per-unit-effort
 
-$$E_{t,p} = E_t \times \frac{open_{t,p}ppue_{t,p}}{\sum_{p=1}^Popen_{t,p}ppue_{t,p}}$$
+
+\begin{equation}
+E_{t,p} = E_t \times \frac{open_{t,p}ppue_{t,p}}{\sum_{p=1}^Popen_{t,p}ppue_{t,p}}
+  (\#eq:ppueeffort)
+\end{equation}
+
 
 Under the constant effort or open access scenarios, effort can immediately respond to MPA placement in one of two ways. Effort can concentrate outside the MPAs (such that the sum of effort before and after MPA placement stays constant), or effort can leave the MPAs, such that the total effort in the fishery is reduced by the amount of effort that occurred inside the MPAs immediately before MPA placement. This is intended to simulate a scenario where fishers that used to use the MPA simply leave the fishery, due for example to costs or lack of location specific knowledge to fish outside the MPA, rather than redistribute outside the MPA.
 
@@ -591,51 +657,90 @@ knitr::include_graphics("figs/estimation-cartoon.png")
 
 The first stage of the regression is a log-normal delta model. The model estimates two regressions, the first is a binomial generalized linear model (GLM) with a logit link estimating the probability of observing a given fish species at a observation *i* (transect at time *t*). The probability that a given species was observed *o* at a given observation is distributed
 
-$$o_{s,i} \sim binomial(\frac{1}{1 +e^{-\beta^{o}{X}}}) $$
+\begin{equation}
+o_{s,i} \sim binomial(\frac{1}{1 +e^{-\beta^{o}{X}}})
+  (\#eq:binom)
+\end{equation}
+
  where $\beta^{o}$ are the estimated coefficients for the observation model and *X* is a matrix of covariates that include random effects for each year in the data (2000 to 2017). 
  
 The expected density *d* of positive observations is modeled per a log-normal distribution
  
- $$log(d_{s,i}) \sim normal(\beta^{d}X, \sigma_s)$$
+ \begin{equation}
+  log(d_{s,i}) \sim normal(\beta^{d}X, \sigma_s)
+   (\#eq:logd)
+ \end{equation}
  
 
 where $\beta^{d}$ are the estimated coefficients for the expected density model and *X* is the same matrix of covariates as used in the observation portion of the model and $\sigma_s$ allows for each species *s* to have different standard deviations. 
 
 Our covariate matrix *X* contains both fixed and random effects. Fixed effects include the depth level of the transect, the sampling site, the month of the observation, the estimated surge at the transect, visibility, the depth of the transect, and the experience (and experience squared) of the diver conducting the transect. We classify each species into one of two clusters based on the mean longitude the species was encountered at, breaking the species into two groups: those primarily found in the western end of the Channel Islands those found more in the eastern end.  We then estimate random effects for each island for each cluster
 
-$$\beta_{island,cluster} \sim normal(0,\sigma_{cluster})$$
+
+\begin{equation}
+\beta_{island,cluster} \sim normal(0,\sigma_{cluster})
+  (\#eq:island)
+\end{equation}
 
 This allows the mean effect of each island to differ for each cluster, e.g. allowing the San Miguel, the eastern most island, to have a higher mean density for eastern species than for more western species (if the data suggest it). 
 
 The second critical component of the covariate matrix *X* are random effects for each year for each species
 
-$$\beta_{year,species} \sim normal(0,\sigma_{species})$$
+\begin{equation}
+  \beta_{year,species} \sim normal(0,\sigma_{species})
+  (\#eq:species)
+\end{equation}
+
 
 These $\beta_{year,species}$ represent our "standardized" estimate of observed abundance of each species in each time step, controlling for the included covariates. 
 
 However, we still need to account for changes in the probability of detection over time. For that, we create a standard matrix of with rows equal to the number of years and columns corresponding to each of the columns in *X*, holding everything fixed at mean (or most frequently observed level for factors) levels for all variables in X except for the year and species interaction indices. Calling this standardized matrix $X^{standard}$, the probability of observing a given species in year *y* is then
 
-$$p_{s,y} = (\frac{1}{1 +e^{-\beta^{o}{X^{standard}}}})$$
+\begin{equation}
+p_{s,y} = (\frac{1}{1 +e^{-\beta^{o}{X^{standard}}}})
+  (\#eq:pdetect)
+\end{equation}
+
 
 In the same manner as described by @punt2000, The standardized index of abundance for species *s* in year *y* then is
 
-$$I_{species,year} = p_{species,year}e^{\beta_{species,year}}$$
+
+\begin{equation}
+I_{species,year} = p_{species,year}e^{\beta_{species,year}}
+  (\#eq:index)
+\end{equation}
+
 
 The next phase of the model requires us to estimate the mean abundance of targeted and non-targeted species over time. The concept here is that each $I_{species,year}$ can be modeled by a regression that contains random effects for each year for targeted and non-targeted fishes, the assumption then being that there is a mean density for targeted and non-target species, and $I_{species,year}$ represent deviations from that mean. 
 
-$$log(I_{species,year}) \sim normal(\beta^{effect}X^{effect}, \sigma_I)$$
+\begin{equation}
+log(I_{species,year}) \sim normal(\beta^{effect}X^{effect}, \sigma_I)
+  (\#eq:indexprior)
+\end{equation}
+
 
 $X^{effect}$ contains both fixed and random effects. The fixed effects include an intercept and the temperature deviation for a given species in a year, where temperature deviation is
 
-$$t_{s,y} = (t^{pref}_{s} -  \bar{t_{y}})^2$$
+\begin{equation}
+t_{s,y} = (t^{pref}_{s} -  \bar{t_{y}})^2
+  (\#eq:tempdev)
+\end{equation}
+
 
 where $t^{pref}$ is the preferred temperature for species *s* (drawn form `FishLife`, @thorson2017c), and $\bar{t_{y}}$ is the mean temperature encountered by that species in year *y*. We also include as variables in the model the mean kelp cover experienced by a given species in a given year, as well as the total fishery catches reported in the previous year for that species in the Santa Barbara region [drawn from the California Department of Fish and Wildlife database].  We also include random intercepts for each species in $X^{effect}$. The most important random effects are year effects for targeted and non-targeted species
 
-$$\beta_{year,targeted} \sim normal(0,\sigma_{targeted})$$
+\begin{equation}
+\beta_{year,targeted} \sim normal(0,\sigma_{targeted})
+  (\#eq:betatarg)
+\end{equation}
 
 $\beta_{year,targeted}$ is the mean log density of targeted species in year *y*, controlling for included covariates. Therefore, the final step in the model, the divergence in the standardized abundance trends of targeted and non-targeted species is
 
-$$divergence_{year} =  \beta_{year,targeted = 1} - \beta_{year,targeted = 0}$$
+
+\begin{equation}
+divergence_{year} =  \beta_{year,targeted = 1} - \beta_{year,targeted = 0}
+  (\#eq:mpaeffect)
+\end{equation}
 
 The model is fit in TMB to integrate the uncertainty across all levels of the model, with standard errors for each coefficient in the model estimated through the Laplace approximation. 
 
