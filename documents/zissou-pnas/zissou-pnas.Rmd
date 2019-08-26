@@ -51,8 +51,9 @@ watermark: false
 header-includes:
    - \usepackage{eso-pic,graphicx,transparent}
 output:
-  rticles::pnas_article: default
+  bookdown::html_document2: default
   bookdown::word_document2: default
+  rticles::pnas_article: default
 ---
 
 ```{r, include=FALSE}
@@ -426,7 +427,7 @@ cip_data <- pisco_data %>%
   }
 }
 
-No-take Marine Protected Areas (MPAs), spatial regions of the ocean in which fishing is prohibited, have a long history in the management of marine resources. Traditional cultures in Oceania utilized - often temporary - MPAs as "fish banks" for times of need [@johannes1978]. Modern MPAs were first established primarily as marine analogs to the terrestrial protection of iconic landscapes like Yellowstone or Kruger National Parks [@iucn1976]. However, over time our goals and expectations for MPAs have evolved; while all MPAs are expected to deliver conservation benefits within their borders, most modern MPAs are also established to  bolster fish populations and fishing opportunities throughout the region in which they are located (what we term “regional-scale effects”) [@gaines2010].  
+No-take Marine Protected Areas (MPAs), spatial regions of the ocean in which fishing is prohibited, have a long history in the management of marine resources. Traditional cultures in Oceania utilized - often temporary - MPAs as "fish banks" for times of need [@johannes1978]. Modern MPAs were first established primarily as marine analogs to the terrestrial protection of iconic landscapes like Yellowstone or Kruger National Parks [@iucn1976;@watson2014b]. However, over time our goals and expectations for MPAs have evolved; while all MPAs are expected to deliver conservation benefits within their borders, most modern MPAs are also established to  bolster fish populations and fishing opportunities throughout the region in which they are located (what we term “regional-scale effects”) [@gaines2010].  
 
 Indeed, many recent agreements to expand MPAs (most proximately, the Convention on Biological Diversity’s Strategic Plan for Biodiversity, which calls for 10% of coastal waters to be protected inside MPAs by 2020) rely on the assumption that well-designed MPAs will achieve benefits both within, and outside, their borders. Despite these assumptions, our collective scientific understanding of the regional-scale conservation and fishery impacts of current and future MPAs is surprisingly limited. 
 
@@ -746,6 +747,7 @@ dr_plot <- density_ratios %>%
          years_protected,
          mpa_effect,
          adult_movement,
+         mpa_size,
          contains("density_ratio")) %>%
   mutate(adult_movement = adult_movement / max(adult_movement)) %>%
   gather(scenario, density_ratio, contains("density_ratio")) %>%
@@ -756,7 +758,7 @@ dr_plot <- density_ratios %>%
   geom_vline(aes(xintercept = 0)) + 
   geom_smooth(method = "lm", se = FALSE) +
   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, size = 1.5, color = "red") +
-  geom_point(aes(color = adult_movement), size = 2, alpha = 0.5)  +
+  geom_point(aes(color = adult_movement, size = mpa_size), alpha = 0.5)  +
   facet_wrap(~ rev(scenario), labeller = labeller(`rev(scenario)` = c(biased_density_ratio = "A) Inside vs. Experiment",true_density_ratio = "B) Inside vs. Outside"))) +
   labs(y = "True % Increase in Biomass", x = "% Density Ratio") +
   # scale_x_percent(labels = c(percent(seq(-1,1, by = 1)),">200%")) +
@@ -956,6 +958,8 @@ Discussion {#discussion .unnumbered}
 
 <!-- <!-- zeros may be an artifact of "error in variables", which can bias estimates towards zero [@larsen2019] -->
 
+
+XX we note though that throughout our simulations, conservation gains accrue more rapidly than fishery losses XX. So, while real tradeoffs may exist and must be communicated to stakeholders, for cases where fishery losses, either long or short term, are possible compensation schemes could support fishery losses [@ovando2014].
 
 MPAs are an important part of the marine resource management toolbox. Under ideal circumstances they can protect individual species and ecosystem linkages, while supporting local economies through tourism and fishing opportunities. The rationale for MPA expansion largely relies on an assumption that MPAs will deliver conservation benefits outside their borders. To date, this assumption is insufficiently tested, and this is the focus of our paper. Our results show that regional conservation and fishery benefits of MPAs are highly context dependent and in many circumstances, are likely to be so small that they are nearly impossible to detect empirically.  Indeed, this is exactly what we found in our empirical case study from the Channel Islands, California, USA.
 
