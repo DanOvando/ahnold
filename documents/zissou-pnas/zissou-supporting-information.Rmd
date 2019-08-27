@@ -473,7 +473,7 @@ Recruitment follows Beverton-Holt dynamics. We do however allow for three varian
   
   
 \begin{equation}
-  n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l}
+  n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l} \times \epsilon_t
   (\#eq:dd1)
 \end{equation}
 
@@ -484,7 +484,7 @@ where **d^l** is the larval movement matrix, *h* is Beverton-Holt steepness (con
   2. Global density dependence: Density dependence is a function of the sum of spawning biomass across all patches, and recruits are then distributed according to habitat quality
 
 \begin{equation}
-n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p}
+n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p} \times \epsilon_t
   (\#eq:dd2)
 \end{equation}  
   
@@ -502,9 +502,27 @@ where *hab* is a vector of habitat quality by patch that sums to 1.
 
 
 \begin{equation}
-n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l}
+n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l} \times \epsilon_t
   (\#eq:dd3)
 \end{equation}
+
+$\epsilon$ represents multiplicative recruitment deviates. Deviates are calculated as
+
+
+$$\epsilon_t = e^{recdev_t}$$  
+
+`$recdev$ are the log-normal recruitment deviates in time *t*. 
+
+The stochastic component of the deviate is 
+
+$$\gamma_t \sim norm(-\sigma_r^2/2,\sigma_r)$$
+
+and the final multiplicative recruitment deviate in time *t* is then
+
+$$recdev_t = \gamma_t\sqrt{1 - ac_r^2} + recdev_{t-1}ac_r $$
+
+where *ac* is the autocorrelation of the recruitment function (between 0 and 1). 
+
   
 ### Dispersal
 
@@ -619,6 +637,8 @@ We use this our operating model to simulate 10,000 different fisheries, where ea
 |steepness (h) | ~uniform(0.6,0.95)|
 |Adult movement ($\sigma_{s=a}$) | ~uniform(0,0.5 * P)|
 |Larval movement ($\sigma_{s=l}$) | ~uniform(0,0.5 * P)|
+|Recruitment variation ($\sigma_{r}$) |  $\in\{0,0.05,.1\}$|
+|Recruitment autocorrelation ($\ac_{r}$) |  $\in\{0,0.05,.1\}$|
 |DD adult movement (dmod) | $\in\{0.25,1\}$|
 |Density-dependence timing | $\in\{local, global,post-dispersal\}$|
 |\% Patches in MPA | ~uniform(0.01,1)|
