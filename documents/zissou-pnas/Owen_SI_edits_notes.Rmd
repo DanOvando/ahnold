@@ -11,8 +11,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 * Removed journal SI instructions
 * Proofread for typos etc.
+* I changed the plot theme font family to "Gill Sans MT" just because my machine didn't have Fira Sans and I wanted to see if the graphs would render properly. Obviously feel free to change it back
+* added a couple of references (that you already had in the ref list) in key places
+* where I could, fixed figure labels/titles etc. to be more consistent and clean
+* reworked and edited the EDM / SUTVA section to reflect changed interpretation.
 
-# Other notes
+# Other notes and questions
 
 * Still no link for the Docker container
-* 
+* In the paragraph before eq:pdetect, you're missing a word: "we create standard matrix of (???) with rows equal to...".
+* In talking about the species-specific synthetic controls results, what does this mean? "The synthetic control was better constructed for some individual species, but not clearly for any one"
