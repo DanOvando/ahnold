@@ -8,3 +8,16 @@ output: html_document
 
 Using an state space integral projection model
 
+# watson2014b - The performance and potential of protected areas
+
+There is also strong evi- dence that protected areas maintain species population levels (including threatened species) better than other management approaches17,21–25. For example, well-managed marine protected areas (MPAs) have been found to contain more than 5 times the total large fish biomass and 14 times the shark biomass compared with fished areas - sites lester 2009
+
+
+Broadly, makes a strong review of state of global protected areas. Shouldn't really use a stand-alone citation for density-ratios = population effects; they do say it but it's in such a throw away sentence that hard to make the case strongly based on that
+
+# baetscher2019 Dispersal of a nearshore marine fish connects marine reserves and adjacent fished areas along an open coast
+
+
+Provide genetic evidence for fish born in MPA to recruit outside of MPA
+
+right, need to review sale 2005 again

@@ -53,6 +53,8 @@ load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
+load(file.path(run_dir,"abundance_data.Rdata"))
+
 # load(file = here::here("results",run_name,"about_time.Rdata"))
 
 
@@ -471,7 +473,7 @@ Recruitment follows Beverton-Holt dynamics. We do however allow for three varian
   
   
 \begin{equation}
-  n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l}
+  n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{ssb_{t-1,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{ssb_{t-1,p}}}\right)\times \boldsymbol{d^l} \times \epsilon_t
   (\#eq:dd1)
 \end{equation}
 
@@ -482,7 +484,7 @@ where **d^l** is the larval movement matrix, *h* is Beverton-Holt steepness (con
   2. Global density dependence: Density dependence is a function of the sum of spawning biomass across all patches, and recruits are then distributed according to habitat quality
 
 \begin{equation}
-n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p}
+n_{t,a = 1,p} = \left(\frac{0.8{\times}\sum_{p=1}^P{r0_{p}}\times{h}\times\sum_{p=1}^P{ssb_{t-1,p}}}{0.2\times{\sum_{p=1}^Pssb0_p}\times(1 - h)+(h - 0.2)\times{\sum_{p=1}^Pssb_{t-1,p}}}\right)\times {hab_p} \times \epsilon_t
   (\#eq:dd2)
 \end{equation}  
   
@@ -500,9 +502,27 @@ where *hab* is a vector of habitat quality by patch that sums to 1.
 
 
 \begin{equation}
-n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l}
+n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l} \times \epsilon_t
   (\#eq:dd3)
 \end{equation}
+
+$\epsilon$ represents multiplicative recruitment deviates. Deviates are calculated as
+
+
+$$\epsilon_t = e^{recdev_t}$$  
+
+`$recdev$ are the log-normal recruitment deviates in time *t*. 
+
+The stochastic component of the deviate is 
+
+$$\gamma_t \sim norm(-\sigma_r^2/2,\sigma_r)$$
+
+and the final multiplicative recruitment deviate in time *t* is then
+
+$$recdev_t = \gamma_t\sqrt{1 - ac_r^2} + recdev_{t-1}ac_r $$
+
+where *ac* is the autocorrelation of the recruitment function (between 0 and 1). 
+
   
 ### Dispersal
 
@@ -617,6 +637,8 @@ We use this our operating model to simulate 10,000 different fisheries, where ea
 |steepness (h) | ~uniform(0.6,0.95)|
 |Adult movement ($\sigma_{s=a}$) | ~uniform(0,0.5 * P)|
 |Larval movement ($\sigma_{s=l}$) | ~uniform(0,0.5 * P)|
+|Recruitment variation ($\sigma_{r}$) |  $\in\{0,0.05,.1\}$|
+|Recruitment autocorrelation ($\ac_{r}$) |  $\in\{0,0.05,.1\}$|
 |DD adult movement (dmod) | $\in\{0.25,1\}$|
 |Density-dependence timing | $\in\{local, global,post-dispersal\}$|
 |\% Patches in MPA | ~uniform(0.01,1)|
@@ -743,6 +765,30 @@ divergence_{year} =  \beta_{year,targeted = 1} - \beta_{year,targeted = 0}
 \end{equation}
 
 The model is fit in TMB to integrate the uncertainty across all levels of the model, with standard errors for each coefficient in the model estimated through the Laplace approximation. 
+
+A complete table of estimated coefficients can be seen in Table.S\@ref(tab:betatable).
+
+Species are indicated by "classcode". We provide a table linking classcodes to scientific name, common name, and whether the species is listed as targeted by fishing (Table.S\@ref(tab:classcode))
+
+
+```{r classcode, include=FALSE}
+
+classcode_table <-
+  abundance_data$data[[which(abundance_data$data_source == "pisco")]] %>%
+  select(classcode, taxa, commonname, targeted) %>%
+  unique()
+
+knitr::kable(classcode_table,
+             digits = 2,
+             caption = "Classcode, scientific name, common name, and targeted marker for species included in difference-in-difference regression.",
+             longtable = TRUE,
+             booktabs = TRUE,
+             col.names = colnames(classcode_table)) %>%
+  kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
+
+
+```
+
 
 A complete table of estimated coefficients can be seen in Table.S\@ref(tab:betatable).
 
@@ -1143,7 +1189,6 @@ As a simpler approach, we aggregated the PISCO data into mean biomass densities 
 
 
 ```{r, results = "hide"}
-load(file.path(run_dir,"abundance_data.Rdata"))
 
 year_mpa <- 2002
 
@@ -1718,6 +1763,156 @@ trophic_effects_plot
 
 
 ```
+
+
+## Repeat Analysis with Kelp Forest Monitoring Data
+
+As a robustness check to our main results, we repeated our analysis utilizing data provided by the [Kelp Forest Monitoring Program (KFM)](https://science.nature.nps.gov/im/units/medn/monitor/kelpforest.cfm) conducted in the Channel Islands. Despite have similar but different methods and survey locations, we find almost identical estimated trends in divergences between targeted and non-targeted species using the KFM data (Fig.S\@ref(fig:kfm-did)).
+
+```{r kfm-did,fig.cap = "Estimated divergence in biomass densities of targeted and non-targeted fishes in the Channel Islands (i.e. integrated across inside and outside of MPAs) using the KFM data . MPAs are implemented in 2003 (red dashed line). Estimates are from a regression on log(abundance index), and so estimated effects roughly correspond to percentage changes"}
+
+kfm_did_plot <- kfm_run$did_plot[[1]] + 
+  scale_y_continuous(name = "~Divergence from Non-Targeted", labels = percent) + 
+  labs(caption = "")
+
+kfm_did_plot
+
+```
+
+
+## MPA Only Analysis
+
+Given trends in mean densities observed in the raw data, the "regional conservation effect" estimated by our model, defined as the divergence in trends between the targeted and non-targeted species across the Channel Islands region, is not surprising; By jumping through countless statistical hoops we reach a similar conclusion that we would just by looking at the divergences in the mean trends. The integration of data from inside and outside of MPAs is a possible explanation for this lack of a clear regional effect. If spillover is limited or has simply not developed yet, especially relative to the effect of fishing outside of MPAs, then it is possible that there is a clear positive effect inside the MPAs, a clear negative effect outside, and when we look across both types of sites we get an unclear average of the two. 
+
+To address this, we can first repeat some exploratory data analysis of trends in densities inside and outside the MPAs for targeted and non-targeted species. @Caselle2015 provides a thorough look at this question of differences inside and outside of MPAs, we update the analysis here to account for our specific questions of trend divergence, potential differences in filtering methods, to include data up through 2017, and to utilize our estimation method on just the inside-MPA data. For all exploratory analyses, we consider the same top `r length(top_species)` consistently observed species. Looking first at simple trends in total mean biomass density across these species inside and outside of MPAs, we find evidence that biomass densities inside the MPAs is increasing faster (and is higher inside) than outside (Fig.S\@ref(fig:bio-mpa)). 
+
+
+```{r bio-mpa, fig.cap= "Annual mean aggregate biomass density (summed across all fishes) inside and outside of eventual MPA locations over time. Red dashed line indicates MPA implementation year"}
+
+abundance_index_plot <- cip_data %>% 
+  group_by(targeted, region,site,side, transect, year, eventual_mpa, classcode) %>% 
+  summarise(density = sum(density_g_m2)) %>% 
+  group_by(targeted,classcode, region,site, year, eventual_mpa) %>% 
+  summarise(mean_density = mean(density, na.rm = T)) %>% 
+  group_by(targeted, classcode, year, eventual_mpa) %>% 
+  summarise(mmd = mean(mean_density, na.rm = T)) %>% 
+  group_by(year, eventual_mpa) %>% 
+  summarise(abundance_index = sum(mmd, na.rm = T)) %>% 
+  ggplot(aes(year, abundance_index, color = eventual_mpa)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(size = 2) + 
+  scale_color_manual(values = c("#009ACD", "#548B54"), name = "" , labels = c("Non-MPA",'MPA')) + 
+  scale_y_continuous(name = "Total Abundance Index")
+
+abundance_index_plot
+
+```
+
+Our proposed identification strategy here though is not that total biomass density should be different inside and outside, but that the non-targeted species should serve as the control to the targeted. If we believe that the MPA effects are greater inside the MPA, then we would expect to see stronger divergences in biomass densities between these two targeted and non-targeted fishes inside the MPAs than outside
+
+```{r div-mpa, fig.cap="Trends in total biomass density inside and outside of eventual MPAs for targeted and non-targeted fishes. Red dashed line indicates MPA implementation year"}
+
+facet_labels <- c(
+  `TRUE` = "MPA",
+  `FALSE` = "Non-MPA"
+)
+
+mpa_abundance_plot <- cip_data %>% 
+  mutate(targeted = targeted == 1) %>% 
+  group_by(targeted, region,site,side, transect, year, eventual_mpa, classcode) %>% 
+  summarise(density = sum(density_g_m2)) %>% 
+  group_by(targeted,classcode, region,site, year, eventual_mpa) %>% 
+  summarise(mean_density = mean(density, na.rm = T)) %>% 
+  group_by(targeted, classcode, year, eventual_mpa) %>% 
+  summarise(mmd = mean(mean_density, na.rm = T)) %>% 
+  group_by(year, targeted, eventual_mpa) %>% 
+  summarise(abundance_index = sum(mmd, na.rm = T)) %>% 
+  ungroup() %>% 
+  group_by(targeted, eventual_mpa) %>% 
+  mutate(abundance_index = (abundance_index - mean(abundance_index)) / sd(abundance_index)) %>% 
+  ungroup() %>% 
+  rename(`Eventual MPA?` = eventual_mpa) %>% 
+  ggplot(aes(year, abundance_index, color = targeted)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(size = 2) + 
+  scale_color_manual(values = c("steelblue", "tomato") ,name = "",
+                     labels = c("Non-Targeted","Targeted")) + 
+  facet_wrap(~`Eventual MPA?`, labeller = labeller(`Eventual MPA?` = facet_labels)) + 
+    scale_y_continuous(name = "Total Abundance Index")
+
+mpa_abundance_plot
+
+```
+
+Here we see a different picture. While there is some visual evidence that the targeted species were diverging from the non-targeted faster inside the MPAs than outside, both inside and outside we see that the trend in total biomass density of targeted species is trending downward, relative to the trend in the non-targeted species in recent years. This analysis is of total biomass density However, our model estimates the mean difference in targeted and non-targeted species. Both have their advantages, but we chose the mean to reflect a hypothesis that the MPAs would provide positive benefits across all targeted species. The total biomass density could be strongly affected by a sharp increase or decrease in one or two species, even if the mean trend is different. Examining the mean trends though, we see the same results (Fig.S\@ref(fig:mean-div-mpa)). 
+
+```{r mean-div-mpa, fig.cap = "Trends in mean total biomass density inside and outside of eventual MPAs for targeted and non-targeted fishes. Red dashed line indicates MPA implementation year"}
+
+targeted_mpa_plot <- cip_data %>% 
+  mutate(targeted = targeted == 1) %>% 
+  group_by(targeted, region,site,side, transect, year, eventual_mpa, classcode) %>% 
+  summarise(density = sum(density_g_m2)) %>% 
+  group_by(targeted,classcode, region,site, year, eventual_mpa) %>% 
+  summarise(mean_density = mean(density, na.rm = T)) %>% 
+  group_by(targeted, classcode, year, eventual_mpa) %>% 
+  summarise(mmd = mean(mean_density, na.rm = T)) %>% 
+  group_by(year, targeted, eventual_mpa) %>% 
+  summarise(abundance_index = mean(mmd, na.rm = T)) %>% 
+  ungroup() %>% 
+    group_by(targeted, eventual_mpa) %>% 
+  mutate(abundance_index = (abundance_index - mean(abundance_index)) / sd(abundance_index)) %>% 
+  ungroup() %>% 
+  rename(`Eventual MPA?` = eventual_mpa) %>% 
+  ggplot(aes(year, abundance_index, color = targeted)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(size = 2) + 
+  scale_color_manual(values = c("steelblue", "tomato") ,name = "Targeted?") + 
+  facet_wrap(~`Eventual MPA?`, labeller = label_both) + 
+    scale_y_continuous(name = "Mean Abundance Index")
+
+targeted_mpa_plot
+```
+
+
+Lastly, we can examine both the mean and individual trend to check clear species-by-species outliers in the overall biomass density trends. This analysis shows noise, but overall the targeted and non-targeted species seem to be following similar trends within their respective groups 
+
+```{r cs-trends, fig.cap = "Centered and scaled biomass density trends for each fish grouped by targeted and non targeted (pale lines) and fitted LOESS smoother (with 95% confidence intervals around mean) and mean by targeted and non-targeted groups, inside and outside od MPAs. Red dashed line indicates MPA implementation year"}
+
+species_mpa_trend_plot <- cip_data %>% 
+  group_by(year, classcode, eventual_mpa, targeted) %>% 
+  summarise(mean_density = mean(density_g_m2, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(targeted = targeted == 1) %>% 
+  group_by(classcode, eventual_mpa) %>% 
+  mutate(cs_density = (mean_density - mean(mean_density)) / sd(mean_density)) %>% 
+  ungroup() %>% 
+    rename(`Eventual MPA?` = eventual_mpa) %>% 
+  ggplot(aes(year, cs_density, color = targeted, fill = targeted)) + 
+    geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line(aes(group = interaction(classcode, targeted)),alpha = 0.5) + 
+  geom_smooth() +
+    scale_color_manual(values = c("steelblue", "tomato") ,name = "", labels = c("Non-Targeted","Targeted")) +
+      scale_fill_manual(values = c("steelblue", "tomato") ,name = "",labels = c("Non-Targeted","Targeted")) +
+
+    facet_wrap(~`Eventual MPA?`, labeller = labeller(`Eventual MPA?` = facet_labels)) + 
+    labs(y = "Centered and Scaled Mean Density", x = "Year")
+
+species_mpa_trend_plot
+
+```
+
+These visual assessments suggest that similar to our results looking both inside and outside of MPAs, we would expect that our estimation model fitted only on data from inside eventual MPAs would reach similar conclusions as our results fitted to data from both inside and outside MPAs. To test this, we re-ran our analysis, but only using data from sites that are eventually placed inside MPAs. Our results reflect the same trends as displayed in the raw data and the statistical region-wide analysis, providing robust statistical support to the conclusions we would reach from visually examining the raw data (Fig.S \@ref(fig:mpa-did)). 
+
+```{r mpa-did,fig.cap = "Estimated divergence in biomass densities of targeted and non-targeted fishes inside eventual Channel Islands MPAs. MPAs are implement in 2003 (red dashed line). Estimates are from a regression on log(abundance index), and so estimated effects roughly correspond to percentage changes" }
+
+mpa_did_plot <- mpa_run$did_plot[[1]] + 
+       labs(x = "Year", y = "Estimate of Regional Effect",
+          caption = "")
+
+mpa_did_plot
+
+```
+
 
 ## References
 
