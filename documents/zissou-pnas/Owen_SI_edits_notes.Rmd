@@ -1,0 +1,18 @@
+---
+title: "Owen SI edits"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Things I did
+
+* Removed journal SI instructions
+* Proofread for typos etc.
+
+# Other notes
+
+* Still no link for the Docker container
+* 
