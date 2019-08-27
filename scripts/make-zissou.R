@@ -40,10 +40,9 @@ walk(functions, ~ here::here("functions", .x) %>% source()) # load local functio
 
 # options -----------------------------------------------------------------
 
-run_name <- 'v4.1'
+run_name <- 'v4.3'
 
-run_description <- "hopefully publication version, incorporating new adult
-density dependent movement"
+run_description <- "now with recruitment deviates and autocorrleation"
 
 # the following analysis run the complete contents of "zissou". Each section depends on the out
 # outcomes of the prior section, but will load relevant saved files.
@@ -54,7 +53,7 @@ run_did <- TRUE # run difference in difference on data from the CINMS
 
 simulate_mpas <- FALSE # simulate MPA outcomes
 
-validate_mpas <- TRUE
+validate_mpas <- FALSE
 
 make_figures <- TRUE
 
@@ -1337,8 +1336,8 @@ model_runs <- model_runs %>%
            tibble(
              scientific_name = sample(rfishbase::taxonomy(), samps, replace = T),
              steepness = runif(samps, min = 0.6, max = 0.95),
-             adult_movement = sample(0:(0.5 * num_patches), samps, replace = T),
-             larval_movement = sample(0:(0.5 * num_patches), samps, replace = T),
+             adult_movement = sample(0:round(0.25 * num_patches), samps, replace = T),
+             larval_movement = sample(0:round(0.25 * num_patches), samps, replace = T),
              density_movement_modifier = sample(c(0.25, 1), samps, replace = T),
              density_dependence_form = sample(1:3, samps, replace = T),
              mpa_size = runif(samps, min = 0.01, max = 1),
@@ -1359,7 +1358,9 @@ model_runs <- model_runs %>%
              min_size = runif(samps, min = 0.01, max = 0.75),
              mpa_habfactor = sample(c(1, 4), samps, replace = TRUE),
              size_limit = runif(samps, 0.1, 1.25),
-             random_mpa = sample(c(TRUE, FALSE), samps, replace = TRUE)
+             random_mpa = sample(c(TRUE, FALSE), samps, replace = TRUE),
+             sigma_r = sample(c(0,.05,.1,.2), samps, replace = TRUE),
+             rec_ac =  sample(c(0,.05,.1,.2), samps, replace = TRUE)
            )
 
 
@@ -1393,7 +1394,9 @@ model_runs <- model_runs %>%
              adult_movement = adult_movement,
              larval_movement = larval_movement,
              density_dependence_form = density_dependence_form,
-             density_movement_modifier = density_movement_modifier
+             density_movement_modifier = density_movement_modifier,
+             sigma_r = sigma_r,
+             rec_ac = rec_ac
            ),
            safely(create_fish),
            price = 10
@@ -3466,7 +3469,7 @@ if (make_figures == TRUE){
 
 if (knit_paper == TRUE){
 
-  rmarkdown::render(here::here("documents","zissou-pnas","zissou-pnas-v3.Rmd"))
+    rmarkdown::render(here::here("documents","zissou-pnas","zissou-pnas.Rmd"))
 
 }
 
