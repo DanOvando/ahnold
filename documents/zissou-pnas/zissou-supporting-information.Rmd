@@ -1,9 +1,9 @@
 ---
 title: "Supporting Information"
 output: 
-  pdf_document: default
   bookdown::pdf_document2:
     keep_tex: true
+  pdf_document: default
 bibliography: My Library.bib
 csl: pnas.csl
 header-includes:
@@ -38,8 +38,6 @@ sim_years <- 50
 burn_years <- 20
 
 num_patches <- 25
-
-  samps <- 20000
 
   run_name <- "v4.2"
 
@@ -91,7 +89,6 @@ processed_grid <- processed_grid %>%
 outcomes <- processed_grid %>%
   left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
   select(-fishery_effect, -density_ratio) %>%
-  slice(1:samps) %>%
   unnest() %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
@@ -118,7 +115,6 @@ eqo <- outcomes %>%
 
 fishery_outcomes <- processed_grid %>%
   select(-mpa_effect, -density_ratio) %>%
-  slice(1:samps) %>%
   unnest() %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
@@ -131,7 +127,6 @@ fishery_outcomes <- processed_grid %>%
 
 density_ratios <- processed_grid %>%
   select(-fishery_effect) %>%
-  slice(1:samps) %>%
   unnest() %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
@@ -163,7 +158,7 @@ zissou_theme <-
     base_size = 12,
     axis_title_size = 12,
     strip_text_size = 12,
-    base_family = "Gill Sans MT"
+    base_family = "Helvetica"
   )
 
 
@@ -623,7 +618,7 @@ We use this our operating model to simulate 10,000 different fisheries, where ea
 |Adult movement ($\sigma_{s=a}$) | ~uniform(0,0.5 * P)|
 |Larval movement ($\sigma_{s=l}$) | ~uniform(0,0.5 * P)|
 |Recruitment variation ($\sigma_{r}$) |  $\in\{0,0.05,.1\}$|
-|Recruitment autocorrelation ($\ac_{r}$) |  $\in\{0,0.05,.1\}$|
+|Recruitment autocorrelation ($ac_{r}$) |  $\in\{0,0.05,.1\}$|
 |DD adult movement (dmod) | $\in\{0.25,1\}$|
 |Density-dependence timing | $\in\{local, global,post-dispersal\}$|
 |\% Patches in MPA | ~uniform(0.01,1)|
@@ -645,6 +640,120 @@ We ran 10,000 simulations from these distributions. Each simulation runs for 50 
 ##### Filtering Simulations
 
 After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario; b) did not converge to the correct bionomic equilibrium in the open-access scenario; or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with `r nrow(processed_grid) ` viable simulations. 
+
+
+#### Additional Simulation Results
+
+At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs  
+
+```{r mpa-tradeoffs}
+
+tradeoffs <- fishery_outcomes %>% 
+  select(experiment, year, years_protected,mpa_size, fishery_effect) %>% 
+  left_join(outcomes %>% 
+  select(experiment,year, mpa_effect), by = c("experiment","year")
+)
+
+
+vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>% 
+  mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>% 
+  mutate(vline = slope * fishery_effect)
+
+tradeoff_kobe_plot = tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  ungroup() %>%
+  mutate(mpa_bin = cut(mpa_size, breaks = seq(0, 1, by = 0.25))) %>%
+  ggplot(aes(fishery_effect, mpa_effect)) +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 0), linetype = 2) +
+  geom_hex(bins = 5,    aes(fill = ..density..),color = "black") +
+    geom_line(data = vplot,aes(fishery_effect, vline), color = "red",
+              linetype = 2, size = 2) +
+
+  # geom_abline(aes(slope = -1, intercept = 0), linetype = 2, color = "red", size = 2) +
+  #   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, color = "black", size = 2) +
+  scale_fill_distiller(
+    # option = "plasma",
+    labels = scales::percent_format(accuracy = 1),
+    name = "% of Sims",
+    guide = hgc
+  ) +
+  # geom_point(size = 2, alpha = 0.2, aes(color = factor(mpa_bin))) +
+  # scale_color_viridis_d() +
+  facet_wrap( ~ mpa_bin) +
+  theme_minimal() +
+  theme(legend.position = "top") + 
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Change Fishery") +
+      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Change Conservation")
+
+# suppose that utility is the sum of percentage gain in conservation and fishery
+
+tradeoff_bins <- tradeoffs %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
+  mutate(tradeoff_bin = plyr::round_any(tradeoff,.25),
+         mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
+  group_by(tradeoff_bin, mpa_bin) %>% 
+  count() %>% 
+  group_by(mpa_bin) %>% 
+  mutate(n = n / sum(n)) %>% 
+  ungroup() 
+
+tradeoff_summary <- tradeoffs %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
+  mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
+  group_by(mpa_bin) %>% 
+  summarise(net_tradeoff = mean(tradeoff > 0)) 
+
+tradeoff_density_plot <- tradeoff_bins %>%
+  ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) +
+  # geom_hline(aes(yintercept = 0), linetype = 2, size = 2) +
+  geom_tile(alpha = 0.9) +
+  scale_fill_viridis(
+    option = "plasma",
+    labels = scales::percent_format(accuracy = 1),
+    name = "% of Sims",
+    guide = hgc
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% of Range in MPA") +
+  scale_y_continuous(name = "Net Utility") + 
+  theme(legend.position = "top")
+
+
+
+tradeoff_summary_plot <- tradeoff_summary %>%
+  ggplot(aes(mpa_bin, net_tradeoff)) +
+  geom_col() +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% of Range in MPA") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Positive Utility") 
+
+tradeoff_density_plot + tradeoff_summary_plot & theme(
+    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
+    axis.text.x = element_text(size = 8),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    ) 
+   
+
+```
+
+why is it going to be hard ot detect regional effects of MPAs few if any empirical studies at net regional effects. does this mean that i doesn't exist, or impossible tot est, why? three fundamental stumbling blocks
+## Channel Islands Data
+
+```{r}
+
+
+```
+
 
 ## Estimation Model
 
@@ -756,19 +865,31 @@ A complete table of estimated coefficients can be seen in Table.S\@ref(tab:betat
 Species are indicated by "classcode". We provide a table linking classcodes to scientific name, common name, and whether the species is listed as targeted by fishing (Table.S\@ref(tab:classcode))
 
 
-```{r classcode, include=FALSE}
+Stock status estimates are not available for many of the targeted species in the database. The California Department of Fish and Wildlife compiles status estimates for many nearshore finfish (https://www.wildlife.ca.gov/Conservation/Marine/Groundfish/Nearshore-Finfish), including recent stock assessments.  For species not listed here we searched for available information on recent stock status from relevant stock assessments. 
 
-classcode_table <-
-  abundance_data$data[[which(abundance_data$data_source == "pisco")]] %>%
-  select(classcode, taxa, commonname, targeted) %>%
-  unique()
+```{r classcode}
 
-knitr::kable(classcode_table,
+species_data <- cip_data %>% 
+  select(classcode, commonname, taxa, targeted) %>% 
+  unique() %>% 
+  arrange(desc(targeted)) %>% 
+  mutate(targeted = targeted == 1) %>% 
+  rename(`Common Name` = commonname, 
+         `Scientific Name` = taxa,
+         `Targeted?` = targeted)
+
+status <- read_csv(here::here("data","stock-status-summaries.csv")) %>% 
+  select(classcode, `Stock Status`)
+
+species_data <- species_data %>% 
+  left_join(status, by = "classcode")
+
+knitr::kable(species_data,
              digits = 2,
-             caption = "Classcode, scientific name, common name, and targeted marker for species included in difference-in-difference regression.",
+             caption = "Species included in estimation model",
              longtable = TRUE,
              booktabs = TRUE,
-             col.names = colnames(classcode_table)) %>%
+             col.names = colnames(species_data)) %>%
   kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
 
 
@@ -1599,6 +1720,29 @@ Convergent cross mapping is a nonlinear forecasting method that uses observed ti
 
 ```{r trophic-plot, fig.cap="Centered and scaled densities by broad trophic group and island over time"}
 
+trophic_groups <- cip_data %>% 
+  select(classcode, broadtrophic) %>% 
+  unique()
+
+
+# dat <- abundance_trends %>%
+#   left_join(trophic_groups, by = "classcode") %>%
+#   group_by(broadtrophic, year) %>%
+#   summarise(density = mean(scaled_abundance_hat)) %>%
+#   group_by(broadtrophic) %>%
+#   mutate(density = scale(density)) %>%
+#   ungroup() %>% 
+#   spread(broadtrophic, density) %>% 
+#   arrange(year) %>% 
+#   mutate(lag4_carnivore = lag(carnivore,4),
+#          lag4_piscovore = lag(piscivore,4)) %>% 
+#   na.omit() %>% 
+#   ungroup() %>% 
+#   filter(year > 1999) 
+# dat %>%
+#   ggplot(aes(year, density, color = broadtrophic)) +
+#   geom_line()
+
 dat <- cip_data %>%
   group_by(broadtrophic, region, site, side, transect, year, eventual_mpa) %>%
   summarise(density = sum(density_g_m2)) %>%
@@ -1626,6 +1770,7 @@ group_trends_plot <- dat %>%
   gather("group","density",-region,-year)%>%
   ggplot(aes(year,density,col=group))+
   geom_line()+
+  geom_point() +
   scale_color_locuszoom(name="Trophic Group",labels=c("carnivore","herbivore","piscivore","planktivore"))+
   labs(x="year",y="Centered and Scaled Density")+
   facet_wrap(~region)

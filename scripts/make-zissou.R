@@ -50,7 +50,7 @@ density dependent movement"
 # So, once you've run simulate_mpas, you can set it to FALSE and validata_mpas will work
 
 
-run_did <- FALSE # run difference in difference on data from the CINMS
+run_did <- TRUE # run difference in difference on data from the CINMS
 
 simulate_mpas <- FALSE # simulate MPA outcomes
 
@@ -66,7 +66,7 @@ sim_years <- 50
 
 num_patches <- 50
 
-n_cores <- 12
+n_cores <- 1
 
 # prepare run -------------------------------------------------------------
 
@@ -1185,7 +1185,6 @@ model_runs <- cross_df(
 #   filter(data_source == "pisco" & mpa_only == FALSE & center_scale == TRUE)
 
 # model_runs <- model_runs %>% filter(data_source == "kfm")
-
 if (run_tmb == T){
 
   if (file.exists("fit-progress.txt")){
@@ -1196,6 +1195,9 @@ if (run_tmb == T){
 
   doParallel::registerDoParallel(cores = n_cores)
   #
+  # model_runs <- model_runs %>%
+  #   slice(3)
+
   fits <- foreach::foreach(i = 1:nrow(model_runs)) %dopar% {
 
     # fits <- list()
@@ -1215,7 +1217,8 @@ if (run_tmb == T){
                 fixed_did = FALSE,
                 non_nested_did_variables = c(
                   "temp", "kelp", "lag_catch"
-                )
+                ),
+                bin_years = TRUE
     )
 
     write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
@@ -1227,7 +1230,6 @@ if (run_tmb == T){
     out <- fits
 
   } # close dopar
-
 
   save(file = paste0(run_dir, '/model_fits.Rdata'),
        fits)
