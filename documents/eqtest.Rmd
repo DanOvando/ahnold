@@ -7,6 +7,29 @@ output:
 ---
 
 
+| Variable | Distribution|
+|---------:|:-----------:|
+| Scientific Name | Drawn from all possible species in `FishLife` (@thorson2017c)|
+|steepness (h) | ~uniform(0.6,0.95)|
+|Adult movement ($\sigma_{s=a}$) | ~uniform(0,0.5 * P)|
+|Larval movement ($\sigma_{s=l}$) | ~uniform(0,0.5 * P)|
+|Recruitment variation ($\sigma_{r}$) |  $\in\{0,0.05,.1\}$|
+|Recruitment autocorrelation ($ac_{r}$) |  $\in\{0,0.05,.1\}$|
+|DD adult movement (dmod) | $\in\{0.25,1\}$|
+|Density-dependence timing | $\in\{local, global,post-dispersal\}$|
+| Patches in MPA | ~uniform(0.01,1)|
+|Initial fishing relative to natural mortality | ~uniform(0.01,4)|
+|Selectivity as a multiple of maturity length| ~uniform(0.1,1.25)|
+|Fleet model| $\in\{open-access, constant-effort,constant-catch\}$|
+|Spatial effort model| $\in\{uniform, biomass,profits\}$|
+|Years into simulation to start MPA| ~round(uniform(5,0.66 * T))|
+|MPA is sprinkler?| $\in\{TRUE,FALSE\}$|
+|Randomly place MPA?| $\in\{TRUE,FALSE\}$|
+|Fleet reaction to MPA| $\in\{concentrate, abandon-ship\}$|
+|Patchiness | ~uniform(0.01,0.75)|
+|MPA habitat factor| $\in\{1, 4\}$|
+
+
 $$\sum_i^p $$
 
 $\in$
@@ -18,6 +41,11 @@ $\in$
      =  n_{t-1,a}e^{-(m + f*s_a)} + n_{t-1,a-1}e^{-(m + f*s_{a-1})}, & \text{if $a = max(a)$}
   \end{cases}
   (\#eq:pop)
+\end{equation}
+
+
+\begin{equation}
+s_a=\frac{1}{(1 + e^{-log(19)\times\frac{l_a - l_{sel}}{\delta_{sel}}})}
 \end{equation}
 
 were *ssb* represents spawning stock biomass, by first
