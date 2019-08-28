@@ -793,7 +793,7 @@ knitr::kable(table,
 ```
 
 
-Figures S\@ref(fig:fe-plot):S\@ref(fig:targ-plot) present estimated effects for covariates included in the model, along with the raw estimated mean trends of the targeted and non-targeted species (while the difference between these trends is presented in our main results). 
+Figures S\@ref(fig:fe-plot):S\@ref(fig:targ-plot) present estimated effects for covariates included in the model, along with the raw estimated mean trends of the targeted and non-targeted species (while the difference between these trends is presented in our main results).
 
 \newpage
 
@@ -807,7 +807,10 @@ Figures S\@ref(fig:fe-plot):S\@ref(fig:targ-plot) present estimated effects for 
                        y = estimate,
                        ymin = lower,
                        ymax = upper)) +
-   facet_wrap(~group) +
+   facet_wrap(~group, labeller=labeller(group=c(
+     seeing_non_nested_betas="Observation Model\n(seeing)",
+     seen_non_nested_betas = "Observed Model\n(seen)"
+   ))) +
    coord_flip() +
    theme(axis.text.y = element_text(size = 10))
 
@@ -833,7 +836,10 @@ non_nested_beta_plot
                        y = estimate,
                        ymin = lower,
                        ymax = upper)) +
-   facet_grid(island~group, scales = "free") +
+   facet_grid(island~group, scales = "free",labeller=labeller(group=c(
+     seeing_non_nested_betas="Observation Model\n(seeing)",
+     seen_non_nested_betas = "Observed Model\n(seen)"),
+     island=c(anacapa="ANA",sci="SCI",smi="SMI",sri="SRI"))) +
    coord_flip() +
    theme(axis.text.y = element_text(size = 10)) + 
   theme_minimal()
@@ -859,7 +865,9 @@ non_nested_site_beta_plot +
                         y = estimate,
                         ymin = lower,
                         ymax = upper, color = cluster)) +
-    facet_wrap(~group)
+    facet_wrap(~group,labeller=labeller(group=c(
+     seeing_region_cluster_betas="Observation Model\n(seeing)",
+     seen_region_cluster_betas = "Observed Model\n(seen)")))
 
 region_cluster_plots
 
@@ -872,12 +880,14 @@ region_cluster_plots
 targeted_trends <- report$zissou_estimates %>% 
   filter(str_detect(variable, "targeted_did")) %>% 
   group_by(variable) %>% 
-  mutate(year = unique(fitted_data$year)) %>% 
+  mutate(year = unique(fitted_data$year),
+         labvar=ifelse(variable=="nontargeted_did_betas","Nontargeted","Targeted")) %>% 
   ungroup() %>% 
   ggplot() + 
-  geom_line(aes(year, estimate, color = variable),alpha = 0.5) +
-  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = variable)) + 
-scale_color_d3(name = "Targeted?") 
+  geom_line(aes(year, estimate, color = labvar),alpha = 0.5) +
+  geom_pointrange(aes(year, estimate, ymin = lower, ymax = upper, color = labvar)) + 
+  scale_color_d3(name = "") +
+  theme(legend.position = c(0.8,0.9))
 
 
 targeted_trends
@@ -971,7 +981,6 @@ seeing_diag_plot <- seeing_diagnostics %>%
   geom_point(aes(mean_prob_seen, percent_observed)) + 
   geom_abline(aes(intercept = 0, slope = 1), color = "red", linetype = 2) + 
   labs(x = "Binned Predicted Probability of Detection", y = "Proportion of Positive Observations")
-  
 
 seeing_diag_plot
 ```
@@ -1005,9 +1014,12 @@ reg_pop_plot <- fitted_data %>%
   mutate(cs_mean_density = (mean_density - mean(mean_density)) / sd(mean_density)) %>% 
   ungroup() %>% 
   ggplot(aes(year, cs_mean_density, color = region)) + 
+  scale_color_npg(name="Region")+
   geom_line() + 
+  labs(y="Centered and Scaled Density",x="Year")+
   facet_wrap(~classcode, scales = "free_y") + 
-  theme_minimal()
+  theme_minimal()+
+  theme(axis.text=element_text(size=6))
 
 reg_pop_plot
 
@@ -1060,7 +1072,9 @@ raw_v_std_plot <- abundance_trends %>%
   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
   geom_point(data = raw,aes(year, smd, color = factor(classcode)), show.legend = F)+
   facet_wrap(~classcode) +
-  theme_minimal()
+  labs(y="Raw (dots) and Standardized (lines) Abundance",x="Year")+
+  theme_minimal()+
+  theme(axis.text=element_text(size=6))
 
 raw_v_std_plot
 
