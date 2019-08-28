@@ -22,6 +22,18 @@ calc_mpa_effect <- function(outcomes) {
 }
 
 
+calc_abs_mpa_effect <- function(outcomes) {
+  mpa_effect <- outcomes %>%
+    group_by(year) %>%
+    mutate(mpa_size = max(percent_mpa)) %>%
+    ungroup() %>%
+    select(year, experiment, biomass, mpa_size) %>%
+    spread(experiment, biomass) %>%
+    mutate(mpa_effect = `with-mpa` - `no-mpa`) # %>%
+  # select(year, mpa_size, mpa_effect)
+}
+
+
 calc_mpa_fishery_effect <- function(outcomes) {
   mpa_effect <- outcomes %>%
     group_by(year) %>%
@@ -78,6 +90,7 @@ density_ratio <- results$mpa_experiment[[1]]$raw_outcomes %>%
 results <- results %>%
   mutate(
     mpa_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_effect),
+    absolute_mpa_effect = map(map(mpa_experiment, "outcomes"), calc_abs_mpa_effect),
     fishery_effect = map(map(mpa_experiment, "outcomes"), calc_mpa_fishery_effect),
     density_ratio = list(density_ratio),
     baci = map(map(mpa_experiment, "raw_outcomes"), calculate_baci, distance = distance_grid, type = "biased")

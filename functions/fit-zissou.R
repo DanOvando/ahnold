@@ -21,10 +21,20 @@ fit_zissou <- function(data,
                        include_intercept = T,
                        center_scale = T,
                        fixed_regions = F,
-                       mpa_only = F) {
+                       mpa_only = F,
+                       bin_years = FALSE) {
 
   # data <- data %>%
   #   filter(classcode != "opic")
+
+  if (bin_years == TRUE){
+
+    data$year <- plyr::round_any(data$year, 3)
+
+    data$factor_year <- factor(data$year)
+
+  }
+
 
   if (mpa_only == T){
 

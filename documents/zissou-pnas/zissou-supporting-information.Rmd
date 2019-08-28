@@ -39,8 +39,6 @@ burn_years <- 20
 
 num_patches <- 25
 
-  samps <- 20000
-
   run_name <- "v4.2"
 
 run_dir <- here::here("results", run_name)
@@ -91,7 +89,6 @@ processed_grid <- processed_grid %>%
 outcomes <- processed_grid %>%
   left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
   select(-fishery_effect, -density_ratio) %>%
-  slice(1:samps) %>%
   unnest() %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
@@ -118,7 +115,6 @@ eqo <- outcomes %>%
 
 fishery_outcomes <- processed_grid %>%
   select(-mpa_effect, -density_ratio) %>%
-  slice(1:samps) %>%
   unnest() %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
@@ -131,7 +127,6 @@ fishery_outcomes <- processed_grid %>%
 
 density_ratios <- processed_grid %>%
   select(-fishery_effect) %>%
-  slice(1:samps) %>%
   unnest() %>%
   group_by(experiment) %>%
   mutate(year = 1:length(year)) %>%
@@ -645,6 +640,112 @@ We ran 10,000 simulations from these distributions. Each simulation runs for 50 
 ##### Filtering Simulations
 
 After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario; b) did not converge to the correct bionomic equilibrium in the open-access scenario; or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with `r nrow(processed_grid) ` viable simulations. 
+
+
+#### Additional Simulation Results
+
+
+```{r mpa-tradeoffs}
+
+tradeoffs <- fishery_outcomes %>% 
+  select(experiment, year, years_protected,mpa_size, fishery_effect) %>% 
+  left_join(outcomes %>% 
+  select(experiment,year, mpa_effect), by = c("experiment","year")
+)
+
+
+vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>% 
+  mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>% 
+  mutate(vline = slope * fishery_effect)
+
+tradeoff_kobe_plot = tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  ungroup() %>%
+  mutate(mpa_bin = cut(mpa_size, breaks = seq(0, 1, by = 0.25))) %>%
+  ggplot(aes(fishery_effect, mpa_effect)) +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 0), linetype = 2) +
+  geom_hex(bins = 5,    aes(fill = ..density..),color = "black") +
+    geom_line(data = vplot,aes(fishery_effect, vline), color = "red",
+              linetype = 2, size = 2) +
+
+  # geom_abline(aes(slope = -1, intercept = 0), linetype = 2, color = "red", size = 2) +
+  #   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, color = "black", size = 2) +
+  scale_fill_distiller(
+    # option = "plasma",
+    labels = scales::percent_format(accuracy = 1),
+    name = "% of Sims",
+    guide = hgc
+  ) +
+  # geom_point(size = 2, alpha = 0.2, aes(color = factor(mpa_bin))) +
+  # scale_color_viridis_d() +
+  facet_wrap( ~ mpa_bin) +
+  theme_minimal() +
+  theme(legend.position = "top") + 
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Change Fishery") +
+      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Change Conservation")
+
+# suppose that utility is the sum of percentage gain in conservation and fishery
+
+tradeoff_bins <- tradeoffs %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
+  mutate(tradeoff_bin = plyr::round_any(tradeoff,.25),
+         mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
+  group_by(tradeoff_bin, mpa_bin) %>% 
+  count() %>% 
+  group_by(mpa_bin) %>% 
+  mutate(n = n / sum(n)) %>% 
+  ungroup() 
+
+tradeoff_summary <- tradeoffs %>% 
+  group_by(experiment) %>% 
+  filter(years_protected == max(years_protected)) %>% 
+  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
+  mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
+  group_by(mpa_bin) %>% 
+  summarise(net_tradeoff = mean(tradeoff > 0)) 
+
+tradeoff_density_plot <- tradeoff_bins %>%
+  ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) +
+  geom_hline(aes(yintercept = 0), linetype = 2, size = 2) +
+  geom_tile(alpha = 0.9) +
+  scale_fill_viridis(
+    option = "plasma",
+    labels = scales::percent_format(accuracy = 1),
+    name = "% of Sims",
+    guide = hgc
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% of Range in MPA") +
+  scale_y_continuous(name = "Net Utility") + 
+  theme(legend.position = "top")
+
+
+
+tradeoff_summary_plot <- tradeoff_summary %>%
+  ggplot(aes(mpa_bin, net_tradeoff)) +
+  geom_col() +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% of Range in MPA") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Positive Utility") 
+
+
+tradeoff_density_plot + tradeoff_summary_plot & theme(
+    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
+    axis.text.x = element_text(size = 8),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    ) 
+   
+
+```
+
 
 ## Estimation Model
 
@@ -1599,6 +1700,29 @@ Convergent cross mapping is a nonlinear forecasting method that uses observed ti
 
 ```{r trophic-plot, fig.cap="Centered and scaled densities by broad trophic group and island over time"}
 
+trophic_groups <- cip_data %>% 
+  select(classcode, broadtrophic) %>% 
+  unique()
+
+
+# dat <- abundance_trends %>%
+#   left_join(trophic_groups, by = "classcode") %>%
+#   group_by(broadtrophic, year) %>%
+#   summarise(density = mean(scaled_abundance_hat)) %>%
+#   group_by(broadtrophic) %>%
+#   mutate(density = scale(density)) %>%
+#   ungroup() %>% 
+#   spread(broadtrophic, density) %>% 
+#   arrange(year) %>% 
+#   mutate(lag4_carnivore = lag(carnivore,4),
+#          lag4_piscovore = lag(piscivore,4)) %>% 
+#   na.omit() %>% 
+#   ungroup() %>% 
+#   filter(year > 1999) 
+# dat %>%
+#   ggplot(aes(year, density, color = broadtrophic)) +
+#   geom_line()
+
 dat <- cip_data %>%
   group_by(broadtrophic, region, site, side, transect, year, eventual_mpa) %>%
   summarise(density = sum(density_g_m2)) %>%
@@ -1626,6 +1750,7 @@ group_trends_plot <- dat %>%
   gather("group","density",-region,-year)%>%
   ggplot(aes(year,density,col=group))+
   geom_line()+
+  geom_point() +
   scale_color_locuszoom(name="Trophic Group",labels=c("carnivore","herbivore","piscivore","planktivore"))+
   labs(x="year",y="Centered and Scaled Density")+
   facet_wrap(~region)
