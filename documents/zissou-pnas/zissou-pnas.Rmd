@@ -89,9 +89,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-  samps <- 20000
-
-  run_name <- "v4.2"
+  run_name <- "v4.3"
 
 run_dir <- here::here("results", run_name)
 
@@ -103,94 +101,18 @@ load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
-# load(file = here::here("results",run_name,"about_time.Rdata"))
+density_ratios <- readRDS(file.path(run_dir,"density_ratios.rds"))
 
+outcomes <- readRDS(file.path(run_dir,"outcomes.rds"))
 
-bad_sims <- processed_grid %>%
-  select(-fishery_effect,-density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  filter(years_protected <= 0) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = pmax(0,1 - `no-mpa` / b0)) %>%
-  mutate(pop_effect = pmin(1, (`with-mpa` - `no-mpa`) / b0)) %>%
-  summarise(bad = any(depletion > 0.95 |
-                        abs(pop_effect) > 1e-3)) %>%
-  filter(bad == TRUE)
-
-
-# wtf <- processed_grid %>%
-#   select(-fishery_effect, -density_ratio) %>%
-#   unnest() %>%
-#   group_by(experiment) %>%
-#   mutate(year = 1:length(year)) %>% 
-#   mutate(years_protected = year - year_mpa + 1) %>%
-#   filter(years_protected <= 0) %>% 
-#   mutate(b0 = `no-mpa`[year == min(year)]) %>%
-#   mutate(depletion = 1 - `no-mpa`/b0) %>%
-#   mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0)) 
-# 
-
-processed_grid <- processed_grid %>% 
-  filter(!experiment %in% unique(bad_sims$experiment))
-
-outcomes <- processed_grid %>%
-  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
-  select(-fishery_effect, -density_ratio) %>%
-  slice(1:samps) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(mpa_effect = pmax(-.5,pmin(mpa_effect,1))) %>%
-  group_by(experiment) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = 1 - `no-mpa`/b0) %>%
-  mutate(final_depletion = depletion[year == max(year)],
-         f = f_v_m * m) %>%
-  mutate(u = 1 - exp(-f)) %>%
-  mutate(final_u = u[year == max(year)]) %>%
-  ungroup() %>%
-  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
-
-
-# outcomes <- outcomes %>%
-#     filter(!experiment %in% collapsed$experiment,
-#            !experiment %in% unique(bad_converge$experiment))
-
-eqo <- outcomes %>%
-  filter(year == max(year))
-
-fishery_outcomes <- processed_grid %>%
-  select(-mpa_effect, -density_ratio) %>%
-  slice(1:samps) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(fishery_effect = pmin(mpa_effect,1)) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
-  filter(fleet_model != "constant-catch") %>%
-  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
-
-density_ratios <- processed_grid %>%
-  select(-fishery_effect) %>%
-  slice(1:samps) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
-
+fishery_outcomes <- readRDS(file.path(run_dir,"fishery_outcomes.rds"))
 
 
 fishery_eqo <- fishery_outcomes %>%
   filter(year == max(year))
+
+   eqo <- outcomes %>%
+     filter(year == max(year))
 
 
 facet_labels <- c(
@@ -203,7 +125,6 @@ channel_islands <- readRDS(here::here("data","channel_islands_map.RDS"))
 ca_mpas <- sf::st_read(here::here("data","MPA_CA_Existing_160301")) %>%
   rmapshaper::ms_simplify() %>%
   sf::st_transform(crs = 4326)
-
 
 
 zissou_theme <-
@@ -568,7 +489,7 @@ pop_size_plot <- outcomes %>%
            mpa_size = plyr::round_any(mpa_size, .1)) %>%
     filter(year == max(year)) %>%
     group_by(depletion, mpa_size) %>%
-    summarise(median_mpa_effect = median(mpa_effect)) %>%
+    summarise(median_mpa_effect = median(mpa_effect, na.rm = TRUE)) %>%
     ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) +
     geom_tile() +
     # geom_contour(aes(z = median_mpa_effect, color = ..level..), show.legend = FALSE) +
@@ -821,7 +742,6 @@ dev.off()
 ```{r}
 fish_v_fishing <- processed_grid %>%
   select(-density_ratio) %>%
-  slice(1:samps) %>%
   unnest() %>%
   rename(fishery_effect = mpa_effect1) %>%
   group_by(experiment) %>%

@@ -39,7 +39,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-  run_name <- "v4.2"
+  run_name <- "v4.3"
 
 run_dir <- here::here("results", run_name)
 
@@ -53,92 +53,18 @@ load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
 load(file.path(run_dir,"abundance_data.Rdata"))
 
-# load(file = here::here("results",run_name,"about_time.Rdata"))
+density_ratios <- readRDS(file.path(run_dir,"density_ratios.rds"))
 
+outcomes <- readRDS(file.path(run_dir,"outcomes.rds"))
 
-bad_sims <- processed_grid %>%
-  select(-fishery_effect,-density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  filter(years_protected <= 0) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = pmax(0,1 - `no-mpa` / b0)) %>%
-  mutate(pop_effect = pmin(1, (`with-mpa` - `no-mpa`) / b0)) %>%
-  summarise(bad = any(depletion > 0.95 |
-                        abs(pop_effect) > 1e-3)) %>%
-  filter(bad == TRUE)
-
-
-# wtf <- processed_grid %>%
-#   select(-fishery_effect, -density_ratio) %>%
-#   unnest() %>%
-#   group_by(experiment) %>%
-#   mutate(year = 1:length(year)) %>% 
-#   mutate(years_protected = year - year_mpa + 1) %>%
-#   filter(years_protected <= 0) %>% 
-#   mutate(b0 = `no-mpa`[year == min(year)]) %>%
-#   mutate(depletion = 1 - `no-mpa`/b0) %>%
-#   mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0)) 
-# 
-
-processed_grid <- processed_grid %>% 
-  filter(!experiment %in% unique(bad_sims$experiment))
-
-outcomes <- processed_grid %>%
-  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
-  select(-fishery_effect, -density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(mpa_effect = pmax(-.5,pmin(mpa_effect,1))) %>%
-  group_by(experiment) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = 1 - `no-mpa`/b0) %>%
-  mutate(final_depletion = depletion[year == max(year)],
-         f = f_v_m * m) %>%
-  mutate(u = 1 - exp(-f)) %>%
-  mutate(final_u = u[year == max(year)]) %>%
-  ungroup() %>%
-  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
-
-
-# outcomes <- outcomes %>%
-#     filter(!experiment %in% collapsed$experiment,
-#            !experiment %in% unique(bad_converge$experiment))
-
-eqo <- outcomes %>%
-  filter(year == max(year))
-
-fishery_outcomes <- processed_grid %>%
-  select(-mpa_effect, -density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(fishery_effect = pmin(mpa_effect,1)) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
-  filter(fleet_model != "constant-catch") %>%
-  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
-
-density_ratios <- processed_grid %>%
-  select(-fishery_effect) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
-
+fishery_outcomes <- readRDS(file.path(run_dir,"fishery_outcomes.rds"))
 
 
 fishery_eqo <- fishery_outcomes %>%
   filter(year == max(year))
 
+   eqo <- outcomes %>%
+     filter(year == max(year))
 
 facet_labels <- c(
   mpa_size = "Range in MPA",
@@ -1289,7 +1215,7 @@ raw_nompa_only <- fitted_data %>%
   ungroup() %>%
   left_join(life_history, by = "classcode")
 
-basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
+# basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
 
 
 ```
@@ -1317,7 +1243,7 @@ year_mpa <- 2002
     mutate(mpa = year > year_mpa) %>%
     ungroup() %>%
     mutate(fyear = factor(year)) %>%
-    mutate(fyear = relevel(fyear, ref = "2002"))
+    mutate(fyear = relevel(fyear, ref = "2003"))
 
 
   sortasimple_reg <-
@@ -1345,6 +1271,46 @@ sortasimple_plot
 ```
 
 
+```{r species-by-species-did, results = "hide"}
+
+year_mpa <- 2002
+
+  data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+    mutate(density = exp(log_density) * any_seen) %>%
+    mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+  sortasimple <- data %>%
+    group_by(year, classcode) %>%
+    summarise(mean_density = mean(density),
+              targ = unique(targ)) %>%
+    mutate(mpa = year > year_mpa) %>%
+    ungroup() %>%
+    mutate(fyear = factor(year)) %>%
+    mutate(fyear = relevel(fyear, ref = "2003"))
+
+
+  sortasimple_reg <-
+    rstanarm::stan_glmer(
+      log(mean_density + 1e-3) ~ targ * fyear + (1 |
+                                                   classcode),
+      data = sortasimple,
+      cores = 4
+    )
+
+  sortasimple_plot <- bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                                            regex_pars = ":fyear") +
+    geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
+    scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+    coord_flip() +
+    scale_x_percent() + 
+    zissou_theme + 
+    labs(x="Estimated Difference",y="Year")+
+    theme(axis.text.x = element_text(size = 8))
+
+
+```
+
+
 As an even simpler approach, we aggregated the data to the level of targeted and non-targeted species, and estimated the divergence in their trends over time.
 
 ```{r}
@@ -1355,7 +1321,7 @@ As an even simpler approach, we aggregated the data to the level of targeted and
     mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
 
   supersimple <- data %>%
-    group_by(year, targeted) %>%
+    group_by(year, targ) %>%
     summarise(mean_density = mean(density)) %>% 
     mutate(mpa = year > year_mpa) %>%
     ungroup() %>%
@@ -1365,10 +1331,10 @@ As an even simpler approach, we aggregated the data to the level of targeted and
 
   supersimple_reg <-
     rstanarm::stan_glm(
-      log(mean_density + 1e-3) ~ targeted * fyear,
+      log(mean_density + 1e-3) ~ targ * fyear,
       data = supersimple,
       cores = 4,
-      iter = 5000,
+      iter = 10000,
       adapt_delta = 0.95
     )
   
