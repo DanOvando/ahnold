@@ -568,117 +568,112 @@ We ran 10,000 simulations from these distributions. Each simulation runs for 50 
 After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario; b) did not converge to the correct bionomic equilibrium in the open-access scenario; or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with `r nrow(processed_grid) ` viable simulations. 
 
 
-#### Additional Simulation Results
+<!-- #### Additional Simulation Results -->
 
-At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs  
+<!-- At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs   -->
 
-```{r mpa-tradeoffs}
+<!-- ```{r mpa-tradeoffs} -->
 
-tradeoffs <- fishery_outcomes %>% 
-  select(experiment, year, years_protected,mpa_size, fishery_effect) %>% 
-  left_join(outcomes %>% 
-  select(experiment,year, mpa_effect), by = c("experiment","year")
-)
-
-
-vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>% 
-  mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>% 
-  mutate(vline = slope * fishery_effect)
-
-tradeoff_kobe_plot = tradeoffs %>%
-  group_by(experiment) %>%
-  filter(years_protected == max(years_protected)) %>%
-  ungroup() %>%
-  mutate(mpa_bin = cut(mpa_size, breaks = seq(0, 1, by = 0.25))) %>%
-  ggplot(aes(fishery_effect, mpa_effect)) +
-  geom_hline(aes(yintercept = 0), linetype = 2) +
-  geom_vline(aes(xintercept = 0), linetype = 2) +
-  geom_hex(bins = 5,    aes(fill = ..density..),color = "black") +
-    geom_line(data = vplot,aes(fishery_effect, vline), color = "red",
-              linetype = 2, size = 2) +
-
-  # geom_abline(aes(slope = -1, intercept = 0), linetype = 2, color = "red", size = 2) +
-  #   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, color = "black", size = 2) +
-  scale_fill_distiller(
-    # option = "plasma",
-    labels = scales::percent_format(accuracy = 1),
-    name = "% of Sims",
-    guide = hgc
-  ) +
-  # geom_point(size = 2, alpha = 0.2, aes(color = factor(mpa_bin))) +
-  # scale_color_viridis_d() +
-  facet_wrap( ~ mpa_bin) +
-  theme_minimal() +
-  theme(legend.position = "top") + 
-    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% Change Fishery") +
-      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% Change Conservation")
-
-# suppose that utility is the sum of percentage gain in conservation and fishery
-
-tradeoff_bins <- tradeoffs %>% 
-  group_by(experiment) %>% 
-  filter(years_protected == max(years_protected)) %>% 
-  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
-  mutate(tradeoff_bin = plyr::round_any(tradeoff,.25),
-         mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
-  group_by(tradeoff_bin, mpa_bin) %>% 
-  count() %>% 
-  group_by(mpa_bin) %>% 
-  mutate(n = n / sum(n)) %>% 
-  ungroup() 
-
-tradeoff_summary <- tradeoffs %>% 
-  group_by(experiment) %>% 
-  filter(years_protected == max(years_protected)) %>% 
-  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
-  mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
-  group_by(mpa_bin) %>% 
-  summarise(net_tradeoff = mean(tradeoff > 0)) 
-
-tradeoff_density_plot <- tradeoff_bins %>%
-  ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) +
-  # geom_hline(aes(yintercept = 0), linetype = 2, size = 2) +
-  geom_tile(alpha = 0.9) +
-  scale_fill_viridis(
-    option = "plasma",
-    labels = scales::percent_format(accuracy = 1),
-    name = "% of Sims",
-    guide = hgc
-  ) +
-  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% of Range in MPA") +
-  scale_y_continuous(name = "Net Utility") + 
-  theme(legend.position = "top")
+<!-- tradeoffs <- fishery_outcomes %>%  -->
+<!--   select(experiment, year, years_protected,mpa_size, fishery_effect) %>%  -->
+<!--   left_join(outcomes %>%  -->
+<!--   select(experiment,year, mpa_effect), by = c("experiment","year") -->
+<!-- ) -->
 
 
+<!-- vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>%  -->
+<!--   mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>%  -->
+<!--   mutate(vline = slope * fishery_effect) -->
 
-tradeoff_summary_plot <- tradeoff_summary %>%
-  ggplot(aes(mpa_bin, net_tradeoff)) +
-  geom_col() +
-  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% of Range in MPA") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% Positive Utility") 
+<!-- tradeoff_kobe_plot = tradeoffs %>% -->
+<!--   group_by(experiment) %>% -->
+<!--   filter(years_protected == max(years_protected)) %>% -->
+<!--   ungroup() %>% -->
+<!--   mutate(mpa_bin = cut(mpa_size, breaks = seq(0, 1, by = 0.25))) %>% -->
+<!--   ggplot(aes(fishery_effect, mpa_effect)) + -->
+<!--   geom_hline(aes(yintercept = 0), linetype = 2) + -->
+<!--   geom_vline(aes(xintercept = 0), linetype = 2) + -->
+<!--   geom_hex(bins = 5,    aes(fill = ..density..),color = "black") + -->
+<!--     geom_line(data = vplot,aes(fishery_effect, vline), color = "red", -->
+<!--               linetype = 2, size = 2) + -->
 
-tradeoff_density_plot + tradeoff_summary_plot & theme(
-    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
-    axis.text.x = element_text(size = 8),
-    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
-    axis.text.y = element_text(size = 10)
-    ) 
-   
+<!--   # geom_abline(aes(slope = -1, intercept = 0), linetype = 2, color = "red", size = 2) + -->
+<!--   #   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, color = "black", size = 2) + -->
+<!--   scale_fill_distiller( -->
+<!--     # option = "plasma", -->
+<!--     labels = scales::percent_format(accuracy = 1), -->
+<!--     name = "% of Sims", -->
+<!--     guide = hgc -->
+<!--   ) + -->
+<!--   # geom_point(size = 2, alpha = 0.2, aes(color = factor(mpa_bin))) + -->
+<!--   # scale_color_viridis_d() + -->
+<!--   facet_wrap( ~ mpa_bin) + -->
+<!--   theme_minimal() + -->
+<!--   theme(legend.position = "top") +  -->
+<!--     scale_x_continuous(labels = scales::percent_format(accuracy = 1), -->
+<!--                      name = "% Change Fishery") + -->
+<!--       scale_y_continuous(labels = scales::percent_format(accuracy = 1), -->
+<!--                      name = "% Change Conservation") -->
 
-```
+<!-- # suppose that utility is the sum of percentage gain in conservation and fishery -->
 
-why is it going to be hard ot detect regional effects of MPAs few if any empirical studies at net regional effects. does this mean that i doesn't exist, or impossible tot est, why? three fundamental stumbling blocks
-## Channel Islands Data
+<!-- tradeoff_bins <- tradeoffs %>%  -->
+<!--   group_by(experiment) %>%  -->
+<!--   filter(years_protected == max(years_protected)) %>%  -->
+<!--   mutate(tradeoff = mpa_effect + fishery_effect) %>%  -->
+<!--   mutate(tradeoff_bin = plyr::round_any(tradeoff,.25), -->
+<!--          mpa_bin = plyr::round_any(mpa_size,.1)) %>%  -->
+<!--   group_by(tradeoff_bin, mpa_bin) %>%  -->
+<!--   count() %>%  -->
+<!--   group_by(mpa_bin) %>%  -->
+<!--   mutate(n = n / sum(n)) %>%  -->
+<!--   ungroup()  -->
 
-```{r}
+<!-- tradeoff_summary <- tradeoffs %>%  -->
+<!--   group_by(experiment) %>%  -->
+<!--   filter(years_protected == max(years_protected)) %>%  -->
+<!--   mutate(tradeoff = mpa_effect + fishery_effect) %>%  -->
+<!--   mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>%  -->
+<!--   group_by(mpa_bin) %>%  -->
+<!--   summarise(net_tradeoff = mean(tradeoff > 0))  -->
+
+<!-- tradeoff_density_plot <- tradeoff_bins %>% -->
+<!--   ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) + -->
+<!--   # geom_hline(aes(yintercept = 0), linetype = 2, size = 2) + -->
+<!--   geom_tile(alpha = 0.9) + -->
+<!--   scale_fill_viridis( -->
+<!--     option = "plasma", -->
+<!--     labels = scales::percent_format(accuracy = 1), -->
+<!--     name = "% of Sims", -->
+<!--     guide = hgc -->
+<!--   ) + -->
+<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), -->
+<!--                      name = "% of Range in MPA") + -->
+<!--   scale_y_continuous(name = "Net Utility") +  -->
+<!--   theme(legend.position = "top") -->
 
 
-```
+
+<!-- tradeoff_summary_plot <- tradeoff_summary %>% -->
+<!--   ggplot(aes(mpa_bin, net_tradeoff)) + -->
+<!--   geom_col() + -->
+<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), -->
+<!--                      name = "% of Range in MPA") + -->
+<!--   scale_y_continuous(labels = scales::percent_format(accuracy = 1), -->
+<!--                      name = "% Positive Utility")  -->
+
+<!-- tradeoff_density_plot + tradeoff_summary_plot & theme( -->
+<!--     plot.margin = unit(c(0, 1, 0, 1), units = "lines"), -->
+<!--     axis.text.x = element_text(size = 8), -->
+<!--     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"), -->
+<!--     axis.text.y = element_text(size = 10) -->
+<!--     )  -->
+
+
+<!-- ``` -->
+
+<!-- why is it going to be hard ot detect regional effects of MPAs few if any empirical studies at net regional effects. does this mean that i doesn't exist, or impossible tot est, why? three fundamental stumbling blocks -->
+
 
 
 ## Estimation Model
