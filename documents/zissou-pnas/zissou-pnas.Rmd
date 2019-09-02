@@ -103,6 +103,10 @@ load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
+load(file = paste0(run_dir, "/sim_grid.Rdata"))
+
+
+
 cdfw_catches <-
   read_csv(file = here::here("processed_data", 'cdfw-catches.csv')) %>%
   group_by(sci_name, year) %>%
@@ -312,13 +316,43 @@ did_betas <- zissou_fit$zissou_estimates %>%
                         ymax = upper, color = cluster)) +
     facet_wrap(~group)
 
+ 
 
+top_species <- base_run$data[[1]]$classcode %>% unique()
 
+  
+life_summaries <- life_history_data %>% 
+  select(classcode, tm, vbgf.k, vbgf.linf) %>% 
+  rename(age_mature = tm, vbk = vbgf.k, linf = vbgf.linf) %>% 
+  unique() %>% 
+  filter(classcode %in% top_species) %>% 
+  select(-classcode) %>% 
+  gather(variable,value) %>% 
+  group_by(variable) %>% 
+  summarise(min_val = min(value, na.rm = TRUE),
+         max_val = max(value, na.rm = TRUE))
+
+ sim_life_history <- sim_grid %>%
+    mutate(
+      age_mature = map_dbl(fish, "age_mature"),
+      vbk = map_dbl(fish, "vbk"),
+      linf = map_dbl(fish, "linf")
+    ) %>%
+    select(scientific_name, age_mature, vbk, linf) %>%
+    unique() %>% 
+   filter(age_mature > life_summaries$min_val[life_summaries$variable == "age_mature"],
+          age_mature < life_summaries$max_val[life_summaries$variable == "age_mature"],
+          vbk > life_summaries$min_val[life_summaries$variable == "vbk"],
+          vbk < life_summaries$max_val[life_summaries$variable == "vbk"],
+          linf > life_summaries$min_val[life_summaries$variable == "linf"],
+          linf < life_summaries$max_val[life_summaries$variable == "linf"])
 
   sim_plot <- outcomes %>%
     mutate(rsize = plyr::round_any(mpa_size, 0.25),
-           reff = plyr::round_any(mpa_effect,0.1)) %>%
-    filter(rsize == 0.25) %>%
+           reff = plyr::round_any(mpa_effect,0.2)) %>%
+    filter(rsize == 0.25, depletion < 0.8, depletion > 0.2,
+           scientific_name %in% sim_life_history$scientific_name
+           ) %>%
     mutate(year = years_protected + 2001) %>%
     filter(year %in% did_betas$year, years_protected >1) %>% 
     group_by(year, reff) %>% 
@@ -343,10 +377,11 @@ did_betas <- zissou_fit$zissou_estimates %>%
     scale_fill_viridis(guide = hgc,
                        name = "% of Annual Sims",
                        labels = scales::percent_format(accuracy = 1),
-                       option = "plasma") + 
+                       option = "magma") + 
     theme(legend.position = "top")
   
-top_species <- base_run$data[[1]]$classcode %>% unique()
+
+
 
 cip_data <- pisco_data %>%
   left_join(site_data, by = c("site","side")) %>%
@@ -371,6 +406,12 @@ cip_data <- pisco_data %>%
     }}
   }
 }
+
+
+* mention need to keep monitoring
+
+* with extra space point out that large percentage increases at high depletions are somewhat misleading
+
 
 No-take Marine Protected Areas (MPAs), spatial regions of the ocean in which fishing is prohibited, have a long history in the management of marine resources. Traditional cultures in Oceania utilized - often temporary - MPAs as "fish banks" for times of need [@johannes1978]. Modern MPAs were first established primarily as marine analogs to the terrestrial protection of iconic landscapes like Yellowstone or Kruger National Parks [@iucn1976;@watson2014b]. However, over time our goals and expectations for MPAs have evolved; while all MPAs are expected to deliver conservation benefits within their borders, most modern MPAs are also established to  bolster fish populations and fishing opportunities throughout the region in which they are located (what we term “regional-scale effects”) [@gaines2010].  
 
@@ -482,20 +523,99 @@ pop_depletion_plot <- outcomes %>%
   scale_x_continuous(labels = scales::percent_format(accuracy = 1), name = "Depletion") +
   scale_y_continuous(labels = ylabs, breaks = ybreaks, name = "") 
 
-pop_size_plot <- outcomes %>%
-  filter(year == max(year)) %>%
-  ggplot() +
-  geom_bin2d(aes(mpa_size, mpa_effect, fill = ..density..),binwidth = c(.1, .1), show.legend = TRUE) +
-  scale_fill_viridis(
-  option = "A",
-  # trans = "log10",
-  guide = hgc,
-  name = "% of Sims",
-  labels = scales::percent_format(accuracy = 1)
-  ) +
-  scale_x_continuous(labels = scales::percent_format(accuracy = 1), name = "Range in MPA") +
-  scale_y_continuous(labels = ylabs, breaks = ybreaks, name = "Conservation Effect") +
-  theme(legend.position = "top") + 
+
+pop_depletion_plot <- outcomes %>%
+    filter(year == max(year)) %>%
+    mutate(
+      rdep = cut(
+        depletion,
+        breaks = seq(0, 1, by = .2),
+        labels = seq(0, .8, by = .2),
+        include.lowest = TRUE
+      )
+      ,
+      reff = cut(
+        mpa_effect,
+        breaks = seq(-.6, 1, by = .2),
+        labels = seq(-.6, .8, by = .2),
+        include.lowest = TRUE
+      )
+    ) %>%
+    group_by(rdep, reff) %>%
+    count() %>%
+    group_by(rdep) %>%
+    mutate(pn = n / sum(n)) %>%
+    ungroup() %>%
+    mutate(rdep = as.numeric(as.character(rdep)),
+           reff = as.numeric(as.character(reff))) %>%
+    ggplot(aes(rdep, reff, fill = pn)) +
+    geom_raster(hjust = 1, vjust = 1, show.legend = FALSE) +
+    scale_fill_viridis(
+      option = "A",
+      # trans = "log10",
+      guide = hgc,
+      name = "% of Sims",
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                       name = "Depletion",
+                       expand = expand_scale(add = c(0,0))) +
+    scale_y_continuous(labels = ylabs,
+                       breaks = ybreaks,
+                       name = "")
+
+  sim_plot <- outcomes %>%
+    mutate(rsize = plyr::round_any(mpa_size, 0.25),
+           reff = plyr::round_any(mpa_effect,0.2)) %>%
+    filter(rsize == 0.25, depletion < 0.8, depletion > 0.2,
+           scientific_name %in% sim_life_history$scientific_name
+           ) %>%
+    mutate(year = years_protected + 2001) %>%
+    filter(year %in% did_betas$year, years_protected >1) %>% 
+    group_by(year, reff) %>% 
+    count() %>% 
+    group_by(year) %>% 
+    mutate(sc = n / sum(n))
+
+
+  pop_size_plot <- outcomes %>%
+    filter(year == max(year)) %>%
+    mutate(
+      rsize = cut(
+        mpa_size,
+        breaks = seq(0, 1, by = .2),
+        labels = seq(0, .8, by = .2)
+      )
+      ,
+      reff = cut(
+        mpa_effect,
+        breaks = seq(-.6, 1, by = .2),
+        labels = seq(-.6, .8, by = .2)
+      )
+    ) %>%
+    group_by(rsize, reff) %>%
+    count() %>%
+    group_by(rsize) %>%
+    mutate(pn = n / sum(n)) %>%
+    ungroup() %>%
+    mutate(rsize = as.numeric(as.character(rsize)),
+           reff = as.numeric(as.character(reff))) %>%
+    ggplot(aes(rsize, reff, fill = pn)) +
+    geom_raster(hjust = 1, vjust = 1) +
+    scale_fill_viridis(
+      option = "A",
+      # trans = "log10",
+      guide = hgc,
+      name = "% of Sims",
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                       name = "Range in MPA",
+                       expand = expand_scale(add = c(0,0))) +
+    scale_y_continuous(labels = ylabs,
+                       breaks = ybreaks,
+                       name = "Conservation Effect") +
+    theme(legend.position = "top") +
     labs(title = 'B)')
 
 
@@ -551,21 +671,24 @@ pop_size_plot <- outcomes %>%
    
 
 
+  ggsave(pop_combo_plot,filename = "figs/conservation-effect.png",
+         width = 8,
+         height = 5)  
+
   pdf(
     file =  "figs/conservation-effect.pdf",
     width = 8,
     height = 5,
-    useDingbats = TRUE
+    useDingbats = FALSE
   )
   print(pop_combo_plot)
   dev.off()
 
-pop_combo_plot
 ```
 
 \begin{figure*}%[tbhp]
   \centering
-  \includegraphics[width=.9\linewidth]{figs/conservation-effect.pdf}
+  \includegraphics[width=.9\linewidth]{figs/conservation-effect.png}
   \caption{Median (A) and range (B) of equilibrium regional MPA conservation effects (percent change in total biomass with MPAs relative to without MPAs) across a range of depletion and MPA sizes (and incorporating the full range of scenarios included in our study). "Range in MPA" is the percent of patches covered by an MPA, "Depletion" is the depletion that would have occurred in equilibrium without the MPA}
   \label{conservation-effects}
 \end{figure*}
@@ -960,9 +1083,10 @@ We find regional conservation gains from MPAs in `r percent(pos_runs, accuracy =
 
 <!-- . That we were unable to detect a significant divergence in the biomass densities of targeted species throughout the Channel Islands post MPA implementation, relative to the densities that the trends of the non-targeted species would suggest we should observe, should not come as a great surprise then.  -->
 
-We were not able to detect a statistically significant difference in the densities of targeted and non-targeted finfish species over the 13 years of MPA protection in the Channel Islands covered by our analysis. The data (and model assumptions) provide support for both negative and positive MPA effects, though the size of these estimated effects is well within the range that our simulation analysis suggests are plausible. At face value, this lack of a clear result may seem surprising given the size and carefully studied nature of this MPA network. However, our simulation analysis suggests that this result should perhaps be expected. The Channel Islands MPAs cover approximately 20% of the waters in the Channel Islands, and while formal stock assessments are not available for many of the targeted species in our analysis, what evidence we have suggests that, as a group, these fish are not heavily overfished XX. Harkening back to our simulations, we expect the percentage difference in densities of targeted species with and without MPAs to be modest (likely 20% or less). Small effects are likely to be challenging to detect empirically given the large natural variation of marine ecosystems (especially temperate reefs) and the observation error inherent in visual survey programs such as those provided by PISCO.
+We were not able to detect a statistically significant difference in the densities of targeted and non-targeted finfish species over the 13 years of MPA protection in the Channel Islands covered by our analysis. The data (and model assumptions) provide support for both negative and positive MPA effects, though the size of these estimated effects is well within the range that our simulation analysis suggests are plausible. At face value, this lack of a clear result may seem surprising given the size and carefully studied nature of this MPA network. However, our simulation analysis suggests that this result should perhaps be expected. The Channel Islands MPAs cover approximately 20% of the waters in the Channel Islands, and while formal stock assessments are not available for many of the targeted species in our analysis, what evidence we have suggests that, as a group, these fish are not heavily overfished, though some species such as California sheephead and blue rockfish were likely below target levels during the period [@alonzo2004;@dick2017]. Harkening back to our simulations, we expect the percentage difference in densities of targeted species with and without MPAs to be modest (likely around 20%). Effects of this size are likely to be challenging to detect empirically given the large natural variation of marine ecosystems (especially temperate reefs) and the observation error inherent in visual survey programs such as those provided by PISCO. In addition, our simulations examine percentage increases in biomass densities. As an extreme example then, if moving from no-MPA to MPA increases biomass densities from 2kg/m^2^ to 4kg/m^2^ would be reported as a 100% increase, and therefore presumably easier to detect. However, while a large percentage increase this is a small change in absolute biomass densities relative to the variance in the observation process itself (see Fig.SXX for a companion to Fig.S scaled by absolute population size). 
 
-While the MPA effect estimated by our model was not significant in any one year, the positive trend from 2005 to 2014 is evident, as is the sharp decline from 2015-2017. To what should we attribute this apparent shift? We cannot reject the parallel trends assumption between the targeted and non-targeted species in the years before the MPAs (Fig.\ref{did-plot}). One hypothesis is that the non-targeted species can serve as effective control for environmental drivers not included in the model. However, the Channel Islands region (and the entire West coast of the USA) experienced a dramatic ‘marine heatwave’ beginning in 2014 and persisting through 2016, resulting in part in extremely elevated water temperatures throughout the region  [@gentemann2017]. Many of the non-targeted species have warm thermal affinities and have increased in numbers since the heatwave (Freedman et al in prep XX). However, the targeted group is made up mostly of fishes with cold-water affinities, such as members of the genus Sebastes. As such, we hypothesize that the recent evidence for a decline in densities of targeted species is due to environmental conditions that disproportionately affect the targeted group (and not for example due to concentrated fishing pressure outside the reserves). This hypothesis is supported by the sharp declines in densities of targeted species seen inside the MPAs themselves, suggesting a driver other than fishing may be at play (see SM). The Channel Islands case study demonstrates the challenge of detecting small effect sizes in nature and highlights the potential for small effect sizes to be overwhelmed by additional shocks to the system.
+
+While the MPA effect estimated by our model was not significant in any one year, the positive trend from 2005 to 2014 is evident, as is the sharp decline from 2015-2017. To what should we attribute this apparent shift? We cannot reject the parallel trends assumption between the targeted and non-targeted species in the years before the MPAs (Fig.\ref{did-plot}). One hypothesis is that the non-targeted species can serve as effective control for environmental drivers not included in the model. However, the Channel Islands region (and the entire West coast of the USA) experienced a dramatic ‘marine heatwave’ beginning in 2014 and persisting through 2016, resulting in part in extremely elevated water temperatures throughout the region  [@gentemann2017]. Many of the non-targeted species have warm thermal affinities and have increased in numbers since the heatwave (Freedman et al in prep XX). However, the targeted group is made up mostly of fishes with cold-water affinities, such as members of the genus Sebastes. As such, we hypothesize that the recent evidence for a decline in densities of targeted species is due to environmental conditions that disproportionately affect the targeted group (and not for example due to concentrated fishing pressure outside the reserves). This hypothesis is supported by the sharp declines in densities of targeted species seen inside the MPAs themselves (see Fig.SXX), suggesting a driver other than fishing may be at play. The Channel Islands case study demonstrates the challenge of detecting small effect sizes in nature and highlights the potential for small effect sizes to be overwhelmed by additional shocks to the system.
 
 <!-- Our simulation model accounts for many factors that theory suggest should be critical drivers of MPA effects, namely adult and larval movement rates, nature of density dependence, and fleet dynamics. However, currently our model does not contain many other potentially important factors, such as species interactions. If stakeholders expect an effect that our model says is unlikely or impossible given local context, they should provide a clear hypothesis and evidence as to what factors not included in this model would cause their expected effect. For example, stakeholders might assert that larger conservation effects than predicted by our simulation model might occur in a location due to protection of critical spawning aggregation sites [@roberts2002;@erisman2015], but relevant evidence supporting this belief must be presented. It is also important to remember that our conservation results refer to the regional effects of MPAs both inside and outside of their borders. The buildup of biomass within the border of well enforced reserves is well documented [@lester2009], we show though that the regional effects may be much smaller and harder to detect than these within-MPA outcomes. -->
 
@@ -970,7 +1094,16 @@ What do our results imply about the future of MPA science? Our simulation model 
 
 Once simulation models have been used to help design an MPA, how can users evaluate whether it is achieving their objectives? Response ratios are commonly used as evidence for conservation outcomes of MPAs [@lester2009], but as suggested in @ferraro2018 and @larsen2019 and demonstrated here, without careful attention to the design of control sites (accounting for example for the displacement of effort by MPAs), response ratios may be highly unreliable estimators of regional MPA effects. As @larsen2019 suggests, there are many potential alternatives for estimating the effects of MPAs that better account for the challenges of causal inference. We applied one such approach here (a difference-in-difference estimator), and yet were still unable to reach robust conclusions as to the effect of MPAs on the density of targeted species in the Channel Islands, due to the likely small size of the true effect relative to the strength of environmental drivers. 
 
-While this does not mean that all MPAs will face similar challenges in estimating their effects, our results in the rigorously studied Channel Islands system make clear that in many instances estimating a clear regional effect of MPAs may not be possible. How then should stakeholders go about adaptively monitoring and managing MPAs? Simulation modeling can help inform the range of effect sizes that may be expected, and monitoring programs can perhaps be tuned to focus on the species groups that have the highest chance of a detectable effect size [@nickols2019]. Expanding data collection to include robust monitoring of fleet dynamics may help statistical approaches to isolate the true effect of MPAs on conservation outcomes by allowing for improved control of the effects of fishing dynamics. Whenever possible monitoring programs should be implemented prior to MPA implementation to provide a pre-treatment benchmark. Beyond that, educating communities about the challenges of estimating the effects of MPAs can help set expectations, so that a lack of a clear effect is not necessarily viewed as a failure of the program. 
+```{r}
+tmdata <- life_history_data %>% 
+  filter(targeted == 1, classcode %in% top_species) %>% 
+  select(tm, everything()) 
+
+median_tm = round(median(tmdata$tm))
+```
+
+
+While this does not mean that all MPAs will face similar challenges in estimating their effects, our results in the rigorously studied Channel Islands system make clear that in many instances estimating a clear regional effect of MPAs may not be possible. How then should stakeholders go about adaptively monitoring and managing MPAs? Simulation modeling can help inform the range of effect sizes that may be expected, and monitoring programs can perhaps be tuned to focus on the species groups that have the highest chance of a detectable effect size [@nickols2019]. Expanding data collection to include robust monitoring of fleet dynamics may help statistical approaches to isolate the true effect of MPAs on conservation outcomes by allowing for improved control of the effects of fishing dynamics. Whenever possible monitoring programs should be implemented prior to MPA implementation to provide a pre-treatment benchmark. Non-equilibrium analyses (Fig.\ref{did-plot}) also help set expectations for effect sizes over time. The median estimated age at sexual maturity for the targeted species included in this study is `r median_tm` years, meaning that the span of this analysis represents less than three generations of MPA protection for half of the the measured species. Ongoing monitoring may yet reveal clearer effects. Beyond that, educating communities about the challenges of estimating the effects of MPAs can help set expectations, so that a lack of a clear effect is not necessarily viewed as a failure of the program, but rather considered in the context of reasonable expectations. 
 
 <!-- Our results provide a unique survey of the likely regional effects of MPAs to fisheries and conservation, and places our empirical assessment of the regional effects of the Channel Islands MPAs in context. The Channel Islands are an intensely studied system, and the challenge of identifying a clear regional effect of the network of MPAs placed there in 2003 may seem surprising. However, our results show that in fact a smaller effect size, from the perspective of regional conservation gains, is to be expected in this system, and therefore the true effect will be very challenging to separate from environmental noise. -->
 
