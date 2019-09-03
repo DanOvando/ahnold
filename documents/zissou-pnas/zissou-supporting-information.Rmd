@@ -39,7 +39,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-  run_name <- "v4.2"
+  run_name <- "v4.3"
 
 run_dir <- here::here("results", run_name)
 
@@ -53,92 +53,18 @@ load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
 load(file.path(run_dir,"abundance_data.Rdata"))
 
-# load(file = here::here("results",run_name,"about_time.Rdata"))
+density_ratios <- readRDS(file.path(run_dir,"density_ratios.rds"))
 
+outcomes <- readRDS(file.path(run_dir,"outcomes.rds"))
 
-bad_sims <- processed_grid %>%
-  select(-fishery_effect,-density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  filter(years_protected <= 0) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = pmax(0,1 - `no-mpa` / b0)) %>%
-  mutate(pop_effect = pmin(1, (`with-mpa` - `no-mpa`) / b0)) %>%
-  summarise(bad = any(depletion > 0.95 |
-                        abs(pop_effect) > 1e-3)) %>%
-  filter(bad == TRUE)
-
-
-# wtf <- processed_grid %>%
-#   select(-fishery_effect, -density_ratio) %>%
-#   unnest() %>%
-#   group_by(experiment) %>%
-#   mutate(year = 1:length(year)) %>% 
-#   mutate(years_protected = year - year_mpa + 1) %>%
-#   filter(years_protected <= 0) %>% 
-#   mutate(b0 = `no-mpa`[year == min(year)]) %>%
-#   mutate(depletion = 1 - `no-mpa`/b0) %>%
-#   mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0)) 
-# 
-
-processed_grid <- processed_grid %>% 
-  filter(!experiment %in% unique(bad_sims$experiment))
-
-outcomes <- processed_grid %>%
-  left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
-  select(-fishery_effect, -density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(mpa_effect = pmax(-.5,pmin(mpa_effect,1))) %>%
-  group_by(experiment) %>%
-  mutate(b0 = `no-mpa`[year == min(year)]) %>%
-  mutate(depletion = 1 - `no-mpa`/b0) %>%
-  mutate(final_depletion = depletion[year == max(year)],
-         f = f_v_m * m) %>%
-  mutate(u = 1 - exp(-f)) %>%
-  mutate(final_u = u[year == max(year)]) %>%
-  ungroup() %>%
-  mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
-
-
-# outcomes <- outcomes %>%
-#     filter(!experiment %in% collapsed$experiment,
-#            !experiment %in% unique(bad_converge$experiment))
-
-eqo <- outcomes %>%
-  filter(year == max(year))
-
-fishery_outcomes <- processed_grid %>%
-  select(-mpa_effect, -density_ratio) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  mutate(fishery_effect = pmin(mpa_effect,1)) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
-  filter(fleet_model != "constant-catch") %>%
-  mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
-
-density_ratios <- processed_grid %>%
-  select(-fishery_effect) %>%
-  unnest() %>%
-  group_by(experiment) %>%
-  mutate(year = 1:length(year)) %>%
-  ungroup() %>%
-  mutate(years_protected = year - year_mpa + 1) %>%
-  left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
-
+fishery_outcomes <- readRDS(file.path(run_dir,"fishery_outcomes.rds"))
 
 
 fishery_eqo <- fishery_outcomes %>%
   filter(year == max(year))
 
+   eqo <- outcomes %>%
+     filter(year == max(year))
 
 facet_labels <- c(
   mpa_size = "Range in MPA",
@@ -395,8 +321,8 @@ For the population model, numbers *n* at time *t* for age *a* are given by
 \begin{equation}
 n_{t,a}=\begin{cases}
       = BH(ssb_{t-1}) & \text{if $a = 1$}\\
-     = n_{t-1,a-1}e^{-(m + qE_t{\times}s_{a-1})}, & \text{if $1< a < max(age)$}\\
-     =  n_{t-1,a}e^{-(m + qE_t{\times}s_a)} + n_{t-1,a-1}e^{-(m + qE_t{\times}s_{a-1})}, & \text{if $a = max(a)$}
+     = n_{t-1,a-1}e^{-(m + qE_{t-1}{\times}s_{a-1})}, & \text{if $1< a < max(age)$}\\
+     =  n_{t-1,a}e^{-(m + qE_{t-1}{\times}s_a)} + n_{t-1,a-1}e^{-(m + qE_{t-1}{\times}s_{a-1})}, & \text{if $a = max(a)$}
   \end{cases}
   (\#eq:pop)
 \end{equation}
@@ -459,7 +385,7 @@ Recruitment follows Beverton-Holt dynamics. We do however allow for three varian
 \end{equation}
 
 
-where **d^l** is the larval movement matrix, *h* is Beverton-Holt steepness (constrained between 0.6 and 0.99), *r0* is unfished recruitment, and *ssb0* is unfished spawning stock biomass.
+where **d^l^** is the larval movement matrix, *h* is Beverton-Holt steepness (constrained between 0.6 and 0.99), *r0* is unfished recruitment, and *ssb0* is unfished spawning stock biomass.
   
   2. Global density dependence: Density dependence is a function of the sum of spawning biomass across all patches, and recruits are then distributed according to habitat quality
 
@@ -482,7 +408,7 @@ where *hab* is a vector of habitat quality by patch that sums to 1.
 
 
 \begin{equation}
-n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right)\times \boldsymbol{d^l} \times \epsilon_t
+n_{t,a = 1,p} = \left(\frac{0.8{\times}r0_{p}\times{h}\times{larv_{t,p}}}{0.2\times{ssb0_p}\times(1 - h)+(h - 0.2)\times{larv_{t,p}}}\right) \times \epsilon_t
   (\#eq:dd3)
 \end{equation}
 
@@ -516,7 +442,7 @@ m_{s,p_i,p_j}=\frac{1}{\sqrt{2\pi\sigma_{s,p_i}^2}}e^{-\frac{d_{p_i,p_j}^2}{2\si
 
 where *i* is the source patch, *j* is the destination patch, *d* is the distance between patches *i* and *j* (where distance is measured with wrapped edges, such that if there are 50 patches, patch 1 and patch 50 have a distance of 1), and $\sigma_s*$is the movement rate, in units of patches, for life stage *s* (adult or larval).
 
-We allow the adult dispersal matrix to be affected by adult density dependence. The idea behind this is that adult fish will move more as densities increase, and become more sedentary as densities decrease (as habitat and good becomes more available for example). This allows us to simulate a scenario where as MPAs build up density they begin to export more adults to the surrounding waters, and if densities are lower in the fished areas these fish will actually become more sedentary. 
+We allow the adult dispersal matrix to be affected by adult density dependence. The idea behind this is that adult fish will move more as densities increase, and become more sedentary as densities decrease (as habitat and food become more available for example). This allows us to simulate a scenario where as MPAs build up density they begin to export more adults to the surrounding waters, and if densities are lower in the fished areas these fish will actually become more sedentary. 
 
 Under these conditions, the adult movement rate is a linear function of depletion (measured as $ssb/ssb_0$)
 
@@ -611,6 +537,8 @@ MPA design is relatively straightforward. We set a percentage of patches that ar
 
 We use this our operating model to simulate 10,000 different fisheries, where each fishery is a random combination of variables, described below
 
+Table.S1 - Range of simulated variables
+
 | Variable | Distribution|
 |---------:|:-----------:|
 | Scientific Name | Drawn from all possible species in `FishLife` (@thorson2017c)|
@@ -635,28 +563,236 @@ We use this our operating model to simulate 10,000 different fisheries, where ea
 
 One thing to note here is the random sampling of species' scientific names. The effect of MPAs, especially over the short term, will clearly be affected by factors such as the growth rate, the mortality rate, and the maturity schedule. These life history traits are related through a variety of biological processes, as such randomly sampling these parameters can lead to biologically nonsensical "frankenfish". We resolve this by using the `FishLife` package (@thorson2017c) instead. `FishLife` builds off of [FishBase](https://fishbase.org/), and provides estimate of key life history traits taking into account the relationships across these variables. For simulations then, we randomly pull a species from `FishLife`, and then pull the available life history information from that species for use in the operating model. This allows us to simulate a wide range of life history types in a realistic manner.
 
-We ran 10,000 simulations from these distributions. Each simulation runs for 50 years in 50 patches (with a 25 year unfished burn-in period for conditions in which initial conditions cannot be solved analytically, for example when MPAs have better habitat than non-MPAs). For each simulation, we run one scenario without MPAs, though taking note of where the MPA would be as needed. For the second scenario, we hold everything constant except we now add in the MPAs as dictated by the particular simulation. 
+We ran 20,000 simulations from these distributions. Each simulation runs for 50 years in 50 patches (with a 25 year unfished burn-in period for conditions in which initial conditions cannot be solved analytically, for example when MPAs have better habitat than non-MPAs). For each simulation, we run one scenario without MPAs, though taking note of where the MPA would be as needed. For the second scenario, we hold everything constant except we now add in the MPAs as dictated by the particular simulation. 
 
 ##### Filtering Simulations
 
-After the 10,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario; b) did not converge to the correct bionomic equilibrium in the open-access scenario; or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with `r nrow(processed_grid) ` viable simulations. 
+After the 20,000 simulations have run, we perform a series of filtering steps to remove runs that either a) produced chaotic dynamics during the open-access scenario; b) did not converge to the correct bionomic equilibrium in the open-access scenario; or c) crashed the population before the MPAs went into place (population falls below 5% of unfished biomass). These filtering steps left us with `r nrow(processed_grid) ` viable simulations. 
 
 
 #### Additional Simulation Results
 
-At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs  
+Simulation results are presented as percent differences in biomass densities with and without MPAs, in order to be comparable to the estimates that the regression model produces. However, this metric presents some problems as a measure of how "detectable" an effect size is. As depletion increases, relatively small changes in total biomass (relative to the variance in the observation process) can translate into large percent changes in biomass. For example, moving from a density of .2kg/m^2^ to .4kg/m^2^ translates to a 100% percent increase, but only a .2kg/m^2^ absolute increase, a small value to detect with a real observation program. 
+
+To illustrate these, we present an alternative to our simulation results in which changes in biomass caused by MPAs is scaled by the unfished biomass in the system. 
+
+```{r pop-conservation-effect, include = TRUE, fig.cap="Median (A) and range (B) of equilibrium regional MPA conservation effects (change in total biomass with MPAs relative to without MPAs as a percentage of unfished biomass) across a range of depletion and MPA sizes (and incorporating the full range of scenarios included in our study). 'Range in MPA' is the percent of patches covered by an MPA, 'Depletion' is the depletion that would have occurred in equilibrium without the MPA"}
+
+
+pop_time_plot <- outcomes %>%
+  filter(years_protected > 0) %>%
+  ggplot(aes(years_protected, pop_effect)) +
+  geom_bin2d() +
+  scale_fill_viridis(guide = gc)
+
+ylabs <- c(expression(""<= "-50%"), paste0(seq(-25,75, by = 25),"%"),expression("">= "100%") )
+
+
+ybreaks = seq(-.50,1, by = .25)
+
+pop_depletion_plot <- outcomes %>%
+  filter(year == max(year)) %>%
+  ggplot() +
+  geom_bin2d(aes(depletion, pop_effect), binwidth = c(.1, .1),
+             show.legend = FALSE) +
+  scale_fill_viridis(
+  option = "A",
+  # trans = "log10",
+  guide = guide_colorbar(frame.colour = "black",
+  frame.linewidth = 1,),
+  name = "Median Effect"
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1), name = "Depletion") +
+  scale_y_continuous(labels = ylabs, breaks = ybreaks, name = "") 
+
+
+pop_depletion_plot <- outcomes %>%
+    filter(year == max(year)) %>%
+    mutate(
+      rdep = cut(
+        depletion,
+        breaks = seq(0, 1, by = .2),
+        labels = seq(0, .8, by = .2),
+        include.lowest = TRUE
+      )
+      ,
+      reff = cut(
+        pop_effect,
+        breaks = seq(-.6, 1, by = .2),
+        labels = seq(-.6, .8, by = .2),
+        include.lowest = TRUE
+      )
+    ) %>%
+    group_by(rdep, reff) %>%
+    count() %>%
+    group_by(rdep) %>%
+    mutate(pn = n / sum(n)) %>%
+    ungroup() %>%
+    mutate(rdep = as.numeric(as.character(rdep)),
+           reff = as.numeric(as.character(reff))) %>%
+    ggplot(aes(rdep, reff, fill = pn)) +
+    geom_raster(hjust = 1, vjust = 1, show.legend = FALSE) +
+    scale_fill_viridis(
+      option = "A",
+      # trans = "log10",
+      guide = hgc,
+      name = "% of Sims",
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                       name = "Depletion",
+                       expand = expand_scale(add = c(0,0))) +
+    scale_y_continuous(labels = ylabs,
+                       breaks = ybreaks,
+                       name = "")
+
+  pop_size_plot <- outcomes %>%
+    filter(year == max(year)) %>%
+    mutate(
+      rsize = cut(
+        mpa_size,
+        breaks = seq(0, 1, by = .2),
+        labels = seq(0, .8, by = .2)
+      )
+      ,
+      reff = cut(
+        pop_effect,
+        breaks = seq(-.6, 1, by = .2),
+        labels = seq(-.6, .8, by = .2)
+      )
+    ) %>%
+    group_by(rsize, reff) %>%
+    count() %>%
+    group_by(rsize) %>%
+    mutate(pn = n / sum(n)) %>%
+    ungroup() %>%
+    mutate(rsize = as.numeric(as.character(rsize)),
+           reff = as.numeric(as.character(reff))) %>%
+    ggplot(aes(rsize, reff, fill = pn)) +
+    geom_raster(hjust = 1, vjust = 1) +
+    scale_fill_viridis(
+      option = "A",
+      # trans = "log10",
+      guide = hgc,
+      name = "% of Sims",
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                       name = "Range in MPA",
+                       expand = expand_scale(add = c(0,0))) +
+    scale_y_continuous(labels = ylabs,
+                       breaks = ybreaks,
+                       name = "Conservation Effect") +
+    theme(legend.position = "top") +
+    labs(title = 'B)')
+
+
+
+ pop_facet_effect_plot <- outcomes %>%
+  filter(year == max(year)) %>%
+   select(pop_effect, mpa_size, depletion) %>%
+   gather(measure, value, -pop_effect) %>%
+   ggplot() +
+   geom_bin2d(aes(value, pop_effect), binwidth = c(.1, .1), show.legend = TRUE) +
+  scale_fill_viridis(
+  option = "A",
+  # trans = "log10",
+  guide = hgc,
+  name = "# of Sims"
+  ) +
+   facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") +
+   scale_x_percent(name = "") +
+   scale_y_percent(name = "Pop. Conservation Effect") + 
+   theme(legend.position = "top")
+
+
+  pop_depletion_and_size_plot <- outcomes %>%
+    filter(years_protected >= 0) %>%
+    group_by(experiment) %>%
+    mutate(depletion = plyr::round_any(depletion[years_protected == 0], .1),
+           mpa_size = plyr::round_any(mpa_size, .1)) %>%
+    filter(year == max(year)) %>%
+    group_by(depletion, mpa_size) %>%
+    summarise(median_mpa_effect = median(pop_effect, na.rm = TRUE)) %>%
+    ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) +
+    geom_tile() +
+    # geom_contour(aes(z = median_mpa_effect, color = ..level..), show.legend = FALSE) +
+    scale_fill_viridis(labels = scales::percent_format(accuracy = 1),
+                       guide = hgc,
+                       name = "Median Population Effect") +
+  labs(x = "Depletion", y = "Range in MPA", title = "A)") +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                       expand = c(0,0)) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0)) + 
+    theme(legend.position = "top")
+  
+  # pop_depletion_and_size_plot <-  directlabels::direct.label(pop_depletion_and_size_plot, list("angled.boxes", box.alpha = 0.5))
+
+
+  pop_combo_plot <-
+    (pop_depletion_and_size_plot) + ((pop_size_plot) / pop_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme(
+    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
+    axis.text.x = element_text(size = 8),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    ) 
+   
+pop_combo_plot
+
+```
+
+
+<!-- ##### BACI -->
+
+<!-- # ```{r baci-vs-mpa-effect-plot, include = FALSE, eval = FALSE} -->
+<!-- #  -->
+<!-- # baci_plot <- baci_outcomes %>% -->
+<!-- #   filter(sprinkler == FALSE, mpa_habfactor == 1) %>% -->
+<!-- #   # select(experiment, -->
+<!-- #   #        years_protected, -->
+<!-- #   #        mpa_effect, -->
+<!-- #   #        adult_movement, -->
+<!-- #   #        mpa_size, -->
+<!-- #   #        contains("baci")) %>% -->
+<!-- #   group_by(experiment) %>%  -->
+<!-- #   mutate(b0 = unique(`no-mpa`[year == 1])) %>%  -->
+<!-- #   ungroup() %>%  -->
+<!-- #   mutate(mpa_effect = (`with-mpa` - `no-mpa`) / b0, -->
+<!-- #          baci = baci / b0) %>%  -->
+<!-- #   mutate(adult_movement = adult_movement / max(adult_movement)) %>% -->
+<!-- #   group_by(experiment) %>%  -->
+<!-- #   filter(years_protected == max(years_protected)) %>% -->
+<!-- #   ggplot(aes(y = (mpa_effect), x = (baci / b0))) + -->
+<!-- #     # geom_hline(aes(yintercept = 0)) +  -->
+<!-- #   # geom_vline(aes(xintercept = 0)) +  -->
+<!-- #   geom_smooth(method = "lm", se = FALSE) + -->
+<!-- #   # geom_abline(aes(slope = 1, intercept = 0), linetype = 2, size = 1.5, color = "red") + -->
+<!-- #   geom_point(aes(color = adult_movement, size = mpa_size), alpha = 0.5, show.legend = FALSE)  + -->
+<!-- #   # labs(y = "True % Increase in Biomass", x = "% BACI") + -->
+<!-- #   scale_color_viridis(guide = wide_hgc, labels = scales::percent_format(accuracy = 1), name = "Fish Movement", -->
+<!-- #                       option = "cividis") +  -->
+<!-- #   theme(legend.position = "top") -->
+<!-- #  -->
+<!-- # pdf(file =  "figs/baci.pdf",width = 8, height = 5, useDingbats = TRUE) -->
+<!-- # print(baci_plot) -->
+<!-- # dev.off() -->
+<!-- #  -->
+<!-- # ``` -->
+
+
+<!-- At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs   -->
 
 ```{r mpa-tradeoffs}
 
-tradeoffs <- fishery_outcomes %>% 
-  select(experiment, year, years_protected,mpa_size, fishery_effect) %>% 
-  left_join(outcomes %>% 
+tradeoffs <- fishery_outcomes %>%
+  select(experiment, year, years_protected,mpa_size, fishery_effect) %>%
+  left_join(outcomes %>%
   select(experiment,year, mpa_effect), by = c("experiment","year")
 )
 
 
-vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>% 
-  mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>% 
+vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>%
+  mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>%
   mutate(vline = slope * fishery_effect)
 
 tradeoff_kobe_plot = tradeoffs %>%
@@ -683,33 +819,34 @@ tradeoff_kobe_plot = tradeoffs %>%
   # scale_color_viridis_d() +
   facet_wrap( ~ mpa_bin) +
   theme_minimal() +
-  theme(legend.position = "top") + 
+  theme(legend.position = "top") +
     scale_x_continuous(labels = scales::percent_format(accuracy = 1),
                      name = "% Change Fishery") +
       scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% Change Conservation")
+                     name = "% Change Conservation") + 
+  labs(caption = "facets are percent of range in MPA. Red dashed line shows points where fisheries losses/gains are equal to conservation gains")
 
 # suppose that utility is the sum of percentage gain in conservation and fishery
 
-tradeoff_bins <- tradeoffs %>% 
-  group_by(experiment) %>% 
-  filter(years_protected == max(years_protected)) %>% 
-  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
+tradeoff_bins <- tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  mutate(tradeoff = mpa_effect + fishery_effect) %>%
   mutate(tradeoff_bin = plyr::round_any(tradeoff,.25),
-         mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
-  group_by(tradeoff_bin, mpa_bin) %>% 
-  count() %>% 
-  group_by(mpa_bin) %>% 
-  mutate(n = n / sum(n)) %>% 
-  ungroup() 
+         mpa_bin = plyr::round_any(mpa_size,.1)) %>%
+  group_by(tradeoff_bin, mpa_bin) %>%
+  count() %>%
+  group_by(mpa_bin) %>%
+  mutate(n = n / sum(n)) %>%
+  ungroup()
 
-tradeoff_summary <- tradeoffs %>% 
-  group_by(experiment) %>% 
-  filter(years_protected == max(years_protected)) %>% 
-  mutate(tradeoff = mpa_effect + fishery_effect) %>% 
-  mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>% 
-  group_by(mpa_bin) %>% 
-  summarise(net_tradeoff = mean(tradeoff > 0)) 
+tradeoff_summary <- tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  mutate(tradeoff = mpa_effect + fishery_effect) %>%
+  mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>%
+  group_by(mpa_bin) %>%
+  summarise(net_tradeoff = mean(tradeoff > 0))
 
 tradeoff_density_plot <- tradeoff_bins %>%
   ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) +
@@ -723,7 +860,7 @@ tradeoff_density_plot <- tradeoff_bins %>%
   ) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1),
                      name = "% of Range in MPA") +
-  scale_y_continuous(name = "Net Utility") + 
+  scale_y_continuous(name = "Net Utility") +
   theme(legend.position = "top")
 
 
@@ -734,34 +871,166 @@ tradeoff_summary_plot <- tradeoff_summary %>%
   scale_x_continuous(labels = scales::percent_format(accuracy = 1),
                      name = "% of Range in MPA") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     name = "% Positive Utility") 
+                     name = "% Positive Utility")
 
 tradeoff_density_plot + tradeoff_summary_plot & theme(
     plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
     axis.text.x = element_text(size = 8),
     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
     axis.text.y = element_text(size = 10)
-    ) 
-   
-
-```
-
-why is it going to be hard ot detect regional effects of MPAs few if any empirical studies at net regional effects. does this mean that i doesn't exist, or impossible tot est, why? three fundamental stumbling blocks
-## Channel Islands Data
-
-```{r}
+    )
 
 
 ```
+
+<!-- why is it going to be hard ot detect regional effects of MPAs few if any empirical studies at net regional effects. does this mean that i doesn't exist, or impossible tot est, why? three fundamental stumbling blocks -->
+
 
 
 ## Estimation Model
 
 The goal of the estimation model is to estimate the difference in the mean densities of targeted and non-targeted species pre-and-post MPA implementation.
 
+### Data
+
+All observation data used in the estimation model were collected by PISCO. PISCO staff also compiled allometric information used to convert lengths to expected weights, and hence biomass densities. We do not account for error in this translation step Table.S\@ref(tab:classcode) lists the species included in the model. In order to be included in the estimation model, a species must have been observed at least twice a year every year for at least 14 years. We also omitted all observations of "young of the year" fish due to inability to identify these observations to the nearest species level in many cases. We omitted data from 1999 due to changes in the sampling procedures that occurred after 1999. Per recommendations from PISCO staff we omit observations from the canopy level of the transects (leaving the middle, bottom, and middle canopy levels). 
+
+PISCO data report positive observations of fish. In order to use these data in our model we need to add in zeros for any transect that could have observed a given species of fish but did not. We assume that a fish could have been observed on a given transect if that species has ever been observed at that site in any time period in the data (PISCO data are organized by sites, with multiple transect at different locations within the borders of a site). If a species has never been observed at a site we assume that it does not occur at that site. 
+
+Interested readers can examine the mean biomass densities of all species in Fig.\@ref(fig:targ-trend-plot)-\@ref(fig:nontarg-trend-plot). 
+
+We include several additional sources of data in our regression analysis. Temperature readings are included from the PISCO data for each transect. We also include PISCO data on the estimated surge and visibility. We augmented these data with information on kelp cover over time from the Santa Barbara Channel Long Term Ecological Research Network [@lter2017]. We used a k-nearest neighbors algorithm to fill in missing kelp observations, and matched the interpolated kelp data to the PISCO data at the resolution of year-month-site (Fig.\@ref(fig:kelp-plot)). 
+
+Temperature data were augmented with data from `FishLife` [@thorson2017c] to include the estimated preferred temperature for a given species, so that we can include deviations from the preferred temperature envelope as a predictor in the model. This allows different temperatures to have different effects on each species (and is less computationally intensive than estimating species-temperature slopes) (Fig.\@ref(fig:tempdev-plot)). 
+
+We also included lagged catch totals in the Santa Barbara region for the commercially harvest species in the database, in an effort to control for changes in density caused by changes in fishing pressure. Catches were pulled from the CDFW website (https://www.wildlife.ca.gov/Fishing/Commercial/Landings), and extracted using the `tabulizer` package in R [@leeper2018] (Fig.\@ref(fig:catches-plot)). 
+
+```{r tempdev-plot, fig.cap = "Mean deviations from preferred temperature by species and year"}
+
+
+abundance_data$data[[1]] %>% 
+  group_by(commonname, year) %>% 
+  summarise(mean_tempdev = mean(temp_deviation)) %>% 
+  ggplot(aes(year, mean_tempdev)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line() + 
+  facet_wrap(~commonname, scales = "free_y") + 
+  theme_minimal() + 
+  labs(x = "Year", y = "Deviation from mean preferred temperature")
+
+
+```
+
+
+```{r catches-plot, fig.cap = "Total CDFW reported commercial catches in the Santa Barbara region"}
+
+abundance_data$data[[1]] %>% 
+  filter(targeted == 1) %>% 
+  group_by(commonname, year) %>% 
+  summarise(catches = unique(lag_catch)) %>% 
+  group_by(commonname) %>% 
+  mutate(total_catches = sum(catches)) %>% 
+  ungroup() %>% 
+  filter(total_catches > 0) %>% 
+  ggplot(aes(year, catches)) + 
+  geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
+  geom_line() + 
+  facet_wrap(~commonname, scales = "free_y") + 
+  theme_minimal() + 
+  labs(x = "Year", y = "Catch (lbs)")
+
+```
+
+
+```{r kelp-plot, fig.cap="Mean kelp biomass by island over time from SBC LTER"}
+
+abundance_data$data[[1]] %>% 
+  group_by(region,year) %>% 
+  summarise(mean_kelp = mean(interp_kelp, na.rm = TRUE)) %>% 
+  ggplot(aes(year, (mean_kelp), color = region)) + 
+  geom_line() + 
+  labs(x = "Year", y = "Mean Kelp Biomass")
+
+```
+
+
+
+```{r targ-trend-plot, fig.cap="Centered and scaled mean biomass densities of all targeted finfish in analysis before filtering"}
+
+targeted_trend_plot <- pisco_data %>% 
+  filter(targeted == 1) %>% 
+  group_by(year, classcode, targeted, commonname) %>% 
+  summarise(mean_biomass_density = mean(density_g_m2, na.rm = TRUE)) %>% 
+  group_by(classcode) %>% 
+  mutate(mean_biomass_density = scale(mean_biomass_density)) %>% 
+  ggplot(aes(year,mean_biomass_density)) + 
+  geom_hline(aes(yintercept = 0), linetype = 2) + 
+  geom_vline(aes(xintercept = 2003), color = "red") +
+  geom_line() + 
+  facet_wrap(~commonname) +
+  theme_minimal() + 
+  theme(strip.text = element_text(size = 6),
+        axis.text.x = element_text(size = 8)) + 
+  labs(x = "Year", y = "Centered and Scaled Mean Biomass Density")
+
+targeted_trend_plot
+```
+
+```{r nontarg-trend-plot, fig.cap="Centered and scaled mean biomass densities of all non-targeted finfish in analysis before filtering"}
+
+nontargeted_trend_plot <- pisco_data %>% 
+  filter(targeted == 0) %>% 
+  group_by(year, classcode, targeted, commonname) %>% 
+  summarise(mean_biomass_density = mean(density_g_m2, na.rm = TRUE)) %>% 
+  group_by(classcode) %>% 
+  mutate(mean_biomass_density = scale(mean_biomass_density)) %>% 
+  ggplot(aes(year,mean_biomass_density)) + 
+  geom_hline(aes(yintercept = 0), linetype = 2) + 
+  geom_vline(aes(xintercept = 2003), color = "red") +
+  geom_line() + 
+  facet_wrap(~commonname) +
+  theme_minimal() + 
+  theme(strip.text = element_text(size = 6),
+        axis.text.x = element_text(size = 8)) + 
+  labs(x = "Year", y = "Centered and Scaled Mean Biomass Density")
+
+nontargeted_trend_plot
+```
+
+
+```{r classcode}
+
+species_data <- cip_data %>% 
+  select(classcode, commonname, taxa, targeted) %>% 
+  unique() %>% 
+  arrange(desc(targeted)) %>% 
+  mutate(targeted = targeted == 1) %>% 
+  rename(`Common Name` = commonname, 
+         `Scientific Name` = taxa,
+         `Targeted?` = targeted)
+
+status <- read_csv(here::here("data","stock-status-summaries.csv")) %>% 
+  select(classcode, `Stock Status`)
+
+species_data <- species_data %>% 
+  left_join(status, by = "classcode")
+
+knitr::kable(species_data,
+             digits = 2,
+             caption = "Species included in estimation model",
+             longtable = TRUE,
+             booktabs = TRUE,
+             col.names = colnames(species_data)) %>%
+  kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
+
+
+```
+
+### Model
+
 The regression analysis uses a mixed-effects hierarchical model. The raw data are estimated length compositions by fish species along a survey transect at a site. Lengths are converted to biomass per allometric relationships supplied by PISCO and supplemented by the `FishLife` [@thorson2017c] package in R where needed. We performed some minimal data filtering to reduce noise in the data. We only include species that were observed at least twice in each year of the dataset (2000-2017) somewhere in the core Channel Islands (Anacapa, Santa Cruz, Santa Rosa, San Miguel). While some data are available from 1999, per consultation with PISCO we omit those data due to changes in survey protocols. We assign species to targeted and non-targeted groups per the PISCO classifications. This filtering process results in `r filter_summary$no` non-targeted species and `r filter_summary$yes` targeted species remaining in the analysis. 
 
-The simplified explanation of the estimation is a hierarchichal model in which we first standardize the observed biomass densities into an abundance index of each species over time. The abundance indices in each year are assumed to be log-normally distributed with means and standard deviations for the targeted and non-targeted groups, giving an estimate of the mean densities of targeted and non-targeted species over time. We then calculate the difference between mean density of targeted species and the mean density of non-targeted species in each year.
+The simplified explanation of the estimation is a hierarchical model in which we first standardize the observed biomass densities into an abundance index of each species over time. The abundance indices in each year are assumed to be log-normally distributed with means and standard deviations for the targeted and non-targeted groups, giving an estimate of the mean densities of targeted and non-targeted species over time. We then calculate the difference between mean density of targeted species and the mean density of non-targeted species in each year.
 
 \newpage
 ```{r cartoon, fig.cap= "Cartoon illustration of the hierarchichal difference-in-difference estimator", fig.width=3}
@@ -862,41 +1131,7 @@ The model is fit in TMB to integrate the uncertainty across all levels of the mo
 
 A complete table of estimated coefficients can be seen in Table.S\@ref(tab:betatable).
 
-Species are indicated by "classcode". We provide a table linking classcodes to scientific name, common name, and whether the species is listed as targeted by fishing (Table.S\@ref(tab:classcode))
-
-
-Stock status estimates are not available for many of the targeted species in the database. The California Department of Fish and Wildlife compiles status estimates for many nearshore finfish (https://www.wildlife.ca.gov/Conservation/Marine/Groundfish/Nearshore-Finfish), including recent stock assessments.  For species not listed here we searched for available information on recent stock status from relevant stock assessments. 
-
-```{r classcode}
-
-species_data <- cip_data %>% 
-  select(classcode, commonname, taxa, targeted) %>% 
-  unique() %>% 
-  arrange(desc(targeted)) %>% 
-  mutate(targeted = targeted == 1) %>% 
-  rename(`Common Name` = commonname, 
-         `Scientific Name` = taxa,
-         `Targeted?` = targeted)
-
-status <- read_csv(here::here("data","stock-status-summaries.csv")) %>% 
-  select(classcode, `Stock Status`)
-
-species_data <- species_data %>% 
-  left_join(status, by = "classcode")
-
-knitr::kable(species_data,
-             digits = 2,
-             caption = "Species included in estimation model",
-             longtable = TRUE,
-             booktabs = TRUE,
-             col.names = colnames(species_data)) %>%
-  kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
-
-
-```
-
-
-A complete table of estimated coefficients can be seen in Table.S\@ref(tab:betatable).
+<!-- Stock status estimates are not available for many of the targeted species in the database. The California Department of Fish and Wildlife compiles status estimates for many nearshore finfish (https://www.wildlife.ca.gov/Conservation/Marine/Groundfish/Nearshore-Finfish), including recent stock assessments.  For species not listed here we searched for available information on recent stock status from relevant stock assessments.  -->
 
 ```{r betatable}
 
@@ -904,7 +1139,7 @@ table <- betas %>% select(-std_error,-group)
 
 knitr::kable(table,
              digits = 2,
-             caption = "Complete table of estimated coefficients from hierarchichal difference-in-difference model",
+             caption = "Complete table of estimated coefficients from hierarchical difference-in-difference model",
              longtable = TRUE,
              booktabs = TRUE,
              col.names = colnames(table)) %>% 
@@ -1019,7 +1254,7 @@ targeted_trends
 
 ### Regression Diagnostics
 
-We include visual diagnostics of our estimation model. 
+We include visual diagnostics of our estimation model. All coefficients passed convergence criteria for TMB.
 
 
 Looking first at the predictions of the model for the positive observations in the data (i.e. using the full model to predict biomass densities, and then comparing those predictions to cases where some positive biomass densities were observed), the model diagnostics show no clear problems. The $R^2$ of the model is 0.43. Residuals do not exhibit trends, though some grouping the residuals is evident. The quantile-quantile plot suggest that on the assumption of log-normal errors on the observed densities is reasonable, though the model appears to have some slight problems estimating the highest observed densities (Fig.S\@ref(fig:obs-v-pred-plot)).
@@ -1289,7 +1524,7 @@ raw_nompa_only <- fitted_data %>%
   ungroup() %>%
   left_join(life_history, by = "classcode")
 
-basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
+# basic_model <- rstanarm::stan_glm(log(md + 1e-3) ~ factor(year) + targeted + factor(year):targeted, data = raw)
 
 
 ```
@@ -1317,7 +1552,7 @@ year_mpa <- 2002
     mutate(mpa = year > year_mpa) %>%
     ungroup() %>%
     mutate(fyear = factor(year)) %>%
-    mutate(fyear = relevel(fyear, ref = "2002"))
+    mutate(fyear = relevel(fyear, ref = "2003"))
 
 
   sortasimple_reg <-
@@ -1345,9 +1580,49 @@ sortasimple_plot
 ```
 
 
+```{r species-by-species-did, results = "hide"}
+
+year_mpa <- 2002
+
+  data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
+    mutate(density = exp(log_density) * any_seen) %>%
+    mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
+
+  sortasimple <- data %>%
+    group_by(year, classcode) %>%
+    summarise(mean_density = mean(density),
+              targ = unique(targ)) %>%
+    mutate(mpa = year > year_mpa) %>%
+    ungroup() %>%
+    mutate(fyear = factor(year)) %>%
+    mutate(fyear = relevel(fyear, ref = "2003"))
+
+
+  sortasimple_reg <-
+    rstanarm::stan_glmer(
+      log(mean_density + 1e-3) ~ targ * fyear + (1 |
+                                                   classcode),
+      data = sortasimple,
+      cores = 4
+    )
+
+  sortasimple_plot <- bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                                            regex_pars = ":fyear") +
+    geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
+    scale_y_discrete(labels = c(2000:2001, 2003:2017)) +
+    coord_flip() +
+    scale_x_percent() + 
+    zissou_theme + 
+    labs(x="Estimated Difference",y="Year")+
+    theme(axis.text.x = element_text(size = 8))
+
+
+```
+
+
 As an even simpler approach, we aggregated the data to the level of targeted and non-targeted species, and estimated the divergence in their trends over time.
 
-```{r}
+```{r, results = "hide"}
 
 
   data <- abundance_data$data[abundance_data$data_source == "pisco"][[1]] %>%
@@ -1355,7 +1630,7 @@ As an even simpler approach, we aggregated the data to the level of targeted and
     mutate(targ = case_when(targeted == 1 ~ "Targeted",  TRUE ~ "Non-Targeted"))
 
   supersimple <- data %>%
-    group_by(year, targeted) %>%
+    group_by(year, targ) %>%
     summarise(mean_density = mean(density)) %>% 
     mutate(mpa = year > year_mpa) %>%
     ungroup() %>%
@@ -1365,10 +1640,10 @@ As an even simpler approach, we aggregated the data to the level of targeted and
 
   supersimple_reg <-
     rstanarm::stan_glm(
-      log(mean_density + 1e-3) ~ targeted * fyear,
+      log(mean_density + 1e-3) ~ targ * fyear,
       data = supersimple,
       cores = 4,
-      iter = 5000,
+      iter = 10000,
       adapt_delta = 0.95
     )
   
@@ -1397,6 +1672,46 @@ As an even simpler approach, we aggregated the data to the level of targeted and
 supersimple_plot
 ```
 
+
+We can also explore the effects of our species filtering by running a simplified regression but now including all the species in the database, no matter of how infrequently they are observed. 
+
+```{r, results= "hide"}
+year_mpa <- 2002
+
+  sortasimple <- pisco_data %>%
+    group_by(year, classcode) %>%
+    summarise(mean_density = mean(density_g_m2, na.rm = TRUE),
+              targ = unique(targeted)) %>%
+    mutate(mpa = year > year_mpa) %>%
+    ungroup() %>%
+    mutate(fyear = factor(year)) %>%
+    mutate(fyear = relevel(fyear, ref = "2003")) 
+
+
+  sortasimple_reg <-
+    rstanarm::stan_glmer(
+      log(mean_density + 1e-3) ~ targ * fyear + (1 |
+                                                   classcode),
+      data = sortasimple,
+      cores = 4
+    )
+
+  all_species_sortasimple_plot <- bayesplot::mcmc_areas(as.matrix(sortasimple_reg),
+                                            regex_pars = ":fyear") +
+    geom_vline(aes(xintercept = 0), linetype = 2, color = "red") +
+    scale_y_discrete(labels = c(1999:2001, 2003:2017)) +
+    coord_flip() +
+    scale_x_percent() + 
+    zissou_theme + 
+    labs(x="Estimated Difference",y="Year")+
+    theme(axis.text.x = element_text(size = 8))
+```
+
+```{r sortasimple-noilter-did, fig.cap = "Results of simplified difference-in-difference regression including all observed finfish. The model estimates the difference in the mean trend of densities of targeted and non-targeted species over time, controlling for the mean densities of each individual species group. Data are initially aggregated to the level of species-by-year."}
+all_species_sortasimple_plot
+```
+
+
 ### Synthetic controls
 
 Synthetic controls are an alternative method for attempting to estimate the causal effect of a policy intervention [@abadie2010]. A difference-in-difference approach assumes that some observable group serves as an adequate control for the state of the treated group in an untreated world. In our default case, we assume that the mean standardized index of non-targeted species are our control for the targeted species. Alternatively, synthetic controls use timeseries of treated and non-treated groups before and after treatment to construct a new "control" group built by weighting the pre-treatment timeseries of un-treated observations (together with covariates) such that the synthetic control group matches the trends in the treated group pre-treatment. 
@@ -1404,7 +1719,7 @@ Synthetic controls are an alternative method for attempting to estimate the caus
 
 We chose to present difference-in-difference as our main result since it better allows us to capture the uncertainty in the data generating process through our hierarchical model. However, we felt that it was worth exploring whether synthetic controls provided substantially different results than our default model. 
 
-For the first synthetic control, we pulled our standardized mean index of abundance for targeted species as a whole from our difference-in-difference model as our treated group. We then pull the standardized indices of abundance for each of the non-targeted groups from the difference-in-difference to use as the candidate untreated components for the synthetic controls. A complete synthetic control analysis would require more extensive validation of the methods, but we use this approach simply to explore whether we observe substantially divergent results in the synthentic control versus the difference-in-difference model. 
+For the first synthetic control, we pulled our standardized mean index of abundance for targeted species as a whole from our difference-in-difference model as our treated group. We then pull the standardized indices of abundance for each of the non-targeted groups from the difference-in-difference to use as the candidate untreated components for the synthetic controls. A complete synthetic control analysis would require more extensive validation of the methods, but we use this approach simply to explore whether we observe substantially divergent results in the synthetic control versus the difference-in-difference model. 
 
 We centered and scaled the candidate abundance indices to facilitate model convergence given the very few number of pre-treatment years available. The results of a synthetic control model are presented as the difference between the observed treatment outcome and the synthetic control (the difference in this case being in units of standard deviations). The model was not able to construct an adequate synthetic control at this level, as shown by the differences between the treated group and the synthetic control pre-treatment. However, we would note that the post-treatment results do show similarities with our main results, namely a lack of a clear divergence between the treatment and the control, and an upwards trend up through the earl 2010s followed by a decline (Fig.S\@ref(fig:total-synth)). 
 
@@ -1945,7 +2260,7 @@ kfm_did_plot
 
 Given trends in mean densities observed in the raw data, the "regional conservation effect" estimated by our model---defined as the divergence in trends between the targeted and non-targeted species across the Channel Islands region---is not surprising. By jumping through countless statistical hoops we reach a similar conclusion that we would just by looking at the divergences in the mean trends. The integration of data from inside and outside of MPAs is a possible explanation for this lack of a clear regional effect. If spillover is limited or has simply not developed yet, especially relative to the effect of fishing outside of MPAs, then it is possible that there is a clear positive effect inside the MPAs, a clear negative effect outside, and when we look across both types of sites we get an unclear average of the two. 
 
-To address this, we can first repeat some exploratory data analysis of trends in densities inside and outside the MPAs for targeted and non-targeted species. @Caselle2015 provides a thorough look at this question of differences inside and outside of MPAs. We update that analysis here to account for our specific questions of trend divergence, potential differences in filtering methods, to include data up through 2017, and to utilize our estimation method on just the inside-MPA data. For all exploratory analyses, we consider the same top `r length(top_species)` consistently observed species. Looking first at simple trends in total mean biomass density across these species inside and outside of MPAs, we find evidence that biomass densities inside the MPAs is increasing faster (and is higher inside) than outside (Fig.S\@ref(fig:bio-mpa)). 
+To address this, we can first repeat some exploratory data analysis of trends in densities inside and outside the MPAs for targeted and non-targeted species. @caselle2015 provides a thorough look at this question of differences inside and outside of MPAs. We update that analysis here to account for our specific questions of trend divergence, potential differences in filtering methods, to include data up through 2017, and to utilize our estimation method on just the inside-MPA data. For all exploratory analyses, we consider the same top `r length(top_species)` consistently observed species. Looking first at simple trends in total mean biomass density across these species inside and outside of MPAs, we find evidence that biomass densities inside the MPAs is increasing faster (and is higher inside) than outside (Fig.S\@ref(fig:bio-mpa)). 
 
 
 ```{r bio-mpa, fig.cap= "Annual mean aggregate biomass density (summed across all fishes) inside and outside of eventual MPA locations over time. Red dashed line indicates MPA implementation year"}
