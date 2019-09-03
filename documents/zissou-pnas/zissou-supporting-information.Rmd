@@ -782,105 +782,106 @@ pop_combo_plot
 
 <!-- At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs   -->
 
-<!-- ```{r mpa-tradeoffs} -->
+```{r mpa-tradeoffs}
 
-<!-- tradeoffs <- fishery_outcomes %>%  -->
-<!--   select(experiment, year, years_protected,mpa_size, fishery_effect) %>%  -->
-<!--   left_join(outcomes %>%  -->
-<!--   select(experiment,year, mpa_effect), by = c("experiment","year") -->
-<!-- ) -->
-
-
-<!-- vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>%  -->
-<!--   mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>%  -->
-<!--   mutate(vline = slope * fishery_effect) -->
-
-<!-- tradeoff_kobe_plot = tradeoffs %>% -->
-<!--   group_by(experiment) %>% -->
-<!--   filter(years_protected == max(years_protected)) %>% -->
-<!--   ungroup() %>% -->
-<!--   mutate(mpa_bin = cut(mpa_size, breaks = seq(0, 1, by = 0.25))) %>% -->
-<!--   ggplot(aes(fishery_effect, mpa_effect)) + -->
-<!--   geom_hline(aes(yintercept = 0), linetype = 2) + -->
-<!--   geom_vline(aes(xintercept = 0), linetype = 2) + -->
-<!--   geom_hex(bins = 5,    aes(fill = ..density..),color = "black") + -->
-<!--     geom_line(data = vplot,aes(fishery_effect, vline), color = "red", -->
-<!--               linetype = 2, size = 2) + -->
-
-<!--   # geom_abline(aes(slope = -1, intercept = 0), linetype = 2, color = "red", size = 2) + -->
-<!--   #   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, color = "black", size = 2) + -->
-<!--   scale_fill_distiller( -->
-<!--     # option = "plasma", -->
-<!--     labels = scales::percent_format(accuracy = 1), -->
-<!--     name = "% of Sims", -->
-<!--     guide = hgc -->
-<!--   ) + -->
-<!--   # geom_point(size = 2, alpha = 0.2, aes(color = factor(mpa_bin))) + -->
-<!--   # scale_color_viridis_d() + -->
-<!--   facet_wrap( ~ mpa_bin) + -->
-<!--   theme_minimal() + -->
-<!--   theme(legend.position = "top") +  -->
-<!--     scale_x_continuous(labels = scales::percent_format(accuracy = 1), -->
-<!--                      name = "% Change Fishery") + -->
-<!--       scale_y_continuous(labels = scales::percent_format(accuracy = 1), -->
-<!--                      name = "% Change Conservation") -->
-
-<!-- # suppose that utility is the sum of percentage gain in conservation and fishery -->
-
-<!-- tradeoff_bins <- tradeoffs %>%  -->
-<!--   group_by(experiment) %>%  -->
-<!--   filter(years_protected == max(years_protected)) %>%  -->
-<!--   mutate(tradeoff = mpa_effect + fishery_effect) %>%  -->
-<!--   mutate(tradeoff_bin = plyr::round_any(tradeoff,.25), -->
-<!--          mpa_bin = plyr::round_any(mpa_size,.1)) %>%  -->
-<!--   group_by(tradeoff_bin, mpa_bin) %>%  -->
-<!--   count() %>%  -->
-<!--   group_by(mpa_bin) %>%  -->
-<!--   mutate(n = n / sum(n)) %>%  -->
-<!--   ungroup()  -->
-
-<!-- tradeoff_summary <- tradeoffs %>%  -->
-<!--   group_by(experiment) %>%  -->
-<!--   filter(years_protected == max(years_protected)) %>%  -->
-<!--   mutate(tradeoff = mpa_effect + fishery_effect) %>%  -->
-<!--   mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>%  -->
-<!--   group_by(mpa_bin) %>%  -->
-<!--   summarise(net_tradeoff = mean(tradeoff > 0))  -->
-
-<!-- tradeoff_density_plot <- tradeoff_bins %>% -->
-<!--   ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) + -->
-<!--   # geom_hline(aes(yintercept = 0), linetype = 2, size = 2) + -->
-<!--   geom_tile(alpha = 0.9) + -->
-<!--   scale_fill_viridis( -->
-<!--     option = "plasma", -->
-<!--     labels = scales::percent_format(accuracy = 1), -->
-<!--     name = "% of Sims", -->
-<!--     guide = hgc -->
-<!--   ) + -->
-<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), -->
-<!--                      name = "% of Range in MPA") + -->
-<!--   scale_y_continuous(name = "Net Utility") +  -->
-<!--   theme(legend.position = "top") -->
+tradeoffs <- fishery_outcomes %>%
+  select(experiment, year, years_protected,mpa_size, fishery_effect) %>%
+  left_join(outcomes %>%
+  select(experiment,year, mpa_effect), by = c("experiment","year")
+)
 
 
+vplot <- tibble(fishery_effect = -1:1, mpa_effect = -1:1) %>%
+  mutate(slope = ifelse(fishery_effect < 0, -1, 1)) %>%
+  mutate(vline = slope * fishery_effect)
 
-<!-- tradeoff_summary_plot <- tradeoff_summary %>% -->
-<!--   ggplot(aes(mpa_bin, net_tradeoff)) + -->
-<!--   geom_col() + -->
-<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), -->
-<!--                      name = "% of Range in MPA") + -->
-<!--   scale_y_continuous(labels = scales::percent_format(accuracy = 1), -->
-<!--                      name = "% Positive Utility")  -->
+tradeoff_kobe_plot = tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  ungroup() %>%
+  mutate(mpa_bin = cut(mpa_size, breaks = seq(0, 1, by = 0.25))) %>%
+  ggplot(aes(fishery_effect, mpa_effect)) +
+  geom_hline(aes(yintercept = 0), linetype = 2) +
+  geom_vline(aes(xintercept = 0), linetype = 2) +
+  geom_hex(bins = 5,    aes(fill = ..density..),color = "black") +
+    geom_line(data = vplot,aes(fishery_effect, vline), color = "red",
+              linetype = 2, size = 2) +
 
-<!-- tradeoff_density_plot + tradeoff_summary_plot & theme( -->
-<!--     plot.margin = unit(c(0, 1, 0, 1), units = "lines"), -->
-<!--     axis.text.x = element_text(size = 8), -->
-<!--     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"), -->
-<!--     axis.text.y = element_text(size = 10) -->
-<!--     )  -->
+  # geom_abline(aes(slope = -1, intercept = 0), linetype = 2, color = "red", size = 2) +
+  #   geom_abline(aes(slope = 1, intercept = 0), linetype = 2, color = "black", size = 2) +
+  scale_fill_distiller(
+    # option = "plasma",
+    labels = scales::percent_format(accuracy = 1),
+    name = "% of Sims",
+    guide = hgc
+  ) +
+  # geom_point(size = 2, alpha = 0.2, aes(color = factor(mpa_bin))) +
+  # scale_color_viridis_d() +
+  facet_wrap( ~ mpa_bin) +
+  theme_minimal() +
+  theme(legend.position = "top") +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Change Fishery") +
+      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Change Conservation") + 
+  labs(caption = "facets are percent of range in MPA. Red dashed line shows points where fisheries losses/gains are equal to conservation gains")
+
+# suppose that utility is the sum of percentage gain in conservation and fishery
+
+tradeoff_bins <- tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  mutate(tradeoff = mpa_effect + fishery_effect) %>%
+  mutate(tradeoff_bin = plyr::round_any(tradeoff,.25),
+         mpa_bin = plyr::round_any(mpa_size,.1)) %>%
+  group_by(tradeoff_bin, mpa_bin) %>%
+  count() %>%
+  group_by(mpa_bin) %>%
+  mutate(n = n / sum(n)) %>%
+  ungroup()
+
+tradeoff_summary <- tradeoffs %>%
+  group_by(experiment) %>%
+  filter(years_protected == max(years_protected)) %>%
+  mutate(tradeoff = mpa_effect + fishery_effect) %>%
+  mutate(mpa_bin = plyr::round_any(mpa_size,.1)) %>%
+  group_by(mpa_bin) %>%
+  summarise(net_tradeoff = mean(tradeoff > 0))
+
+tradeoff_density_plot <- tradeoff_bins %>%
+  ggplot(aes(mpa_bin, tradeoff_bin, fill = n)) +
+  # geom_hline(aes(yintercept = 0), linetype = 2, size = 2) +
+  geom_tile(alpha = 0.9) +
+  scale_fill_viridis(
+    option = "plasma",
+    labels = scales::percent_format(accuracy = 1),
+    name = "% of Sims",
+    guide = hgc
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% of Range in MPA") +
+  scale_y_continuous(name = "Net Utility") +
+  theme(legend.position = "top")
 
 
-<!-- ``` -->
+
+tradeoff_summary_plot <- tradeoff_summary %>%
+  ggplot(aes(mpa_bin, net_tradeoff)) +
+  geom_col() +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% of Range in MPA") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     name = "% Positive Utility")
+
+tradeoff_density_plot + tradeoff_summary_plot & theme(
+    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
+    axis.text.x = element_text(size = 8),
+    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+    axis.text.y = element_text(size = 10)
+    )
+
+
+```
 
 <!-- why is it going to be hard ot detect regional effects of MPAs few if any empirical studies at net regional effects. does this mean that i doesn't exist, or impossible tot est, why? three fundamental stumbling blocks -->
 
@@ -900,7 +901,7 @@ Interested readers can examine the mean biomass densities of all species in Fig.
 
 We include several additional sources of data in our regression analysis. Temperature readings are included from the PISCO data for each transect. We also include PISCO data on the estimated surge and visibility. We augmented these data with information on kelp cover over time from the Santa Barbara Channel Long Term Ecological Research Network [@lter2017]. We used a k-nearest neighbors algorithm to fill in missing kelp observations, and matched the interpolated kelp data to the PISCO data at the resolution of year-month-site (Fig.\@ref(fig:kelp-plot)). 
 
-Temperature data were augmented with data from `FishLife` [@thorson2017c] to include the estimated preferred temperature for a given species, so that we can include deviations from the preferred temperature as a predictor in the model. This allows different temperatures to have different effects on each species (and is less computationally intensive than estimating species-temperature slopes) (Fig.\@ref(fig:tempdev-plot)). 
+Temperature data were augmented with data from `FishLife` [@thorson2017c] to include the estimated preferred temperature for a given species, so that we can include deviations from the preferred temperature envelope as a predictor in the model. This allows different temperatures to have different effects on each species (and is less computationally intensive than estimating species-temperature slopes) (Fig.\@ref(fig:tempdev-plot)). 
 
 We also included lagged catch totals in the Santa Barbara region for the commercially harvest species in the database, in an effort to control for changes in density caused by changes in fishing pressure. Catches were pulled from the CDFW website (https://www.wildlife.ca.gov/Fishing/Commercial/Landings), and extracted using the `tabulizer` package in R [@leeper2018] (Fig.\@ref(fig:catches-plot)). 
 
