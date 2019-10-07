@@ -1,5 +1,6 @@
 ---
-title: "Supporting Information"
+title: "Supporting Information: The Regional Effects of Marine Protected Areas"
+author:  Daniel Ovando,Jennifer E. Caselle,Christopher Costello,Olivier Deschenes,Steven D. Gaines,Ray Hilborn,Owen Liu
 output: 
   bookdown::pdf_document2:
     keep_tex: true
@@ -9,10 +10,14 @@ csl: pnas.csl
 header-includes:
     - \usepackage{longtable}
     - \usepackage{booktabs}
+    - \usepackage{eso-pic}
+    - \usepackage{graphicx}
+    - \usepackage{transparent}
+lineno: true
 ---
 
 ```{r, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE)
 
 library(sf)
 library(ggmap)
@@ -27,6 +32,7 @@ library(ggsci)
 library(rEDM)
 library(tidyverse)
 library(Synth)
+library(spasm)
 extrafont::loadfonts()
 functions <- list.files(here::here("functions"))
 
@@ -267,9 +273,9 @@ did_betas <- zissou_fit$zissou_estimates %>%
     geom_hline(aes(yintercept = 0)) +
     geom_pointrange(aes(
       year,
-      y = estimate,
-      ymin = lower,
-      ymax = upper
+      y = exp(estimate) - 1,
+      ymin = exp(lower) - 1,
+      ymax = exp(upper) - 1
     ),
     size = 1.5
     ) +
@@ -308,7 +314,22 @@ filter_summary <- fitted_data %>%
 
 ## Computing environment
 
-The computing environment needed to reproduce the results presented here is stored in a Docker container available [here](). Interested users can load the container on their system to reproduce the complete analysis and manuscript. 
+The computing environment needed to reproduce the results presented here is stored in a Docker container available [here]()XX. Interested users can load the container on their system to reproduce the complete analysis and manuscript. Analysis were perfoemd in `r R.version.string`. Package versions are shown in Table.S\@ref(tab:pkg-info).
+
+```{r pkg-info}
+table <- devtools::package_info() %>% 
+  select(package, loadedversion, date,source)
+
+knitr::kable(table,
+             digits = 2,
+             caption = "Package versions and sources used in this paper",
+             longtable = TRUE,
+             booktabs = TRUE,
+             col.names = colnames(table)) %>% 
+  kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
+
+```
+
 
 
 ## Operating Model
@@ -631,7 +652,7 @@ pop_depletion_plot <- outcomes %>%
     mutate(rdep = as.numeric(as.character(rdep)),
            reff = as.numeric(as.character(reff))) %>%
     ggplot(aes(rdep, reff, fill = pn)) +
-    geom_raster(hjust = 1, vjust = 1, show.legend = FALSE) +
+    geom_tile(show.legend = FALSE) +
     scale_fill_viridis(
       option = "A",
       # trans = "log10",
@@ -669,7 +690,7 @@ pop_depletion_plot <- outcomes %>%
     mutate(rsize = as.numeric(as.character(rsize)),
            reff = as.numeric(as.character(reff))) %>%
     ggplot(aes(rsize, reff, fill = pn)) +
-    geom_raster(hjust = 1, vjust = 1) +
+    geom_tile() +
     scale_fill_viridis(
       option = "A",
       # trans = "log10",
@@ -782,7 +803,7 @@ pop_combo_plot
 
 <!-- At the extreme sizes of MPAs there is clearly a tension between conservation and fishery goals. However, most MPAs are relatively small (XX), and therefore likely to cover lower percentages of a population as simulated here. A key question then is how do tradeoffs   -->
 
-```{r mpa-tradeoffs}
+```{r mpa-tradeoffs, eval = FALSE}
 
 tradeoffs <- fishery_outcomes %>%
   select(experiment, year, years_protected,mpa_size, fishery_effect) %>%
@@ -873,12 +894,12 @@ tradeoff_summary_plot <- tradeoff_summary %>%
   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
                      name = "% Positive Utility")
 
-tradeoff_density_plot + tradeoff_summary_plot & theme(
-    plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
-    axis.text.x = element_text(size = 8),
-    legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
-    axis.text.y = element_text(size = 10)
-    )
+# tradeoff_density_plot + tradeoff_summary_plot & theme(
+#     plot.margin = unit(c(0, 1, 0, 1), units = "lines"),
+#     axis.text.x = element_text(size = 8),
+#     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"),
+#     axis.text.y = element_text(size = 10)
+#     )
 
 
 ```
@@ -1159,7 +1180,7 @@ Figures S\@ref(fig:fe-plot):S\@ref(fig:targ-plot) present estimated effects for 
    filter(str_detect(group, "non_nested") & !str_detect(variable, "site_side")) %>%
    ggplot() +
    geom_hline(aes(yintercept = 0), linetype = 2, color = "red") +
-   geom_pointrange(aes(x = variable,
+   geom_pointrange(aes(x =variable,
                        y = estimate,
                        ymin = lower,
                        ymax = upper)) +
@@ -1325,7 +1346,9 @@ obs_v_pred_plot/(fit_v_resid_plot + qq_plot)
 
 In order to evaluate the ability of the model to estimate positive observations, we can compare the the binned predicted probability of a positive observation to the proportion of observations in that bin that recorded positive observations. If our model is working well, we would expect a group of fisheries that our model estimates on average should have a 50% probability of a positive observation, then we should expect about 50% of those observations to have positive observations. This is indeed what we see from the model (Fig.S\@ref(fig:obs-prob-plot)).
 
-```{r obs-prob-plot , fig.cap = "Binned mean predicted probability of detection provided by the first stage of the hurdle model vs observed proportion of positive detections"}
+
+```{r obs-prob-plot, fig.cap = "Binned mean predicted probability of detection provided by the first stage of the hurdle model vs observed proportion of positive detections"}
+
 seeing_diag_plot <- seeing_diagnostics %>% 
   ungroup() %>% 
   mutate(binned_prob = ntile(predicted, 20)) %>% 
@@ -1441,19 +1464,33 @@ We include a variety of environmental, observation, and temporal indicators in o
 
 ```{r numeric-cor, fig.cap="Pearson correlation coefficients of continuos data included in the regression model"}
 
-numeric_cor_plot <- base_run$data[[1]] %>% 
-  select_if(is.numeric) %>% 
-  select(-log_density,-targeted) %>% 
-  na.omit() %>% 
-  corrr::correlate() %>% 
-  gather("colname","correlation",-rowname) %>% 
-  ggplot(aes(rowname, colname,fill = correlation)) + 
-  geom_tile() + 
-  geom_text(aes(rowname, colname, label = round(correlation,2))) + 
-  scale_fill_gradient2(low = "tomato", mid = "white", high = "steelblue", midpoint = 0, limits = c(-1,1)) + 
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank()) 
+numeric_cor_plot <- base_run$data[[1]] %>%
+  select_if(is.numeric) %>%
+  select(-log_density, -targeted) %>%
+  na.omit() %>%
+  corrr::correlate() %>%
+  gather("colname", "correlation", -rowname) %>%
+  ggplot(aes(rowname, colname, fill = correlation)) +
+  geom_tile() +
+  geom_text(aes(rowname, colname, label = round(correlation, 2))) +
+  scale_fill_gradient2(
+    low = "tomato",
+    mid = "white",
+    high = "steelblue",
+    midpoint = 0,
+    limits = c(-1, 1)
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      vjust = 1,
+      hjust = 1,
+    size = 6),
+    axis.text.y = element_text(size = 6),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  )
 
 numeric_cor_plot
 ```
@@ -1640,10 +1677,10 @@ As an even simpler approach, we aggregated the data to the level of targeted and
 
   supersimple_reg <-
     rstanarm::stan_glm(
-      log(mean_density + 1e-3) ~ targ * fyear,
+      log(mean_density) ~ targ + fyear + targ:fyear,
       data = supersimple,
       cores = 4,
-      iter = 10000,
+      iter = 2000,
       adapt_delta = 0.95
     )
   
@@ -2140,7 +2177,7 @@ Focusing on just these three groups then (removing herbivores), we can test for 
 
 There are two criteria for CCM to establish causality:  First, and most obviously, predictive cross-map skill using all available data should be significantly greater than zero. Second, that predictability should be convergent.  Convergence means that cross-mapped estimates improve with library length (the number of state-space vectors used to build the attractor), because the attractor is more fully resolved and therefore estimation error should decline. Convergence is key to distinguishing causation from simple or spurious correlation. If two variables are spuriously correlated and not causally linked, CCM should fail to satisfy this second criterion. Based on these criteria, there is little evidence of significant dynamic interactions between trophic groups (Fig.S\@ref(fig:cross-map)). Cross-mapping produced positive predictive skill, but was non-convergent for all cross-mappings with the exception of carnivores cross-mapping piscivores (providing some evidence that piscivore dynamics may be a driver of carnivore dynamics). This analysis provides evidence that trophic cascades are unlikely to be a significant driver of our results. It is important to note though that this analysis does not mean that trophic cascades could not emerge in this system, rather that we do not detect them with these data at this time. 
 
-```{r cross-map fxn}
+```{r cross-map-fxn}
 # plots a cross mapping between two variables in the data, given their variable names (grp), their optimal embedding dimensions (from simplex forecasting), and their preferred names for plotting
 xmap <- function(grp1,grp2,E1,E2,name1,name2){
     # cross-map group 1 to group 2
@@ -2194,16 +2231,17 @@ cross_map_plot
 }
 ```
 
+
+
 ```{r cross-map, fig.cap = "Cross mapping of effect of herbivores on carnivores (A) and carnivores on herbivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
 
 car_pis<-xmap(grp1="carnivore_norm",grp2="piscivore_norm",E1=4,E2=4,name1="Carnivores",name2="Piscivores")
 car_pl <- xmap(grp1="carnivore_norm",grp2="planktivore_norm",E1=4,E2=4,name1="Carnivores",name2="Planktivores")
 pl_pis <- xmap(grp1="planktivore_norm",grp2="piscivore_norm",E1=4,E2=4,name1="Planktivores",name2="Piscivores")
 
-car_pis
-car_pl
-pl_pis
+car_pis + car_pl + pl_pis
 ```
+
 
 
 ```{r trophic-cor-plot, fig.cap="Estimated correlation coefficients between broad trophic groups at the island by year resolution", eval = FALSE}
