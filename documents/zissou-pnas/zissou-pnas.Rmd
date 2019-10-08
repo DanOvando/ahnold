@@ -91,7 +91,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-run_name <- "v4.2"
+run_name <- "v4.3"
 
 run_dir <- here::here("results", run_name)
 
