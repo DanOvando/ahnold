@@ -40,10 +40,9 @@ walk(functions, ~ here::here("functions", .x) %>% source()) # load local functio
 
 # options -----------------------------------------------------------------
 
-run_name <- 'v4.1'
+run_name <- 'v4.2'
 
-run_description <- "hopefully publication version, incorporating new adult
-density dependent movement"
+run_description <- "making sure everything works after file path fixes"
 
 # the following analysis run the complete contents of "zissou". Each section depends on the out
 # outcomes of the prior section, but will load relevant saved files.
@@ -52,7 +51,7 @@ density dependent movement"
 
 run_did <- TRUE # run difference in difference on data from the CINMS
 
-simulate_mpas <- FALSE # simulate MPA outcomes
+simulate_mpas <- TRUE # simulate MPA outcomes
 
 validate_mpas <- TRUE
 
@@ -136,7 +135,7 @@ max_generations <- 5
 
 max_year <- 2017
 
-length_data <- read.csv(glue::glue("{data_dir}/UCSB_FISH.csv")) %>%
+length_data <- read.csv(here::here(data_dir,"UCSB_FISH.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
   mutate(classcode = tolower(classcode)) %>%
   mutate(observer = as.character(observer)) %>%
@@ -279,7 +278,7 @@ life_history_data <- life_history_data %>%
 
 
 cdfw_catches <-
-  read_csv(file = here::here("processed_data", 'cdfw-catches.csv')) %>%
+  read_csv(file = here::here("data", 'cdfw-catches.csv')) %>%
   group_by(sci_name, year) %>%
   summarise(catch = sum(pounds_caught, na.rm = T)) %>%
   left_join(
@@ -417,7 +416,7 @@ length_data <- length_data %>%
 
 # load kelp data
 
-kelp_conn <- ncdf4::nc_open(here::here("data/LandsatKelpBiomass_2017.nc"))
+kelp_conn <- ncdf4::nc_open(here::here("data","LandsatKelpBiomass_2017.nc"))
 
 kelp_vars <- c('lat','lon','year','quarter', 'biomass')
 
@@ -452,10 +451,10 @@ kelp_recipe <- recipes::recipe(mean_kelp ~ ., data = kelp)
 ## process kfm dat
 
 kfm_data <-
-  read_csv(here::here(data_dir,'kfm_data/SBCMBON_integrated_fish_20170520.csv'))
+  read_csv(here::here(data_dir,'kfm_data','SBCMBON_integrated_fish_20170520.csv'))
 
 kfm_locations <-
-  read_csv(here::here(data_dir,'kfm_data/SBCMBON_site_geolocation_20170520.csv'))
+  read_csv(here::here(data_dir,'kfm_data','SBCMBON_site_geolocation_20170520.csv'))
 
 conditions_data <- length_data %>%
   group_by(site, side, classcode, year) %>%
@@ -588,7 +587,7 @@ if (file.exists(here(data_dir,'pdo.csv'))) {
 # convert transect data to density estimates ------------------------------
 
 
-if (file.exists('processed_data/pisco-data.Rdata') == F |
+if (file.exists(file.path(run_dir,"pisco-data.Rdata")) == F |
     run_length_to_density == T) {
 
 
@@ -702,11 +701,11 @@ if (file.exists('processed_data/pisco-data.Rdata') == F |
     stop('multiple species per classcode')
   }
 
-  save(file = paste0('processed_data/pisco-data.Rdata'),
+  save(file = file.path(run_dir,'pisco-data.Rdata'),
        pisco_data)
 
 } else {
-  load('processed_data/pisco-data.Rdata')
+  load(file.path(run_dir,'pisco-data.Rdata'))
 
 }
 
@@ -788,7 +787,7 @@ pisco_data <- pisco_data %>%
     factor_year = factor(year),
     log_density = log(density_g_m2),
     factor_month = factor(month),
-    site_side = glue::glue('{site}-{side}')
+    site_side = paste(site,side, sep = '-')
   ) %>%
   group_by(site, side, month, year) %>%
   mutate(
@@ -893,7 +892,7 @@ kfm_data <- kfm_data %>%
 # save raw-isa data -------------------------------------------------------
 
 save(
-  file = glue::glue("{run_dir}/rawish_zissou_data.Rdata"),
+  file = file.path(run_dir,'rawish_zissou_data.Rdata'),
   life_history_data,
   pisco_data,
   kfm_data
@@ -986,13 +985,15 @@ abundance_data <- pisco_data %>%
   left_join(site_data, by = c("site","side")) %>%
   left_join(lag_catches %>% select(year, classcode, lag_catch), by = c('year', 'classcode')) %>%
   mutate(data_source = 'pisco') %>%
-  nest(-data_source,-classcode) %>%
+  group_by(data_source, classcode) %>%
+  nest() %>%
   bind_rows(kfm_data %>%  mutate(data_source = 'kfm') %>%
               left_join(site_data, by = c("site","side")) %>%
               left_join(lag_catches %>% select(year, classcode, lag_catch), by = c('year', 'classcode')) %>%
               mutate(year_month = year + (month / 12 - .1),
                      site_side = site_id) %>%
-              nest(-data_source,-classcode)
+              group_by(data_source, classcode) %>%
+              nest()
   ) %>%
   filter(classcode %in% well_observed_species$classcode) %>%
   # mutate(data = map(data, ~ left_join(.x, site_data, by = c('site', 'side')))) %>%
@@ -1026,8 +1027,9 @@ abundance_data <- pisco_data %>%
 
 abundance_data <- abundance_data %>%
   select(classcode, data_source, data) %>%
-  unnest() %>%
-  nest(-data_source)
+  unnest(col = data) %>%
+  group_by(data_source) %>%
+  nest()
 
 
 # add kelp data
@@ -1041,7 +1043,7 @@ abundance_data <- abundance_data %>%
   ))))
 
 save(
-  file = glue::glue("{run_dir}/abundance_data.Rdata"),
+  file = file.path(run_dir,"abundance_data.Rdata"),
   abundance_data
 )
 
@@ -1231,12 +1233,12 @@ if (run_tmb == T){
 
   } # close dopar
 
-  save(file = paste0(run_dir, '/model_fits.Rdata'),
+  save(file = file.path(run_dir, 'model_fits.Rdata'),
        fits)
 
   model_runs$tmb_fit <- fits
 
-  save(file = paste0(run_dir, '/model_runs.Rdata'),
+  save(file = file.path(run_dir, 'model_runs.Rdata'),
        model_runs)
 
 
@@ -1274,7 +1276,7 @@ model_runs <- model_runs %>%
 
    create_grid <- TRUE
 
-   samps <- 10000
+   samps <- 100
 
    grid_search <-  FALSE
 
@@ -1468,7 +1470,7 @@ model_runs <- model_runs %>%
 
 
            if (save_experiment == TRUE) {
-             saveRDS(tuned_fishery, file = glue::glue("{experiment_dir}/{filename}"))
+             saveRDS(tuned_fishery, file = file.path(experiment_dir,filename))
 
            } else {
              out <- tuned_fishery
@@ -1480,7 +1482,7 @@ model_runs <- model_runs %>%
        loadfoo <-
          function(fishery, experiment_dir) {
            ex <-
-             readRDS(glue::glue("{experiment_dir}/fishery_{fishery}.rds"))
+             readRDS(file.path(experiment_dir,glue::glue("fishery_{fishery}.rds")))
          }
 
 
@@ -1563,7 +1565,7 @@ model_runs <- model_runs %>%
          # out <- results
 
          if (save_experiment == TRUE) {
-           saveRDS(results, file = glue::glue("{experiment_dir}/{filename}"))
+           saveRDS(results, file = file.path(experiment_dir,filename))
 
          } else {
            out <- results
@@ -1590,7 +1592,7 @@ model_runs <- model_runs %>%
    loadfoo <-
      function(experiment, experiment_dir, output = "mpa-effect") {
        ex <-
-         readRDS(glue::glue("{experiment_dir}/experiment_{experiment}.rds"))
+         readRDS(file.path(experiment_dir, glue::glue("experiment_{experiment}.rds")))
 
        # if (output == "mpa-effect") {
        ex$msy <- ex$tuned_fishery[[1]]$fish$msy
@@ -3158,7 +3160,7 @@ if (make_figures == TRUE){
   # regional catches --------------------------------------------------------
 
   cdfw_catches <-
-    read_csv(file = here::here("processed_data", 'cdfw-catches.csv')) %>%
+    read_csv(file = here::here("data", 'cdfw-catches.csv')) %>%
     group_by(sci_name, year) %>%
     summarise(catch = sum(pounds_caught, na.rm = T)) %>%
     left_join(
@@ -3466,7 +3468,9 @@ if (make_figures == TRUE){
 
 if (knit_paper == TRUE){
 
-  rmarkdown::render(here::here("documents","zissou-pnas","zissou-pnas-v3.Rmd"))
+  rmarkdown::render(here::here("documents","zissou-pnas","zissou-pnas.Rmd"))
+
+  rmarkdown::render(here::here("documents","zissou-pnas","zissou-supporting-information.Rmd"))
 
 }
 

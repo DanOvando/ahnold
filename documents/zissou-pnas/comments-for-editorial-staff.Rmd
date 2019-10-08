@@ -1,0 +1,6 @@
+---
+title: "Comments for Editorial Staff"
+output: html_document
+---
+
+Marine resources provide food, employment, and cultural identity for millions of people around the globe. 

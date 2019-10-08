@@ -30,7 +30,7 @@ author_contributions: |
 conflict_of_interest: |
   R.H's research program receives funding from environmental NGOs, foundations, fishing industry, governments and international agencies. All of these can be interpreted as a conflict of interest when evaluating fisheries policy. C.C., S.G., and O.D's research program includes funding from environmental NGOs and foundations with an interest in ocean conservation and food security
 abstract: |
-  Marine Protected Areas (MPAs) cover between 3-7% of the world's oceans, up from less than 1% in the year 2000. The Convention on Biological Diversity’s calls for 10% of coastal waters to be protected inside MPAs by 2020, while the International Union for Conservation of Nature calls for 30% protection by 2030. It is often clear that MPAs produce conservation benefits inside their borders, but many MPAs are also justified on the grounds that they also benefit the broader region outside their borders. Despite the expanding role of MPAs in marine resource management, we lack a clear understanding of what the regional effects of MPAs might be, and how we might detect them in scientific studies. We used a bio-economic simulation model to demonstrate how the regional effects of MPAs are affected by a suite of economic and environmental drivers and show how commonly used methods to measure inside-MPA effects are likely to fail to capture the regional impacts of protection. We present an empirical strategy for estimating regional MPA effects on biomass density using 16 years of data from inside and outside of MPAs within the Channel Islands, California, USA. We find no statistically clear effect of MPAs on aggregate mean biomass densities of targeted finfish throughout the study region. To make meaningful progress on MPA design and evaluation, the next generation of MPA science must address the challenge of understanding and estimating the regional effects of MPAs across the diversity of species in the ecosystem.
+  Marine Protected Areas (MPAs) cover between 3-7% of the world's oceans, up from less than 1% in the year 2000. The Convention on Biological Diversity calls for 10% of coastal waters to be protected inside MPAs by 2020, while the International Union for Conservation of Nature calls for 30% protection by 2030. It is often clear that MPAs produce conservation benefits inside their borders, but many MPAs are also justified on the grounds that they also benefit the broader region outside their borders. Despite the expanding role of MPAs in marine resource management, we lack a clear understanding of what the regional effects of MPAs might be, and how we might detect them in scientific studies. We used a bio-economic simulation model to demonstrate how the regional effects of MPAs are affected by a suite of economic and environmental drivers and show how commonly used methods to measure inside-MPA effects are likely to fail to capture the regional impacts of protection. We present an empirical strategy for estimating regional MPA effects on biomass density using 16 years of data from inside and outside of MPAs within the Channel Islands, California, USA. We find no statistically clear effect of MPAs on aggregate mean biomass densities of targeted finfish throughout the study region. To make meaningful progress on MPA design and evaluation, the next generation of MPA science must address the challenge of understanding and estimating the regional effects of MPAs across the diversity of species in the ecosystem.
 significance: |
   Healthy marine ecosystems are critical to the well-being of the planet. Marine protected areas, parts of the oceans protected from human activities such as fishing, are increasingly being used in an effort to conserve and manage these ecosystems. Our study pairs theory with empirical methods to examine the regional effects of MPAs on conservation and fishery outcomes. Using simulations, we show that the effects of marine protected areas can be highly variable and dependent on human drivers. Building off of MPA theory, we find no statistically clear effect of a network of MPAs, which our simulation analysis suggests is entirely reasonable. Our results lay a foundation for future research on the design and monitoring of marine protected areas. 
 acknowledgements: |
@@ -51,6 +51,7 @@ header-includes:
 output:
   rticles::pnas_article: default
   bookdown::word_document2: default
+  bookdown::pdf_document2: default
   bookdown::html_document2: default
 ---
 
@@ -90,7 +91,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-  run_name <- "v4.3"
+run_name <- "v4.2"
 
 run_dir <- here::here("results", run_name)
 
@@ -102,8 +103,7 @@ load(file = here::here("results",run_name, "model_runs.Rdata"))
 
 load(file = here::here("results",run_name,"processed_grid.Rdata"))
 
-load(file = paste0(run_dir, "/sim_grid.Rdata"))
-
+load(file = file.path(run_dir ,"sim_grid.Rdata"))
 
 
 cdfw_catches <-
@@ -437,7 +437,7 @@ We used a simulation model to examine the regional conservation effects of MPAs 
 
 ### Theoretical Conservation Effects {#conservation .unnumbered}
 
-As a thought experiment, imagine a region that has driven its fish populations to near extinction and then places 100\% of its waters inside a no-take MPA.  In that setting, we would expect the regional-scale conservation benefits to be massive. On the other hand, imagine implementing an MPA in an area where a sedentary species has been only lightly fished.  In that setting, it is possible to create a small net conservation loss if the concentration of fishing pressure outside the reserve has a greater effect than the biomass buildup inside the reserve. Within these broad bounds, numerous factors can act to affect the regional effects of MPAs. These include the scale of adult and larval dispersal relative to the size of the MPAs  [@gaines2003; @botsford2008; @difranco2018], the strength and timing of density dependence in the population (e.g. pre- or post-settlement), how overfished the population would be without the MPA, and how fishing activity and management responds to the implementation of the MPAs [@hilborn2004; @hilborn1992; @walters2004; @hastings2003;@gerber2003; @gerber2005; @hilborn2004a; @gaines2010; @botsford2003]. In addition, even for the same total area of MPAs, the location and spacing of the MPAs can have a profound influence on their cumulative impact through habitat and network effects [@gaines2010; @costello2010].
+As a thought experiment, imagine a region that has driven its fish populations to near extinction and then places 100\% of its waters inside a no-take MPA.  In that setting, we would expect the regional-scale conservation benefits to be massive. On the other hand, imagine implementing an MPA in an area where a sedentary species has been only lightly fished.  In that setting, it is possible to create a small net conservation loss if the concentration of fishing pressure outside the reserve has a greater effect than the biomass buildup inside the reserve. Within these broad bounds, numerous factors can act to affect the regional effects of MPAs. These include the scale of adult and larval dispersal relative to the size of the MPAs  [@gaines2003; @botsford2008; @difranco2018;@mcgilliard2008], the strength and timing of density dependence in the population (e.g. pre- or post-settlement), how overfished the population would be without the MPA, and how fishing activity and management responds to the implementation of the MPAs [@hilborn2004; @hilborn1992; @walters2004; @hastings2003;@gerber2003; @gerber2005; @hilborn2004a; @gaines2010; @botsford2003]. In addition, even for the same total area of MPAs, the location and spacing of the MPAs can have a profound influence on their cumulative impact through habitat and network effects [@gaines2010; @costello2010].
 
 ```{r}
 short_term <- outcomes %>%
