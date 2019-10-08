@@ -49,7 +49,7 @@ run_description <- "now with recruitment deviates and autocorrleation"
 # So, once you've run simulate_mpas, you can set it to FALSE and validata_mpas will work
 
 
-run_did <- TRUE # run difference in difference on data from the CINMS
+run_did <- FALSE # run difference in difference on data from the CINMS
 
 simulate_mpas <- TRUE # simulate MPA outcomes
 
@@ -65,7 +65,7 @@ sim_years <- 50
 
 num_patches <- 50
 
-n_cores <- 1
+n_cores <- 6
 
 # prepare run -------------------------------------------------------------
 
@@ -1248,6 +1248,8 @@ if (run_tmb == T){
 }
 
 
+doParallel::stopImplicitCluster()
+
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
 model_runs$tmb_fit %>% map_dbl(length)
@@ -1274,9 +1276,9 @@ model_runs <- model_runs %>%
 
    save_experiment <- TRUE
 
-   create_grid <- TRUE
+   create_grid <- FALSE
 
-   samps <- 100
+   samps <- 20000
 
    grid_search <-  FALSE
 
@@ -1367,24 +1369,6 @@ model_runs <- model_runs %>%
            )
 
 
-         # sim_grid <-
-         #   tibble(
-         #     scientific_name = sample(unique(fitted_data$taxa), samps, replace = T),
-         #     steepness = runif(samps, min = 0.6, max = 1),
-         #     adult_movement = sample(0:num_patches, samps, replace = T),
-         #     larval_movement = sample(0:num_patches, samps, replace = T),
-         #     density_movement_modifier = sample(c(0, 0.5), samps, replace = T),
-         #     density_dependence_form = sample(1:3, samps, replace = T),
-         #     mpa_size = runif(samps, min = 0.05, max = 1),
-         #     f_v_m = runif(samps, min = 0.01, max = 2),
-         #     fleet_model = sample(c("open-access","constant-effort","constant-catch"), samps, replace = T),
-         #     effort_allocation = sample(c("profit-gravity", "simple","gravity"), samps, replace = T),
-         #     year_mpa = sample(5:(sim_years/2), samps, replace = T),
-         #     sprinkler = sample(c(TRUE,FALSE), samps, replace = TRUE),
-         #     mpa_reaction   =  sample(c("stay","leave"), samps, replace = TRUE),
-         #     min_size = runif(samps, min = 0.01, max = 1),
-         #     mpa_habfactor = sample(c(1,4), samps, replace = TRUE)
-         # )
 
        }
 
@@ -1522,7 +1506,8 @@ model_runs <- model_runs %>%
 
      sim_grid$tuned_fishery <- map(sim_grid$tuned_fishery, "result")
 
-     doParallel::registerDoParallel(cores = n_cores)
+     sim_grid <- sim_grid %>% 
+       select(-tuned_fishery)
 
      sim_grid$experiment <- 1:nrow(sim_grid)
 
@@ -1535,9 +1520,16 @@ model_runs <- model_runs %>%
      message("starting mpa experiments")
 
      # sim_grid <- sample_n(sim_grid, 100)
+     obs = ls()
+     size_grid <- tibble(obs = obs) %>% 
+       mutate(size = map_dbl(obs, ~as.numeric(object.size(get(.x))))) %>% 
+       arrange(desc(size))
 
+     doParallel::registerDoParallel(cores = 4)
+     
+     
      mpa_experiments <-
-       foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
+       foreach::foreach(i = 1:nrow(sim_grid), .noexport = c("model_runs","pisco_data",'abundance_data',"kfm_data", 'fitted_data')) %dopar% {
          # pb$tick()
          results <- sim_grid %>%
            slice(i) %>%
@@ -1575,8 +1567,14 @@ model_runs <- model_runs %>%
            out <- results
 
          }
+         
+         
+         rm(list= ls())
+         gc()
        } # close dopar
 
+     doParallel::stopImplicitCluster()
+     
      # mpa_experiments[[1]]$mpa_experiment[[1]]$raw_outcomes %>% filter(year == max(year)) -> a
      #
      # a %>% filter(experiment == "with-mpa") %>% group_by(patch) %>% summarise(mpa = unique(mpa)) %>% ggplot(aes(patch, mpa)) + geom_col()
@@ -1589,24 +1587,25 @@ model_runs <- model_runs %>%
    } # close run experiments
 
    message("finished mpa experiments")
-
+  
    # process outcomes --------------------------------------------------------
+  
 
-
+   
    loadfoo <-
      function(experiment, experiment_dir, output = "mpa-effect") {
        ex <-
          readRDS(file.path(experiment_dir, glue::glue("experiment_{experiment}.rds")))
 
        # if (output == "mpa-effect") {
-       ex$msy <- ex$tuned_fishery[[1]]$fish$msy
+       ex$msy <- ex$fish[[1]]$msy
 
-       ex$b_msy <- ex$tuned_fishery[[1]]$fish$b_msy$b_msy
+       ex$b_msy <- ex$fish[[1]]$b_msy$b_msy
 
        ex <- purrr::map_df(list(ex), study_mpa)
 
        ex <- ex %>%
-         select(-mpa_experiment, -fish,-fleet,-tuned_fishery)
+         select(-mpa_experiment, -fish,-fleet)
 
        return(ex)
      }
@@ -1616,7 +1615,7 @@ model_runs <- model_runs %>%
    future::plan(future::multiprocess, workers = n_cores)
 
    processed_grid <-
-     future_map(1:samps,
+     future_map(1:nrow(sim_grid),
                 safely(loadfoo),
                 experiment_dir = experiment_dir,
                 .progress = T)
@@ -1635,10 +1634,10 @@ model_runs <- model_runs %>%
    outcomes <- processed_grid %>%
      unnest()
 
-   outcomes %>%
-     ggplot(aes(year,pmin(4,mpa_effect), group = experiment)) +
-     geom_path() +
-     facet_wrap(~density_movement_modifier)
+   # outcomes %>%
+   #   ggplot(aes(year,pmin(4,mpa_effect), group = experiment)) +
+   #   geom_path() +
+   #   facet_wrap(~density_movement_modifier)
 
 
 
