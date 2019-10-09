@@ -6,14 +6,19 @@ output:
     keep_tex: true
   pdf_document: default
 bibliography: My Library.bib
-csl: pnas.csl
 header-includes:
     - \usepackage{longtable}
     - \usepackage{booktabs}
     - \usepackage{eso-pic}
     - \usepackage{graphicx}
-    - \usepackage{transparent}
-lineno: true
+    - \usepackage[left]{lineno}
+    - \linenumbers
+params:
+  run_name: ["v5.0"]
+  sim_years: [50]
+  burn_years: [20]
+  num_patches: [25]
+always_allow_html: true
 ---
 
 ```{r, include=FALSE}
@@ -39,13 +44,21 @@ functions <- list.files(here::here("functions"))
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 save_plots <- TRUE
 
-sim_years <- 50
+# sim_years <- 50
+# 
+# burn_years <- 20
+# 
+# num_patches <- 25
+# 
+# run_name <- "v5.0"
 
-burn_years <- 20
+run_name <- params$run_name
 
-num_patches <- 25
+sim_years <- params$sim_years
 
-run_name <- "v5.0"
+burn_years <- params$burn_years
+
+num_patches <- params$num_patches
 
 run_dir <- here::here("results", run_name)
 
@@ -268,7 +281,7 @@ did_betas <- zissou_fit$zissou_estimates %>%
   did_plot <- did_betas %>%
     ggplot() +
     geom_tile(data = sim_plot, aes(year, reff, fill = sc), alpha = 0.75) +
-    geom_vline(aes(xintercept = 2003), color = 'red', linewctype = 2, size = 2) +
+    geom_vline(aes(xintercept = 2003), color = 'red', linetype = 2, size = 2) +
     geom_hline(aes(yintercept = 0)) +
     geom_pointrange(aes(
       year,
@@ -313,9 +326,9 @@ filter_summary <- fitted_data %>%
 
 ## Computing environment
 
-The computing environment needed to reproduce the results presented here is stored in a Docker container available [here]()XX. Interested users can load the container on their system to reproduce the complete analysis and manuscript. Analysis were perfoemd in `r R.version.string`. Package versions are shown in Table.S\@ref(tab:pkg-info).
+The computing environment needed to reproduce the results presented here is stored in a Docker container available [here]()XX. Interested users can load the container on their system to reproduce the complete analysis and manuscript. Analysis were performed in `r R.version.string`. Package versions are shown in Table.S\@ref(tab:pkg-info).
 
-```{r pkg-info}
+```{r pkg-info, results = "asis"}
 table <- devtools::package_info() %>% 
   select(package, loadedversion, date,source)
 
@@ -324,6 +337,7 @@ knitr::kable(table,
              caption = "Package versions and sources used in this paper",
              longtable = TRUE,
              booktabs = TRUE,
+             format = "latex",
              col.names = colnames(table)) %>% 
   kableExtra::kable_styling(latex_options = c("hold_position", "repeat_header"))
 
@@ -739,11 +753,12 @@ pop_depletion_plot <- outcomes %>%
     # geom_contour(aes(z = median_mpa_effect, color = ..level..), show.legend = FALSE) +
     scale_fill_viridis(labels = scales::percent_format(accuracy = 1),
                        guide = hgc,
-                       name = "Median Population Effect") +
+                       name = "Median Pop. Effect") +
   labs(x = "Depletion", y = "Range in MPA", title = "A)") +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1),
                        expand = c(0,0)) +
-    scale_x_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0)) + 
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0),
+                       limits = c(0,1)) + 
     theme(legend.position = "top")
   
   # pop_depletion_and_size_plot <-  directlabels::direct.label(pop_depletion_and_size_plot, list("angled.boxes", box.alpha = 0.5))
@@ -1256,7 +1271,7 @@ region_cluster_plots
 targeted_trends <- report$zissou_estimates %>% 
   filter(str_detect(variable, "targeted_did")) %>% 
   group_by(variable) %>% 
-  mutate(year = unique(fitted_data$year),
+  mutate(year =zissou_fit$did_data$year %>% unique(),
          labvar=ifelse(variable=="nontargeted_did_betas","Nontargeted","Targeted")) %>% 
   ungroup() %>% 
   ggplot() + 
@@ -1425,11 +1440,13 @@ raw <- fitted_data %>%
 
 years <- unique(fitted_data$year)
 
+years <- zissou_fit$did_data$year %>% unique()
+
 abundance_trends <- data_frame(abundance_hat = fit_report$abundance_hat,
                                classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
   mutate(log_abundance_hat = log(abundance_hat)) %>%
   group_by(classcode) %>%
-  mutate(year = 1999 + 1:length(abundance_hat)) %>%
+  mutate(year = years) %>%
   mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
   ungroup() %>%
   rename(numeric_classcode = classcode) %>%
@@ -1445,6 +1462,7 @@ abundance_trends <- data_frame(abundance_hat = fit_report$abundance_hat,
 #   theme_minimal()
 
 raw_v_std_plot <- abundance_trends %>%
+  filter(year %in% years) %>% 
   ggplot(aes(year, scaled_abundance_hat, color = factor(classcode))) +
   geom_line(show.legend = F) +
   geom_vline(aes(xintercept = 2003), linetype = 2, color = "red") +
@@ -1766,7 +1784,7 @@ nontargeted_index <- data_frame(abundance_hat = fit_report$abundance_hat,
                                classcode = rep(1:n_distinct(fitted_data$classcode), each = length(years))) %>%
   mutate(log_abundance_hat = log(abundance_hat)) %>%
   group_by(classcode) %>%
-  mutate(year = 1999 + 1:length(abundance_hat)) %>%
+  mutate(year =years) %>%
   mutate(scaled_abundance_hat = (abundance_hat - mean(abundance_hat)) / sd(abundance_hat)) %>%
   ungroup() %>%
   rename(numeric_classcode = classcode) %>%
@@ -1781,7 +1799,7 @@ targeted_index <- zissou_fit$zissou_estimates %>%
     stringr::str_detect(variable, "(targeted_did_betas)"),!str_detect(variable, "non")
   ) %>%
   mutate(
-    year = unique(nontargeted_index$year),
+    year = years,
     classcode = "targeted",
     targeted = 1
   ) %>%
@@ -1846,8 +1864,8 @@ prepped_synth_data <-
     time.variable = "year",
     treatment.identifier = "targeted",
     controls.identifier = unique(synth_data$classcode)[unique(synth_data$classcode) != "targeted"],
-    time.predictors.prior = c(2000:2003),
-    time.optimize.ssr = c(2000:2003),
+    time.predictors.prior = years[years <= 2003],
+    time.optimize.ssr = years[years <= 2003],
     time.plot = years
   )
 
@@ -2174,7 +2192,7 @@ embed_plot
 
 Focusing on just these three groups then (removing herbivores), we can test for causal relationships between groups using convergent cross mapping and the logic of Takens' theorem of dynamic systems. Generalizations of Takens' theorem indicate that if two variables (in our case, species or physical variables) are part of the same dynamic system, their individual dynamics should reflect their relative causal influence [@sugihara2012]. In other words, if one variable is causally forced by another, that forcing should leave a signature on the first time series. Convergent cross mapping (CCM) tests for causation by using the attractor/manifold built from the time series of one variable to predict another (hence the "cross-mapping"). In simple terms, the *causal effect of A on B is determined by how well B cross-maps A*.
 
-There are two criteria for CCM to establish causality:  First, and most obviously, predictive cross-map skill using all available data should be significantly greater than zero. Second, that predictability should be convergent.  Convergence means that cross-mapped estimates improve with library length (the number of state-space vectors used to build the attractor), because the attractor is more fully resolved and therefore estimation error should decline. Convergence is key to distinguishing causation from simple or spurious correlation. If two variables are spuriously correlated and not causally linked, CCM should fail to satisfy this second criterion. Based on these criteria, there is little evidence of significant dynamic interactions between trophic groups (Fig.S\@ref(fig:cross-map)). Cross-mapping produced positive predictive skill, but was non-convergent for all cross-mappings with the exception of carnivores cross-mapping piscivores (providing some evidence that piscivore dynamics may be a driver of carnivore dynamics). This analysis provides evidence that trophic cascades are unlikely to be a significant driver of our results. It is important to note though that this analysis does not mean that trophic cascades could not emerge in this system, rather that we do not detect them with these data at this time. 
+There are two criteria for CCM to establish causality:  First, and most obviously, predictive cross-map skill using all available data should be significantly greater than zero. Second, that predictability should be convergent.  Convergence means that cross-mapped estimates improve with library length (the number of state-space vectors used to build the attractor), because the attractor is more fully resolved and therefore estimation error should decline. Convergence is key to distinguishing causation from simple or spurious correlation. If two variables are spuriously correlated and not causally linked, CCM should fail to satisfy this second criterion. Based on these criteria, there is little evidence of significant dynamic interactions between trophic groups (Fig.S\@ref(fig:cross-map-cp)-\@ref(fig:cross-map-pis)). Cross-mapping produced positive predictive skill, but was non-convergent for all cross-mappings with the exception of carnivores cross-mapping planktivores (providing some evidence that planktivore dynamics may be a driver of carnivore dynamics). This analysis provides evidence that trophic cascades are unlikely to be a significant driver of our results. It is important to note though that this analysis does not mean that trophic cascades could not emerge in this system, rather that we do not detect them with these data at this time. 
 
 ```{r cross-map-fxn}
 # plots a cross mapping between two variables in the data, given their variable names (grp), their optimal embedding dimensions (from simplex forecasting), and their preferred names for plotting
@@ -2200,7 +2218,7 @@ xmap <- function(grp1,grp2,E1,E2,name1,name2){
     geom_line(color="darkorchid3")+
     geom_hline(aes(yintercept = 0), linetype = 2) +
     labs(x="Library Size",y=expression(paste(rho, " (predictive skill)")),title=paste0(name1," xmap ",name2,"\n","(",conv_test1,")"))+
-    theme(plot.title = element_text(size=10))
+    theme(plot.title = element_text(size=6))
   
   # cross map group 2 to group 1
   # inspect the output of simplex from the previous step and use the best embedding dimension (highest rho) for the carnivore time series
@@ -2222,7 +2240,7 @@ xmap <- function(grp1,grp2,E1,E2,name1,name2){
     geom_line(color="darkorchid3")+
     geom_hline(aes(yintercept = 0), linetype = 2) +
     labs(x="Library Size",y=expression(paste(rho, " (predictive skill)")),title=paste0(name2," xmap ",name1,"\n","(",conv_test2,")"))+
-    theme(plot.title = element_text(size=10))
+    theme(plot.title = element_text(size=6))
   
   cross_map_plot <- xmap1 + xmap2
 
@@ -2232,15 +2250,26 @@ cross_map_plot
 
 
 
-```{r cross-map, fig.cap = "Cross mapping of effect of herbivores on carnivores (A) and carnivores on herbivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
+```{r cross-map-cp, fig.cap = "Cross mapping of effect of piscivores on carnivores (A) and carnivores on piscivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
 
 car_pis<-xmap(grp1="carnivore_norm",grp2="piscivore_norm",E1=4,E2=4,name1="Carnivores",name2="Piscivores")
 car_pl <- xmap(grp1="carnivore_norm",grp2="planktivore_norm",E1=4,E2=4,name1="Carnivores",name2="Planktivores")
 pl_pis <- xmap(grp1="planktivore_norm",grp2="piscivore_norm",E1=4,E2=4,name1="Planktivores",name2="Piscivores")
 
-car_pis + car_pl + pl_pis
+car_pis
 ```
 
+
+```{r cross-map-pl, fig.cap = "Cross mapping of effect of planktivores on carnivores (A) and carnivores on planktivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
+
+car_pl
+
+```
+
+```{r cross-map-pis, fig.cap = "Cross mapping of effect of piscivores on carnivores (A) and carnivores on planktivores (B) in the PISCO data from 2000 to 2017. Shaded region show 95% confidence interval"}
+
+ pl_pis 
+```
 
 
 ```{r trophic-cor-plot, fig.cap="Estimated correlation coefficients between broad trophic groups at the island by year resolution", eval = FALSE}

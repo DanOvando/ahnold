@@ -55,7 +55,7 @@ simulate_mpas <- FALSE # simulate MPA outcomes
 
 validate_mpas <- FALSE
 
-process_results <- TRUE
+process_results <- FALSE
 
 knit_paper <- TRUE
 
@@ -65,7 +65,7 @@ sim_years <- 50
 
 num_patches <- 50
 
-n_cores <- 6
+n_cores <- 4
 
 # prepare run -------------------------------------------------------------
 
@@ -97,7 +97,7 @@ device <- "pdf"
 fig_dir <- file.path(run_dir,"figures",fig_name)
 
 if (!dir.exists(fig_dir)){
-  dir.create(fig_dir)
+  dir.create(fig_dir, recursive = TRUE)
 }
 
 # run MLPA difference-in-difference ---------------------------------------
@@ -138,6 +138,8 @@ rank_targeting <- F
 max_generations <- 5
 
 max_year <- 2017
+
+bin_years <- FALSE # whether or not to group did terms into bins
 
 length_data <- read.csv(here::here(data_dir,"UCSB_FISH.csv")) %>%
   magrittr::set_colnames(., tolower(colnames(.))) %>%
@@ -224,24 +226,6 @@ fish_life <-
   select(1:2) %>%
   set_names(c('genus', 'species'))
 
-get_fish_life <- function(genus, species) {
-  Predict = Plot_taxa(
-    Search_species(Genus = genus, Species = species)$match_taxonomy,
-    mfrow = c(2, 2),
-    partial_match = T,
-    verbose = F
-  )
-  out <- Predict[[1]]$Mean_pred %>%
-    as.matrix() %>%
-    t() %>%
-    as.data.frame()
-
-  out[colnames(out) != 'Temperature'] <-
-    exp(out[colnames(out) != 'Temperature'])
-
-  return(out)
-
-}
 
 fish_life <- fish_life %>%
   mutate(life_traits = map2(genus, species, safely(get_fish_life)))
@@ -1224,7 +1208,7 @@ if (run_tmb == T){
                 non_nested_did_variables = c(
                   "temp", "kelp", "lag_catch"
                 ),
-                bin_years = TRUE
+                bin_years = bin_years
     )
 
     write(glue::glue("{round(100*i/nrow(model_runs),2)}% done with model fits"), file = "fit-progress.txt",
@@ -1280,9 +1264,9 @@ model_runs <- model_runs %>%
 
    save_experiment <- TRUE
 
-   create_grid <- FALSE
+   create_grid <- TRUE
 
-   samps <- 200
+   samps <- 100
 
    grid_search <-  FALSE
 
@@ -1490,11 +1474,11 @@ model_runs <- model_runs %>%
         mutate(tuned_fishery = map(tuned_results[tuning_worked],"result"))
 
 
-       save(sim_grid, file = paste0(run_dir, "/sim_grid.Rdata"))
+       save(sim_grid, file = file.path(run_dir, "sim_grid.Rdata"))
        message("finished fishery tuning")
 
      } else{
-       load(file = paste0(run_dir, "/sim_grid.Rdata"))
+       load(file = file.path(run_dir, "sim_grid.Rdata"))
 
      }
 
@@ -1529,7 +1513,7 @@ model_runs <- model_runs %>%
        mutate(size = map_dbl(obs, ~as.numeric(object.size(get(.x))))) %>%
        arrange(desc(size))
 
-     doParallel::registerDoParallel(cores = 4)
+     doParallel::registerDoParallel(cores = n_cores)
 
 
      mpa_experiments <-
@@ -1591,9 +1575,9 @@ model_runs <- model_runs %>%
    } # close run experiments
 
    message("finished mpa experiments")
-  
+
    # process outcomes --------------------------------------------------------
-  
+
 
 
 
@@ -1634,7 +1618,7 @@ model_runs <- model_runs %>%
      bind_rows()
 
 
-   save(processed_grid, file = paste0(run_dir, "/processed_grid.Rdata"))
+   save(processed_grid, file = file.path(run_dir, "processed_grid.Rdata"))
 
    outcomes <- processed_grid %>%
      unnest()
@@ -1677,11 +1661,11 @@ if (validate_mpas == TRUE){
 
   # prepare data ------------------------------------------------------------
 
-  load(paste0(run_dir, '/abundance_data.Rdata'))
+  load(file.path(run_dir, 'abundance_data.Rdata'))
 
-  load(paste0(run_dir, '/rawish_zissou_data.Rdata'))
+  load(file.path(run_dir, 'rawish_zissou_data.Rdata'))
 
-  enso <- read_csv('data/enso.csv')
+  enso <- read_csv(here::here('data','enso.csv'))
 
   pisco <- abundance_data$data[[1]]
 
@@ -1744,7 +1728,7 @@ if (validate_mpas == TRUE){
       rec_driver = 'stochastic',
       enviro_strength = 1,
       sigma_r = 0,
-      cores = 4,
+      cores = n_cores,
       time_step = time_step
     )
 
@@ -1760,16 +1744,16 @@ if (validate_mpas == TRUE){
       rec_driver = 'environment',
       enviro_strength = 1,
       sigma_r = 0.1,
-      cores = 4,
+      cores = n_cores,
       time_step = time_step
     )
 
-    save(file = paste0(run_dir, '/simulated-data.Rdata'),
+    save(file = file.path(run_dir, 'simulated-data.Rdata'),
          simple_fish,
          pisco_fish)
 
   } else {
-    load(file = paste0(run_dir, '/simulated-data.Rdata'))
+    load(file = file.path(run_dir, 'simulated-data.Rdata'))
   }
 
 
@@ -1884,9 +1868,27 @@ if (process_results == TRUE){
 
 # create summary of results -----------------------------------------------
 
+  simmed_fish_life <-
+    processed_grid$scientific_name %>% str_split(' ', simplify = T) %>%
+    as_data_frame() %>%
+    select(1:2) %>%
+    set_names(c('genus', 'species')) %>%
+    unique()
+
+  simmed_fish_life <- simmed_fish_life %>%
+    mutate(life_traits = future_map2(genus, species, safely(get_fish_life)))
+
+  simmed_fish_life <- simmed_fish_life %>%
+    mutate(fish_life_worked = map(life_traits, 'error') %>% map_lgl(is.null)) %>%
+    filter(fish_life_worked) %>%
+    mutate(life_traits = map(life_traits, 'result')) %>%
+    unnest(cols = life_traits) %>%
+    mutate(taxa = paste(genus,species)) %>%
+    set_names(tolower)
+
 
   outcomes <- processed_grid %>%
-    left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
+    left_join(simmed_fish_life %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
     select(-fishery_effect, -density_ratio) %>%
     unnest() %>%
     group_by(experiment) %>%
@@ -2251,12 +2253,12 @@ if (process_results == TRUE){
     mutate(fyear = factor(year)) %>%
     mutate(fyear = relevel(fyear, ref = "2003"))
 
-  sortasimple %>%
-    filter(targ == "Targeted") %>%
-    ggplot(aes(year, mean_density, color = classcode)) +
-    geom_point() +
-    geom_label(aes(year,mean_density, label = classcode) ) +
-    facet_wrap(~targ)
+  # sortasimple %>%
+  #   filter(targ == "Targeted") %>%
+  #   ggplot(aes(year, mean_density, color = classcode)) +
+  #   geom_point() +
+  #   geom_label(aes(year,mean_density, label = classcode) ) +
+  #   facet_wrap(~targ)
 
 
   # sortasimple_reg <- stan_glm(log(mean_density + 1e-3) ~ targ*fyear, data = sortasimple, cores = 4)
@@ -2860,53 +2862,53 @@ if (process_results == TRUE){
                          name = "Samples")  +
     labs(x = "Longitude", y = "Latitude")
 
-  a = outcomes %>%
-    group_by(experiment) %>%
-    filter(years_protected == max(years_protected)) %>%
-    ungroup() %>%
-    select(
-      -experiment,
-      -msy,
-      -b_msy,
-      -year,
-      -mpa_size1,-`no-mpa`,
-      -`with-mpa`,
-      -years_protected,
-      -depletion,
-      -scientific_name,
-      -pop_effect,
-      -b0    ) %>%
-    na.omit()
-
-
-  d <- recipes::recipe(mpa_effect ~ ., data = a) %>%
-    step_dummy(all_nominal())
-
-  d <- prep(d, data = a) %>%
-    juice() %>%
-    mutate(rando = rnorm(nrow(.)))
-
-
-  b <- caret::train(mpa_effect ~ .,
-                    data = d,
-                    importance = "impurity_corrected",
-                    method = "ranger")
-
-
-  imp <- b$finalModel$variable.importance
-
-  i <- imp %>%
-    broom::tidy() %>%
-    mutate(names = fct_reorder(names, x))
-
-
-  importance_plot <- i %>%
-    filter(x >= x[names == "rando"]) %>%
-    top_n(15,x) %>%
-    ggplot(aes(names,x)) +
-    geom_col(fill = "steelblue", color = "black") +
-    coord_flip() +
-    labs(x = "", y = "Importance to MPA Conservation Effect")
+  # a = outcomes %>%
+  #   group_by(experiment) %>%
+  #   filter(years_protected == max(years_protected)) %>%
+  #   ungroup() %>%
+  #   select(
+  #     -experiment,
+  #     -msy,
+  #     -b_msy,
+  #     -year,
+  #     -mpa_size1,-`no-mpa`,
+  #     -`with-mpa`,
+  #     -years_protected,
+  #     -depletion,
+  #     -scientific_name,
+  #     -pop_effect,
+  #     -b0    ) %>%
+  #   na.omit()
+  #
+  #
+  # d <- recipes::recipe(mpa_effect ~ ., data = a) %>%
+  #   step_dummy(all_nominal())
+  #
+  # d <- prep(d, data = a) %>%
+  #   juice() %>%
+  #   mutate(rando = rnorm(nrow(.)))
+  #
+  #
+  # b <- caret::train(mpa_effect ~ .,
+  #                   data = d,
+  #                   importance = "impurity_corrected",
+  #                   method = "ranger")
+  #
+  #
+  # imp <- b$finalModel$variable.importance
+  #
+  # i <- imp %>%
+  #   broom::tidy() %>%
+  #   mutate(names = fct_reorder(names, x))
+  #
+  #
+  # importance_plot <- i %>%
+  #   filter(x >= x[names == "rando"]) %>%
+  #   top_n(15,x) %>%
+  #   ggplot(aes(names,x)) +
+  #   geom_col(fill = "steelblue", color = "black") +
+  #   coord_flip() +
+  #   labs(x = "", y = "Importance to MPA Conservation Effect")
 
   # ggsave(
   #   filename =  file.path(fig_dir, "channel-islands.pdf"),
@@ -3490,9 +3492,9 @@ if (process_results == TRUE){
 
 if (knit_paper == TRUE){
 
-  rmarkdown::render(here::here("documents","zissou-pnas","zissou-pnas.Rmd"))
+  rmarkdown::render(here::here("documents","zissou-pnas","zissou-pnas.Rmd"), params = list(run_name = run_name))
 
-  rmarkdown::render(here::here("documents","zissou-pnas","zissou-supporting-information.Rmd"))
+  rmarkdown::render(here::here("documents","zissou-pnas","zissou-supporting-information.Rmd"), params = list(run_name = run_name))
 
 }
 

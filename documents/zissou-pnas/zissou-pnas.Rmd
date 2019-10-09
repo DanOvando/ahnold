@@ -53,6 +53,11 @@ output:
   bookdown::word_document2: default
   bookdown::pdf_document2: default
   bookdown::html_document2: default
+params:
+  run_name: ["v5.1"]
+  sim_years: [50]
+  burn_years: [20]
+  num_patches: [25]
 ---
 
 ```{r, include=FALSE}
@@ -85,13 +90,21 @@ functions <- list.files(here::here("functions"))
 walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
 save_plots <- TRUE
 
-sim_years <- 50
+# sim_years <- 50
+# 
+# burn_years <- 20
+# 
+# num_patches <- 25
 
-burn_years <- 20
+# run_name <- "v5.0"
 
-num_patches <- 25
+run_name <- params$run_name
 
-run_name <- "v5.0"
+sim_years <- params$sim_years
+
+burn_years <- params$burn_years
+
+num_patches <- params$num_patches
 
 run_dir <- here::here("results", run_name)
 
@@ -925,7 +938,7 @@ dev.off()
   \label{pop-trends}
 \end{figure}
 
-The raw trends in the biomass densities appear to show parallel trends in the densities of targeted and non-targeted fishes pre-MPA, with the targeted group diverging first positively and then negatively over time (Fig.\ref{pop-trends}). However, these raw trends could be caused by any number of confounding variables besides the effects of the MPAs themselves, from changes in observer skill and sampling locations, to shifts in environmental conditions. Using our difference-in-difference model in an effort to contorl for these factors, we found no significant difference in the biomass densities of targeted and non-targeted fishes pre-MPA (before 2003), which provides support for the parallel trends assumption critical to the difference-in-difference method. Following the implementation of the MPAs in 2003, we see evidence of an increasing trend in densities of targeted relative to non-targeted fish, reaching a peak value in 2014. Following 2014, densities of targeted species appear to have declined relative to what we would expect based on the non-targeted group (Fig.\ref{did-plot}).
+The raw trends in the biomass densities appear to show parallel trends in the densities of targeted and non-targeted fishes pre-MPA, with the targeted group diverging first positively and then negatively over time (Fig.\ref{pop-trends}). However, these raw trends could be caused by any number of confounding variables besides the effects of the MPAs themselves, from changes in observer skill and sampling locations, to shifts in environmental conditions. Using our difference-in-difference model in an effort to control for these factors, we found no significant difference in the biomass densities of targeted and non-targeted fishes pre-MPA (before 2003), which provides support for the parallel trends assumption critical to the difference-in-difference method. Following the implementation of the MPAs in 2003, we see evidence of an increasing trend in densities of targeted relative to non-targeted fish, reaching a peak value in 2014. Following 2014, densities of targeted species appear to have declined relative to what we would expect based on the non-targeted group (Fig.\ref{did-plot}).
 
 
 ```{r did-plot, include = FALSE}
@@ -995,7 +1008,7 @@ What do our results imply about the future of MPA science? Our simulation model 
 
 Once simulation models have been used to help design an MPA, how can users evaluate whether it is achieving their objectives? Response ratios are commonly used as evidence for conservation outcomes of MPAs [@lester2009], but as suggested in @ferraro2018 and @larsen2019 and demonstrated here, without careful attention to the design of control sites (accounting for example for the displacement of effort by MPAs), response ratios may be highly unreliable estimators of regional MPA effects. As @larsen2019 suggests, there are many potential alternatives for estimating the effects of MPAs that better account for the challenges of causal inference. We applied one such approach here (a difference-in-difference estimator), and yet were still unable to reach robust conclusions as to the effect of MPAs on the density of targeted species in the Channel Islands, due to the likely small size of the true effect relative to the strength and variability of environmental drivers. 
 
-While this does not mean that all MPAs will face similar challenges in estimating their effects, our results in the rigorously studied Channel Islands system make clear that in many instances empirically detecting a clear regional effect of MPAs may not be possible. How then should stakeholders go about adaptively monitoring and managing MPAs? Simulation modeling can help inform the range of effect sizes that may be expected, and monitoring programs can perhaps be tuned to focus on the species groups that have the highest chance of a detectable effect size [@nickols2019]. Expanding data collection to include robust monitoring of fleet dynamics may help statistical approaches to isolate the true effect of MPAs on conservation outcomes by allowing for improved control of the effects of fishing dynamics, and allow managers to take into account potential negative interactions between MPAs and fleet dynamics such as those that may occur under constant-catch dynamics. Whenever possible monitoring programs should be implemented prior to MPA implementation to provide a pre-treatment benchmark. Non-equilibrium analyses (Fig.\ref{did-plot}) also help set expectations for effect sizes over time. Beyond that, educating communities about the challenges of estimating the effects of MPAs can help set expectations, so that a lack of a clear effect is not necessarily viewed as a failure of the program, but rather considered in the context of reasonable expectations. 
+While this does not mean that all MPAs will face similar challenges in estimating their effects, our results in the rigorously studied Channel Islands system make clear that in many instances empirically detecting a clear regional effect of MPAs may not be possible. How then should stakeholders go about adaptively monitoring and managing MPAs? Simulation modeling can help inform the range of effect sizes that may be expected, and monitoring programs can perhaps be tuned to focus on the species groups that have the highest chance of a detectable effect size [@nickols2019]. Expanding data collection to include robust monitoring of fleet dynamics may help statistical approaches to isolate the true effect of MPAs on conservation outcomes by allowing for improved control of the effects of fishing dynamics, and allow managers to take into account potential negative interactions between MPAs and fleet dynamics such as those that may occur under constant-catch dynamics. Whenever possible monitoring programs should be implemented prior to MPA implementation to provide a pre-treatment benchmark. Non-equilibrium analyses (Fig.\ref{did-plot}) also help set expectations for effect sizes over time. Beyond that, educating communities about the challenges of estimating the effects of MPAs can help set expectations, so that a lack of a clear effect is not necessarily viewed as a failure of the program, but rather considered in the context of reasonable expectations. While this paper has focused on the conservation outcomes of MPAs, future work must also address the challenge of predicting and estimating the fishery impacts of protected areas.
 
 <!-- Our results provide a unique survey of the likely regional effects of MPAs to fisheries and conservation, and places our empirical assessment of the regional effects of the Channel Islands MPAs in context. The Channel Islands are an intensely studied system, and the challenge of identifying a clear regional effect of the network of MPAs placed there in 2003 may seem surprising. However, our results show that in fact a smaller effect size, from the perspective of regional conservation gains, is to be expected in this system, and therefore the true effect will be very challenging to separate from environmental noise. -->
 
