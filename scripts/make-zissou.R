@@ -53,7 +53,7 @@ run_did <- FALSE # run difference in difference on data from the CINMS
 
 simulate_mpas <- FALSE # simulate MPA outcomes
 
-validate_mpas <- TRUE
+validate_mpas <- FALSE
 
 process_results <- TRUE
 
@@ -1280,7 +1280,7 @@ model_runs <- model_runs %>%
 
    save_experiment <- TRUE
 
-   create_grid <- TRUE
+   create_grid <- FALSE
 
    samps <- 200
 
@@ -1591,8 +1591,9 @@ model_runs <- model_runs %>%
    } # close run experiments
 
    message("finished mpa experiments")
-
+  
    # process outcomes --------------------------------------------------------
+  
 
 
 
