@@ -40,22 +40,22 @@ walk(functions, ~ here::here("functions", .x) %>% source()) # load local functio
 
 # options -----------------------------------------------------------------
 
-run_name <- 'v4.2'
+run_name <- 'v5.0'
 
-run_description <- "making sure everything works after file path fixes"
+run_description <- "now with recruitment deviates and autocorrleation - testing everything works post rebase with master after that screwup before mering back into master"
 
 # the following analysis run the complete contents of "zissou". Each section depends on the out
 # outcomes of the prior section, but will load relevant saved files.
 # So, once you've run simulate_mpas, you can set it to FALSE and validata_mpas will work
 
 
-run_did <- TRUE # run difference in difference on data from the CINMS
+run_did <- FALSE # run difference in difference on data from the CINMS
 
-simulate_mpas <- TRUE # simulate MPA outcomes
+simulate_mpas <- FALSE # simulate MPA outcomes
 
-validate_mpas <- TRUE
+validate_mpas <- FALSE
 
-make_figures <- TRUE
+process_results <- TRUE
 
 knit_paper <- TRUE
 
@@ -65,7 +65,7 @@ sim_years <- 50
 
 num_patches <- 50
 
-n_cores <- 1
+n_cores <- 6
 
 # prepare run -------------------------------------------------------------
 
@@ -95,6 +95,10 @@ fig_height <- fig_width / 1.333
 device <- "pdf"
 
 fig_dir <- file.path(run_dir,"figures",fig_name)
+
+if (!dir.exists(fig_dir)){
+  dir.create(fig_dir)
+}
 
 # run MLPA difference-in-difference ---------------------------------------
 if (run_did == TRUE){
@@ -1248,6 +1252,8 @@ if (run_tmb == T){
 }
 
 
+doParallel::stopImplicitCluster()
+
 models_worked <- model_runs$tmb_fit %>% map("error") %>% map_lgl(is_null)
 
 model_runs$tmb_fit %>% map_dbl(length)
@@ -1274,9 +1280,9 @@ model_runs <- model_runs %>%
 
    save_experiment <- TRUE
 
-   create_grid <- TRUE
+   create_grid <- FALSE
 
-   samps <- 100
+   samps <- 200
 
    grid_search <-  FALSE
 
@@ -1339,8 +1345,8 @@ model_runs <- model_runs %>%
            tibble(
              scientific_name = sample(rfishbase::taxonomy(), samps, replace = T),
              steepness = runif(samps, min = 0.6, max = 0.95),
-             adult_movement = sample(0:(0.5 * num_patches), samps, replace = T),
-             larval_movement = sample(0:(0.5 * num_patches), samps, replace = T),
+             adult_movement = sample(0:round(0.25 * num_patches), samps, replace = T),
+             larval_movement = sample(0:round(0.25 * num_patches), samps, replace = T),
              density_movement_modifier = sample(c(0.25, 1), samps, replace = T),
              density_dependence_form = sample(1:3, samps, replace = T),
              mpa_size = runif(samps, min = 0.01, max = 1),
@@ -1361,28 +1367,12 @@ model_runs <- model_runs %>%
              min_size = runif(samps, min = 0.01, max = 0.75),
              mpa_habfactor = sample(c(1, 4), samps, replace = TRUE),
              size_limit = runif(samps, 0.1, 1.25),
-             random_mpa = sample(c(TRUE, FALSE), samps, replace = TRUE)
+             random_mpa = sample(c(TRUE, FALSE), samps, replace = TRUE),
+             sigma_r = sample(c(0,.05,.1,.2), samps, replace = TRUE),
+             rec_ac =  sample(c(0,.05,.1,.2), samps, replace = TRUE)
            )
 
 
-         # sim_grid <-
-         #   tibble(
-         #     scientific_name = sample(unique(fitted_data$taxa), samps, replace = T),
-         #     steepness = runif(samps, min = 0.6, max = 1),
-         #     adult_movement = sample(0:num_patches, samps, replace = T),
-         #     larval_movement = sample(0:num_patches, samps, replace = T),
-         #     density_movement_modifier = sample(c(0, 0.5), samps, replace = T),
-         #     density_dependence_form = sample(1:3, samps, replace = T),
-         #     mpa_size = runif(samps, min = 0.05, max = 1),
-         #     f_v_m = runif(samps, min = 0.01, max = 2),
-         #     fleet_model = sample(c("open-access","constant-effort","constant-catch"), samps, replace = T),
-         #     effort_allocation = sample(c("profit-gravity", "simple","gravity"), samps, replace = T),
-         #     year_mpa = sample(5:(sim_years/2), samps, replace = T),
-         #     sprinkler = sample(c(TRUE,FALSE), samps, replace = TRUE),
-         #     mpa_reaction   =  sample(c("stay","leave"), samps, replace = TRUE),
-         #     min_size = runif(samps, min = 0.01, max = 1),
-         #     mpa_habfactor = sample(c(1,4), samps, replace = TRUE)
-         # )
 
        }
 
@@ -1395,7 +1385,9 @@ model_runs <- model_runs %>%
              adult_movement = adult_movement,
              larval_movement = larval_movement,
              density_dependence_form = density_dependence_form,
-             density_movement_modifier = density_movement_modifier
+             density_movement_modifier = density_movement_modifier,
+             sigma_r = sigma_r,
+             rec_ac = rec_ac
            ),
            safely(create_fish),
            price = 10
@@ -1518,7 +1510,8 @@ model_runs <- model_runs %>%
 
      sim_grid$tuned_fishery <- map(sim_grid$tuned_fishery, "result")
 
-     doParallel::registerDoParallel(cores = n_cores)
+     sim_grid <- sim_grid %>%
+       select(-tuned_fishery)
 
      sim_grid$experiment <- 1:nrow(sim_grid)
 
@@ -1531,9 +1524,16 @@ model_runs <- model_runs %>%
      message("starting mpa experiments")
 
      # sim_grid <- sample_n(sim_grid, 100)
+     obs = ls()
+     size_grid <- tibble(obs = obs) %>%
+       mutate(size = map_dbl(obs, ~as.numeric(object.size(get(.x))))) %>%
+       arrange(desc(size))
+
+     doParallel::registerDoParallel(cores = 4)
+
 
      mpa_experiments <-
-       foreach::foreach(i = 1:nrow(sim_grid)) %dopar% {
+       foreach::foreach(i = 1:nrow(sim_grid), .noexport = c("model_runs","pisco_data",'abundance_data',"kfm_data", 'fitted_data')) %dopar% {
          # pb$tick()
          results <- sim_grid %>%
            slice(i) %>%
@@ -1571,7 +1571,13 @@ model_runs <- model_runs %>%
            out <- results
 
          }
+
+
+         rm(list= ls())
+         gc()
        } # close dopar
+
+     doParallel::stopImplicitCluster()
 
      # mpa_experiments[[1]]$mpa_experiment[[1]]$raw_outcomes %>% filter(year == max(year)) -> a
      #
@@ -1585,8 +1591,10 @@ model_runs <- model_runs %>%
    } # close run experiments
 
    message("finished mpa experiments")
-
+  
    # process outcomes --------------------------------------------------------
+  
+
 
 
    loadfoo <-
@@ -1595,14 +1603,14 @@ model_runs <- model_runs %>%
          readRDS(file.path(experiment_dir, glue::glue("experiment_{experiment}.rds")))
 
        # if (output == "mpa-effect") {
-       ex$msy <- ex$tuned_fishery[[1]]$fish$msy
+       ex$msy <- ex$fish[[1]]$msy
 
-       ex$b_msy <- ex$tuned_fishery[[1]]$fish$b_msy$b_msy
+       ex$b_msy <- ex$fish[[1]]$b_msy$b_msy
 
        ex <- purrr::map_df(list(ex), study_mpa)
 
        ex <- ex %>%
-         select(-mpa_experiment, -fish,-fleet,-tuned_fishery)
+         select(-mpa_experiment, -fish,-fleet)
 
        return(ex)
      }
@@ -1612,7 +1620,7 @@ model_runs <- model_runs %>%
    future::plan(future::multiprocess, workers = n_cores)
 
    processed_grid <-
-     future_map(1:samps,
+     future_map(1:nrow(sim_grid),
                 safely(loadfoo),
                 experiment_dir = experiment_dir,
                 .progress = T)
@@ -1631,10 +1639,10 @@ model_runs <- model_runs %>%
    outcomes <- processed_grid %>%
      unnest()
 
-   outcomes %>%
-     ggplot(aes(year,pmin(4,mpa_effect), group = experiment)) +
-     geom_path() +
-     facet_wrap(~density_movement_modifier)
+   # outcomes %>%
+   #   ggplot(aes(year,pmin(4,mpa_effect), group = experiment)) +
+   #   geom_path() +
+   #   facet_wrap(~density_movement_modifier)
 
 
 
@@ -1799,13 +1807,15 @@ if (validate_mpas == TRUE){
 
 }
 
-# make figures ------------------------------------------------------------
+#process results ------------------------------------------------------------
 
-if (make_figures == TRUE){
+if (process_results == TRUE){
 
   short_frame <- 15
 
-
+  if (!dir.exists(fig_dir)){
+    dir.create(fig_dir, recursive = TRUE)
+  }
 
   write(glue::glue("Figures generated on {Sys.Date()} using results {run_name}"),
         file = file.path(fig_dir,"README.txt"))
@@ -1821,7 +1831,6 @@ if (make_figures == TRUE){
   load(file = here::here("results",run_name,"simulated_did.Rdata"))
 
   load(file = file.path(run_dir, "abundance_data.Rdata"))
-
 
   channel_islands <- readRDS(here::here("data","channel_islands_map.RDS"))
 
@@ -1853,19 +1862,61 @@ if (make_figures == TRUE){
   # filter results ----------------------------------------------------------
 
 
-  colfoo <- function(sim, collapsed = 0.1){
-    # sim <- processed_grid$mpa_effect[[1]]
-    prepop <- sim$`no-mpa`[sim$mpa_size == 0]
-
-    prepop <- prepop / max(prepop)
-
-    collapse <- any(prepop <= collapsed)
-
-  }
+  bad_sims <- processed_grid %>%
+    select(-fishery_effect,-density_ratio) %>%
+    unnest() %>%
+    group_by(experiment) %>%
+    mutate(year = 1:length(year)) %>%
+    mutate(years_protected = year - year_mpa + 1) %>%
+    filter(years_protected <= 0) %>%
+    mutate(b0 = `no-mpa`[year == min(year)]) %>%
+    mutate(depletion = pmax(0,1 - `no-mpa` / b0)) %>%
+    mutate(pop_effect = pmin(1, (`with-mpa` - `no-mpa`) / b0)) %>%
+    summarise(bad = any(depletion > 0.95 |
+                          abs(pop_effect) > 1e-3)) %>%
+    filter(bad == TRUE)
 
   processed_grid <- processed_grid %>%
-    mutate(collapsed = map_lgl(mpa_effect, colfoo)) %>%
-    filter(collapsed == FALSE)
+    filter(!experiment %in% unique(bad_sims$experiment))
+
+  write_rds(processed_grid, file.path(run_dir,"filtered_processed_grid.rds"))
+
+
+# create summary of results -----------------------------------------------
+
+
+  outcomes <- processed_grid %>%
+    left_join(life_history_data %>% select(taxa, m), by = c("scientific_name" = "taxa")) %>%
+    select(-fishery_effect, -density_ratio) %>%
+    unnest() %>%
+    group_by(experiment) %>%
+    mutate(year = 1:length(year)) %>%
+    ungroup() %>%
+    mutate(years_protected = year - year_mpa + 1) %>%
+    mutate(mpa_effect = pmax(-.5,pmin(mpa_effect,1))) %>%
+    group_by(experiment) %>%
+    mutate(b0 = `no-mpa`[year == min(year)]) %>%
+    mutate(depletion = 1 - `no-mpa`/b0) %>%
+    mutate(final_depletion = depletion[year == max(year)],
+           f = f_v_m * m) %>%
+    mutate(u = 1 - exp(-f)) %>%
+    mutate(final_u = u[year == max(year)]) %>%
+    ungroup() %>%
+    mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
+
+  write_rds(outcomes, file.path(run_dir,"outcomes.rds"))
+
+  density_ratios <- processed_grid %>%
+    select(-fishery_effect) %>%
+    unnest() %>%
+    group_by(experiment) %>%
+    mutate(year = 1:length(year)) %>%
+    ungroup() %>%
+    mutate(years_protected = year - year_mpa + 1) %>%
+    left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
+
+  write_rds(density_ratios, file.path(run_dir,"density_ratios.rds"))
+
 
   # make examples -----------------------------------------------------------
 
@@ -2094,20 +2145,6 @@ if (make_figures == TRUE){
 
 
 
-  outcomes <- processed_grid %>%
-    select(-fishery_effect, -density_ratio) %>%
-    unnest() %>%
-    group_by(experiment) %>%
-    mutate(year = 1:length(year)) %>%
-    ungroup() %>%
-    mutate(years_protected = year - year_mpa + 1) %>%
-    mutate(mpa_effect = pmin(mpa_effect,2)) %>%
-    group_by(experiment) %>%
-    mutate(b0 = `no-mpa`[year == min(year)]) %>%
-    mutate(depletion = 1 - `no-mpa`/b0) %>%
-    ungroup() %>%
-    mutate(pop_effect = pmin(1,(`with-mpa` - `no-mpa`) / b0))
-
 
 
   sim_plot <- outcomes %>%
@@ -2182,19 +2219,6 @@ if (make_figures == TRUE){
     left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year")) %>%
     filter(fleet_model != "constant-catch") %>%
     mutate(msy_effect = pmin(1,(`with-mpa` - `no-mpa`) / msy))
-
-  # density ratio is being saved as a list of a
-  density_ratios <- processed_grid %>%
-    select(-fishery_effect) %>%
-    unnest() %>%
-    group_by(experiment) %>%
-    mutate(year = 1:length(year)) %>%
-    ungroup() %>%
-    mutate(years_protected = year - year_mpa + 1) %>%
-    left_join(outcomes %>% select(experiment, year, depletion), by = c("experiment", "year"))
-
-
-
 
 
   fishery_eqo <- fishery_outcomes %>%
@@ -2851,9 +2875,7 @@ if (make_figures == TRUE){
       -depletion,
       -scientific_name,
       -pop_effect,
-      -b0,
-      -collapsed
-    ) %>%
+      -b0    ) %>%
     na.omit()
 
 

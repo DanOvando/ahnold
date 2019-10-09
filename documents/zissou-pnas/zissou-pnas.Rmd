@@ -91,7 +91,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-run_name <- "v4.3"
+run_name <- "v5.0"
 
 run_dir <- here::here("results", run_name)
 
@@ -101,13 +101,12 @@ load(file = here::here("results",run_name, "rawish_zissou_data.Rdata"))
 
 load(file = here::here("results",run_name, "model_runs.Rdata"))
 
-load(file = here::here("results",run_name,"processed_grid.Rdata"))
+processed_grid <-  read_rds(file.path(run_dir,"filtered_processed_grid.rds"))
 
 load(file = file.path(run_dir ,"sim_grid.Rdata"))
 
-
 cdfw_catches <-
-  read_csv(file = here::here("processed_data", 'cdfw-catches.csv')) %>%
+  read_csv(file = here::here("data", 'cdfw-catches.csv')) %>%
   group_by(sci_name, year) %>%
   summarise(catch = sum(pounds_caught, na.rm = T)) %>%
   left_join(
@@ -122,24 +121,15 @@ cdfw_catches <-
 #   mutate(in_analysis = classcode %in% unique(cip_data$classcode)) %>%
 #   View()
 
-
 density_ratios <- readRDS(file.path(run_dir,"density_ratios.rds"))
 
 outcomes <- readRDS(file.path(run_dir,"outcomes.rds"))
-
-fishery_outcomes <- readRDS(file.path(run_dir,"fishery_outcomes.rds"))
-
-baci_outcomes <- readRDS(file.path(run_dir,"baci.rds"))
-
 
 outcomes <- outcomes %>% 
   filter(!is.na(mpa_effect))
 
 density_ratios <- density_ratios %>% 
   filter(!is.na(biased_density_ratio))
-
-fishery_eqo <- fishery_outcomes %>%
-  filter(year == max(year))
 
    eqo <- outcomes %>%
      filter(year == max(year))
@@ -446,21 +436,18 @@ short_term <- outcomes %>%
   ungroup() %>% 
   filter(!is.na(mpa_effect))
 
-
-fishery_short_term <- fishery_outcomes %>%  
-  filter(years_protected <= 15, years_protected >= 0)
-
 median_effect <- median(short_term$mpa_effect[short_term$year == max(short_term$year)], na.rm = TRUE)
 
 median_pop_effect <- median(short_term$pop_effect[short_term$year == max(short_term$year)], na.rm = TRUE)
 
-median_fish_effect <- median(fishery_short_term$mpa_effect[short_term$year == max(short_term$year)], na.rm = TRUE)
-
-median_fish_effect <- median(fishery_short_term$fishery_effect[short_term$year == max(short_term$year)], na.rm = TRUE)
+# median_fish_effect <- median(fishery_short_term$mpa_effect[short_term$year == max(short_term$year)], na.rm = TRUE)
+# 
+# median_fish_effect <- median(fishery_short_term$fishery_effect[short_term$year == max(short_term$year)], na.rm = TRUE)
 
 pos_runs <- round(mean(short_term$pop_effect[short_term$year == max(short_term$year)] > 0),2)
 
-pos_fish_runs <- round(mean(fishery_short_term$msy_effect[fishery_short_term$year == max(fishery_short_term$year)] > 0, na.rm = TRUE),2)
+# pos_fish_runs <- round(mean(fishery_short_term$msy_effect[fishery_short_term$year == max(fishery_short_term$year)] > 0, na.rm = TRUE),2)
+
 
 pos_fish_effect <- round(mean(short_term$f[short_term$year == max(short_term$year)] > 0),2)
 
@@ -658,7 +645,7 @@ pop_depletion_plot <- outcomes %>%
   labs(x = "Depletion", y = "Range in MPA", title = "A)") +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1),
                        expand = c(0,0)) +
-    scale_x_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0)) + 
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0), limits = c(0,1)) + 
     theme(legend.position = "top")
   
   # pop_depletion_and_size_plot <-  directlabels::direct.label(pop_depletion_and_size_plot, list("angled.boxes", box.alpha = 0.5))
@@ -696,114 +683,7 @@ pop_depletion_plot <- outcomes %>%
   \label{conservation-effects}
 \end{figure*}
 
-<!-- ### Theoretical Fishery Effects {#fisheries .unnumbered} -->
 
-<!-- Intuition and theory tell us that MPAs can have even more diverse effects on fisheries outcomes than they did for conservation. If 100% of fishable area is placed inside an MPA, then the MPA can have no fishery benefits. The effects of MPAs that still allow for fishing opportunity will depend on whether the spillover from MPAs is sufficient to offset losses in fishing grounds, and on the response of fishing fleets to the MPAs  [@hilborn2004]. -->
-
-<!-- We used our simulation model to explore the effects of MPAs on fisheries. We express the fishery effects as a percentage change in total catches in the scenario with MPAs relative to the scenario without MPAs. MPAs produced gains in fishery catches in `r percent(pos_fish_runs, accuracy = 1)` of simulations; MPAs reduced fishery catches in `r percent(1 - pos_fish_runs, accuracy = 1)` of simulations. The median MPA effect for MPAs covering less than 25% of the target species’ range was negligible unless the stock was nearly unfished (causing large losses) or was severely depleted (causing large gains). MPAs covering 50% or more of the range generally produced catch reductions of 25% or more, though even large MPAs were able to provide fishery benefits of 25% or higher when the target fishery was severely depleted (Fig. \ref{catch-msy-effects}A). Under the assumptions of our model, MPAs became capable of providing fishery benefits when depletion was greater than 60% [at least 30% of global fisheries as estiamated by the FAO; @fao2018], though under these conditions negative fishery outcomes were still possible  (Fig. \ref{catch-msy-effects}B). The simulated fishery effects of MPAs, similar to the conservation outcomes, are highly variable and context dependent. -->
-
-<!-- ```{r fishery-effects,fig.cap = "Median (A) and range (B) MPA fishery effects, expressed as the difference in catch with and without MPAs  as a proportion of MSY, after 15 years of protection. For (A), X-axes indicate the depletion of the fishery, where depletion is the percentage of unfished biomass that has been removed from the population, and Y-axes is the percent of the population's range encompasssed inside an MPA. For B), y-axes show the regional conservation effect. Constant-catch scenarios are not included in this plot since by definition catches are equal with or without MPAs", include = FALSE} -->
-
-<!-- ylabs <- c(expression(""<= "-100%"), paste0(seq(-75,75, by = 25),"%"),expression("">= "100%")) -->
-
-<!-- ybreaks = seq(-1,1, by = .25) -->
-
-
-<!-- catch_depletion_plot <- fishery_outcomes %>% -->
-<!--   filter(year == max(year)) %>% -->
-<!--   ggplot() + -->
-<!--   geom_bin2d(aes(depletion, fishery_effect), binwidth = c(.1, .1), -->
-<!--              show.legend = FALSE) + -->
-<!--   scale_fill_viridis( -->
-<!--   option = "A", -->
-<!--   guide = guide_colorbar(frame.colour = "black", -->
-<!--   frame.linewidth = 1,), -->
-<!--   name = "Median Effect" -->
-<!--   ) + -->
-<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), name = "Depletion") + -->
-<!--   scale_y_continuous(labels = ylabs, breaks = ybreaks, name = "Catch Effect") -->
-
-
-<!-- catch_size_plot <- fishery_outcomes %>% -->
-<!--   filter(year == max(year)) %>% -->
-<!--   ggplot() + -->
-<!--   geom_bin2d(aes(mpa_size, fishery_effect, fill = ..density..), binwidth = c(.1, .1), show.legend = TRUE) + -->
-<!--   scale_fill_viridis( -->
-<!--   option = "A", -->
-<!--   guide = hgc, -->
-<!--   name = "% of Sims", -->
-<!--   labels = scales::percent_format(accuracy = 1) -->
-<!--   ) + -->
-<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), name = "Range in MPA") + -->
-<!--   scale_y_continuous(labels = ylabs, breaks = ybreaks, name = '') + -->
-<!--   theme(legend.position = "top") +  -->
-<!--   labs(title = "B)") -->
-
-<!-- catch_facet_effect_plot <- fishery_outcomes %>% -->
-<!--   filter(year == max(year)) %>% -->
-<!--    select(fishery_effect, mpa_size, depletion) %>% -->
-<!--    gather(measure, value, -fishery_effect) %>% -->
-<!--    ggplot() + -->
-<!--    geom_bin2d(aes(value, fishery_effect), binwidth = c(.1, .1), show.legend = TRUE) + -->
-<!--   scale_fill_viridis( -->
-<!--   option = "A", -->
-<!--   guide = hgc, -->
-<!--   name = "# of Sims" -->
-<!--   ) + -->
-<!--    facet_wrap(~measure, labeller = labeller(measure = facet_labels), strip.position = "bottom") + -->
-<!--    scale_x_percent(name = "") + -->
-<!--    scale_y_percent(name = "Catch Effect") -->
-
-
-<!-- catch_depletion_and_size_plot <- fishery_outcomes %>% -->
-<!--   filter(years_protected >= 0) %>% -->
-<!--   group_by(experiment) %>% -->
-<!--   mutate( -->
-<!--     depletion = plyr::round_any(depletion[years_protected == 0], .1), -->
-<!--     mpa_size = plyr::round_any(mpa_size, .1) -->
-<!--   ) %>% -->
-<!--   filter(year == max(year)) %>% -->
-<!--   group_by(depletion, mpa_size) %>% -->
-<!--   summarise(median_mpa_effect = median(fishery_effect, na.rm = T)) %>% -->
-<!--   ggplot(aes(depletion, mpa_size, fill = median_mpa_effect)) + -->
-<!--   geom_tile(interpolate = FALSE) + -->
-<!--   # geom_contour(aes(z = median_mpa_effect)) + -->
-<!--   scale_fill_gradient2( -->
-<!--     midpoint = 0, -->
-<!--     low = "tomato", -->
-<!--     high = "steelblue", -->
-<!--     mid = "white", -->
-<!--     labels = scales::percent_format(accuracy = 1), -->
-<!--     guide = hgc, -->
-<!--     name = "Median Effect" -->
-<!--   ) + -->
-<!--   labs(x = "Depletion", y = "Range in MPA", title = "A)") + -->
-<!--   scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0)) + -->
-<!--   scale_x_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0,0)) + -->
-<!--   theme(legend.position = "top") -->
-
-<!--   catch_fishery_combo_plot <- -->
-<!--     (catch_depletion_and_size_plot) + ((catch_size_plot) / catch_depletion_plot)  + plot_layout(widths = c(1.5, 1)) & theme( -->
-<!--     plot.margin = unit(c(0, 1, 0, 1), units = "lines"), -->
-<!--     axis.text.x = element_text(size = 8), -->
-<!--     legend.box.margin = unit(c(0, 0, 0, 0), units = "lines"), -->
-<!--     axis.text.y = element_text(size = 10) -->
-<!--     ) -->
-
-<!-- pdf(file =  "figs/fishery-effect.pdf",width = 8, height = 5, useDingbats = TRUE) -->
-<!-- print(catch_fishery_combo_plot) -->
-<!-- dev.off() -->
-
-<!-- ``` -->
-
-
-<!-- \begin{figure*}%[tbhp] -->
-<!--   \includegraphics[width=0.9\linewidth]{figs/fishery-effect.pdf} -->
-<!--   \caption{Median (A) and range (B) of equilibrium MPA catch effects, expressed as the percentage difference in catch with and without MPAs, across a range of depletion and MPA sizes (and incorporating the full range of scenarios included in our study except for constant-catch). "Range in MPA" is the percent of patches covered by an MPA, "Depletion" is the depletion that would have occurred in equilibrium without the MPA} -->
-<!--   \label{catch-msy-effects} -->
-<!-- \end{figure*} -->
-
-<!-- XX incorporated edits to here XX -->
 
 ## How Can We Detect Regional Effects?
 
@@ -976,7 +856,7 @@ dev.off()
 \begin{figure}%[tbhp]
   \centering
   \includegraphics[width=1\linewidth]{figs/channel-islands.pdf}
-  \caption{Map of PISCO sampling locations within the the Channel Islands National Marine Sanctuary. Grey boxes indicated MPAs, points sampling locations, with color representing whether the site is inside an MPA (blue) or not (red)}
+  \caption{Map of PISCO sampling locations within the the Channel Islands National Marine Sanctuary, California, USA. Grey boxes indicated MPAs, points sampling locations, with color representing whether the site is inside an MPA (blue) or not (red)}
   \label{channel-islands}
 \end{figure}
 

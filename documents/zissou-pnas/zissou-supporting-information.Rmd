@@ -45,7 +45,7 @@ burn_years <- 20
 
 num_patches <- 25
 
-  run_name <- "v4.3"
+run_name <- "v5.0"
 
 run_dir <- here::here("results", run_name)
 
@@ -63,11 +63,6 @@ density_ratios <- readRDS(file.path(run_dir,"density_ratios.rds"))
 
 outcomes <- readRDS(file.path(run_dir,"outcomes.rds"))
 
-fishery_outcomes <- readRDS(file.path(run_dir,"fishery_outcomes.rds"))
-
-
-fishery_eqo <- fishery_outcomes %>%
-  filter(year == max(year))
 
    eqo <- outcomes %>%
      filter(year == max(year))
@@ -92,6 +87,10 @@ zissou_theme <-
     strip_text_size = 12,
     base_family = "Helvetica"
   )
+
+zissou_theme <- zissou_theme +
+  theme(   panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank())
 
 
 testplot <- ggplot()
