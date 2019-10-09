@@ -56,3 +56,4 @@ packrat/lib*/
 *.JPG
 *.log
 *.zip
+*_cache
